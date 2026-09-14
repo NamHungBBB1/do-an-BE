@@ -1,0 +1,20 @@
+# Chạy test mỗi lần push. Koyeb tự deploy khi main đổi, nên đây là lưới duy nhất
+# đứng giữa một commit hỏng và bản đang chạy thật.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+      - run: mvn -B test

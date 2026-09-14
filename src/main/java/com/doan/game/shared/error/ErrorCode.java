@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
  * Đánh số theo nhóm để đọc log là biết hỏng mảng nào:
  *   1xxx  chung / dữ liệu vào
  *   2xxx  telemetry
+ *   3xxx  xác thực / slot của trẻ
  * Thêm nhóm mới thì cấp dải mới, ĐỪNG chen số vào giữa dải cũ —
  * FE có thể đã bắt theo mã.
  */
@@ -22,7 +23,19 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST),
     BUILD_VERSION_REQUIRED(2002, "Thiếu build_version — không biết dòng log này sinh ra từ bản nào",
             HttpStatus.BAD_REQUEST),
-    BATCH_TOO_LARGE(2003, "Gửi quá nhiều dòng trong một lần", HttpStatus.PAYLOAD_TOO_LARGE);
+    BATCH_TOO_LARGE(2003, "Gửi quá nhiều dòng trong một lần", HttpStatus.PAYLOAD_TOO_LARGE),
+
+    EMAIL_TAKEN(3001, "Email này đã có tài khoản", HttpStatus.CONFLICT),
+    /** Dùng CHUNG cho sai email, sai mật khẩu, sai mã QR và sai PIN — đừng tách. */
+    BAD_CREDENTIALS(3002, "Thông tin đăng nhập không đúng", HttpStatus.UNAUTHORIZED),
+    UNAUTHENTICATED(3003, "Chưa đăng nhập hoặc token đã hết hạn", HttpStatus.UNAUTHORIZED),
+    FORBIDDEN(3004, "Không có quyền thực hiện", HttpStatus.FORBIDDEN),
+    PLAN_REQUIRED(3005, "Cần mua gói phụ huynh hoặc giáo viên trước", HttpStatus.PAYMENT_REQUIRED),
+    SLOT_LIMIT_REACHED(3006, "Đã hết slot — phụ huynh 4, giáo viên 40", HttpStatus.CONFLICT),
+    SLOT_NOT_FOUND(3007, "Không tìm thấy slot", HttpStatus.NOT_FOUND),
+    SLOT_LOCKED(3008, "Nhập sai PIN quá nhiều lần, thử lại sau 15 phút", HttpStatus.LOCKED),
+    SLOT_ARCHIVED(3009, "Lớp học đã kết thúc, mã này không dùng được nữa", HttpStatus.GONE),
+    SLOT_ALREADY_LINKED(3010, "Slot đã liên kết với tài khoản khác", HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;

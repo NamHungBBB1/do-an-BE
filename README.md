@@ -44,7 +44,12 @@ com.doan.game/
 ├── shared/                  dùng chung, không thuộc tính năng nào
 │   ├── web/       ApiResponse · HealthController
 │   ├── error/     ErrorCode · AppException · GlobalExceptionHandler
-│   └── config/    OpenApiConfig · CorsConfig
+│   └── config/    OpenApiConfig · CorsConfig · SecurityConfig
+├── auth/                    xác thực — người lớn và trẻ, hai đường tách hẳn
+│   ├── web/       AuthController · SlotController · AuthDtos
+│   ├── domain/    Account · ChildSlot · Role · LearningContext
+│   ├── repository/AccountRepository · ChildSlotRepository
+│   └──            AuthService · JwtService
 └── telemetry/               một tính năng = một thư mục
     ├── web/       TelemetryController · EstimateRequest
     ├── domain/    EstimateEvent
@@ -79,11 +84,81 @@ Lỗi mới → thêm vào `ErrorCode`, cấp dải số mới, **đừng chen s
 
 ## API hiện có
 
-| | |
-|---|---|
-| `GET /api/health` | sống chưa + `buildVersion` |
-| `POST /api/telemetry/estimates` | nhận **một mảng** dòng cam kết, trần 500 dòng/lô |
-| `GET /api/telemetry/estimates?seed=` | lấy lại cả lượt thí điểm theo seed |
+| | | cần token |
+|---|---|---|
+| `GET /api/health` | sống chưa + `buildVersion` | không |
+| `POST /api/auth/register` | người lớn: Gmail + SĐT + mật khẩu → token | không |
+| `POST /api/auth/login` | người lớn đăng nhập → token | không |
+| `POST /api/auth/child/login` | trẻ: `code` (QR) + `pin` → token gắn 1 slot | không |
+| `POST /api/auth/plan` | bật gói phụ huynh/giáo viên → **token mới** | người lớn |
+| `GET /api/auth/me` | hồ sơ; trả hai hình dạng khác nhau cho người lớn và trẻ | có |
+| `POST /api/auth/child/link` | gắn slot vào tài khoản trẻ (kèm QR + PIN) | có |
+| `POST /api/auth/context` | trẻ đã liên kết CHỌN bối cảnh → token của bối cảnh đó | có |
+| `POST /api/slots` | tạo slot → **PIN chỉ hiện một lần** | đã mua gói |
+| `GET /api/slots` | danh sách slot mình sở hữu | đã mua gói |
+| `POST /api/slots/{id}/reset-pin` | cấp PIN mới | đã mua gói |
+| `POST /api/slots/end-class` | kết thúc lớp: lưu trữ data, trả lại 40 slot | đã mua gói |
+| `POST /api/telemetry/estimates` | nhận **một mảng** dòng cam kết, trần 500 dòng/lô | không |
+| `GET /api/telemetry/estimates?seed=` | lấy lại cả lượt thí điểm theo seed | không |
+
+Token gửi ở header `Authorization: Bearer <token>`. Bấm **Authorize** trên `/swagger` là thử được hết.
+
+Telemetry **cố ý không cần token**: chốt D3 nói game phải chơi trọn vẹn khi server chết,
+bắt đăng nhập ở cổng ghi log là đi ngược chốt đó.
+
+## Luồng auth — năm điều FE phải biết trước khi gọi
+
+Toàn bộ thiết kế lấy từ biên bản `docs/brainstorming/brainstorm-luong-authen-2026-09-14`.
+
+**1. Trẻ không tự đăng ký.** Người lớn tạo slot, hệ thống sinh `code` (in ra QR) + `pin` 6 số.
+PIN gốc trả về **đúng một lần** ở response tạo slot; sau đó chỉ còn bản băm. Mất thì `reset-pin`.
+
+**2. Nhà và lớp riêng hoàn toàn.** `FAMILY` và `CLASS` là hai phạm vi tách hẳn: phụ huynh không
+xem được phần ở lớp, giáo viên không xem được phần ở nhà. Bối cảnh nằm **trong token** (claim `ctx`),
+không phải tham số client gửi lên — để chặn được ngay ở cổng.
+
+**3. Thứ duy nhất đi qua ranh giới là `level` và `badge`.** Lịch sử từng lượt thì không.
+Cô giáo cần biết bé đã từng chơi trước đó, nếu không thì so sánh vô nghĩa — nhưng chỉ cần con số.
+
+**4. Trẻ có cả nhà lẫn lớp thì phải CHỌN.** Không có phiên nào gộp hai bối cảnh:
+`login` → `GET /me` (xem `linkedContexts`) → `POST /context` với `slotId` → nhận token của bối cảnh đó.
+
+**5. Vai nằm trong token.** Mua gói xong mà FE giữ token cũ thì vẫn bị chặn ở `/api/slots`.
+Vì thế `POST /api/auth/plan` trả về **token mới** — thay ngay, đừng chỉ đọc rồi bỏ.
+
+Hạn mức: phụ huynh **4** slot, giáo viên **40**. Slot đã lưu trữ không tính — đó là ý nghĩa
+của nút kết thúc lớp học. Sai PIN **5 lần** thì khoá slot 15 phút.
+
+## Deploy — Koyeb, miễn phí
+
+Vercel không chạy được Java. Nền tảng free nào cũng ngủ, khác nhau ở chỗ ngủ sau bao lâu:
+Render 15 phút, Koyeb **1 giờ** và không tắt được. Chọn Koyeb vì cửa sổ 1 giờ đủ rộng để
+một cron 20 phút giữ cho thức, kể cả khi GitHub chạy cron trễ.
+
+1. Vào <https://app.koyeb.com> → **Sign in with GitHub** → cho phép đọc repo `do-an-BE`.
+2. **Create Web Service** → GitHub → `NamHungBBB1/do-an-BE`, nhánh `main`, builder **Dockerfile**.
+3. Instance **Free (nano)**, để **Autodeploy on push** bật — đó chính là trigger, không cần
+   viết workflow deploy nào.
+4. Đặt biến môi trường:
+
+   ```
+   JWT_SECRET=<chuỗi ngẫu nhiên >= 32 ký tự>
+   CORS_ORIGINS=https://<tên-miền-FE>
+   BUILD_VERSION=0.1.0
+   PORT=8080
+   ```
+
+   Thiếu `JWT_SECRET` thì app **vẫn chạy bằng khoá mặc định** — khoá đó nằm công khai trong repo,
+   ai cũng ký được token giả. Đặt nó trước khi đưa link cho ai.
+
+5. Deploy xong, lấy URL rồi đặt biến repo `BE_URL` (Settings → Secrets and variables → Actions →
+   **Variables**). Workflow `keepalive` tự ping `/api/health` mỗi 20 phút từ lúc đó.
+
+Chưa đặt `BE_URL` thì keepalive tự bỏ qua, không báo đỏ.
+
+**Database:** để trống là dùng H2 trong bộ nhớ — **restart là mất sạch**, đủ cho team FE ghép API
+nhưng không dùng thật được. Muốn giữ dữ liệu thì tạo Postgres free (Koyeb, Neon, Supabase)
+rồi đặt `DB_URL` / `DB_USER` / `DB_PASSWORD`.
 
 ## Vì sao `EstimateEvent` trông như vậy
 
