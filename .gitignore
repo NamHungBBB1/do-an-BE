@@ -7,3 +7,7 @@ target/
 application-local.properties
 *.log
 .DS_Store
+
+# Script dụng chạm prod (SSH, IP, đường dẫn máy chủ) KHÔNG bao giờ vào repo —
+# repo này public. Chúng nằm ngoài ở ops/finteen-deploy/, theo đúng tiền lệ EXE201.
+deploy/

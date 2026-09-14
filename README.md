@@ -129,36 +129,34 @@ Vì thế `POST /api/auth/plan` trả về **token mới** — thay ngay, đừn
 Hạn mức: phụ huynh **4** slot, giáo viên **40**. Slot đã lưu trữ không tính — đó là ý nghĩa
 của nút kết thúc lớp học. Sai PIN **5 lần** thì khoá slot 15 phút.
 
-## Deploy — Koyeb, miễn phí
+## Bản đang chạy
 
-Vercel không chạy được Java. Nền tảng free nào cũng ngủ, khác nhau ở chỗ ngủ sau bao lâu:
-Render 15 phút, Koyeb **1 giờ** và không tắt được. Chọn Koyeb vì cửa sổ 1 giờ đủ rộng để
-một cron 20 phút giữ cho thức, kể cả khi GitHub chạy cron trễ.
+🔗 API: <https://kidzeconomy.com.vn/finteen/api/health>
+· Swagger: <https://kidzeconomy.com.vn/finteen/swagger>
 
-1. Vào <https://app.koyeb.com> → **Sign in with GitHub** → cho phép đọc repo `do-an-BE`.
-2. **Create Web Service** → GitHub → `NamHungBBB1/do-an-BE`, nhánh `main`, builder **Dockerfile**.
-3. Instance **Free (nano)**, để **Autodeploy on push** bật — đó chính là trigger, không cần
-   viết workflow deploy nào.
-4. Đặt biến môi trường:
+Chạy trên VPS riêng của nhóm, không phải nền tảng free — free nào cũng ngủ
+(Render 15 phút, Koyeb 1 giờ và đã chặn đăng ký mới). Đổi lại phải tự vận hành.
 
-   ```
-   JWT_SECRET=<chuỗi ngẫu nhiên >= 32 ký tự>
-   CORS_ORIGINS=https://<tên-miền-FE>
-   BUILD_VERSION=0.1.0
-   PORT=8080
-   ```
+| | |
+|---|---|
+| Tiến trình | systemd, user hệ thống riêng, `-Xmx512m` |
+| DB | H2 **ghi ra file** — restart không mất data |
+| Ra ngoài | nginx reverse proxy, context-path `/finteen` |
+| `JWT_SECRET` | sinh bằng `openssl rand -hex 32` **ngay trên máy chủ**, chưa từng đi qua repo |
 
-   Thiếu `JWT_SECRET` thì app **vẫn chạy bằng khoá mặc định** — khoá đó nằm công khai trong repo,
-   ai cũng ký được token giả. Đặt nó trước khi đưa link cho ai.
+**Thông tin truy cập máy chủ (IP, khoá SSH, đường dẫn) KHÔNG nằm trong repo này —
+repo public.** Script deploy để ngoài ở `ops/finteen-deploy/` trên máy, theo đúng cách
+EXE201 đã làm với script đụng prod. Đẩy bản mới:
 
-5. Deploy xong, lấy URL rồi đặt biến repo `BE_URL` (Settings → Secrets and variables → Actions →
-   **Variables**). Workflow `keepalive` tự ping `/api/health` mỗi 20 phút từ lúc đó.
+```bash
+bash ../ops/finteen-deploy/redeploy.sh   # test -> build -> upload -> restart -> kiểm health
+```
 
-Chưa đặt `BE_URL` thì keepalive tự bỏ qua, không báo đỏ.
+**Đổi CORS khi FE có tên miền:** sửa `CORS_ORIGINS` trong file env trên máy chủ rồi restart
+service. Đừng sửa `application.properties`.
 
-**Database:** để trống là dùng H2 trong bộ nhớ — **restart là mất sạch**, đủ cho team FE ghép API
-nhưng không dùng thật được. Muốn giữ dữ liệu thì tạo Postgres free (Koyeb, Neon, Supabase)
-rồi đặt `DB_URL` / `DB_USER` / `DB_PASSWORD`.
+H2 file đủ cho giai đoạn này. Muốn Postgres thật thì đặt `DB_URL`/`DB_USER`/`DB_PASSWORD`,
+driver đã có sẵn trong `pom.xml`.
 
 ## Vì sao `EstimateEvent` trông như vậy
 
