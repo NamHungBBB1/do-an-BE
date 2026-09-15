@@ -11,9 +11,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,6 +41,10 @@ public class AuthService {
     /** 6 chữ số là 1 triệu tổ hợp. Không khoá thì dò hết trong một buổi. */
     private static final int MAX_PIN_ATTEMPTS = 5;
     private static final Duration LOCK_FOR = Duration.ofMinutes(15);
+
+    private static final Duration VERIFY_TTL = Duration.ofHours(24);
+    /** Mỗi lần "gửi lại" là một mail thật đi ra — không để bấm liên tục. */
+    private static final Duration RESEND_COOLDOWN = Duration.ofMinutes(1);
 
     /** Bỏ 0/O và 1/I/L: trẻ con gõ tay từ giấy in, nhìn nhầm là vào không được. */
     private static final String CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -81,6 +89,64 @@ public class AuthService {
         return accounts.findById(accountId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
     }
 
+    // ---------- xác thực email ----------
+
+    /**
+     * Sinh token mới cho link xác thực, trả về token GỐC để nhét vào mail.
+     * Trong DB chỉ còn bản băm.
+     *
+     * Chưa xác thực vẫn đăng nhập được — để FE hiện được màn "vào hộp thư đi".
+     * Cửa đóng nằm ở {@link #requireVerified}, tức chỗ bắt đầu tốn tài nguyên.
+     */
+    @Transactional
+    public String issueVerification(UUID accountId) {
+        Account a = require(accountId);
+        if (a.isEmailVerified()) throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        Instant now = Instant.now();
+        if (a.getVerifyTokenSentAt() != null
+                && a.getVerifyTokenSentAt().plus(RESEND_COOLDOWN).isAfter(now)) {
+            throw new AppException(ErrorCode.VERIFY_TOO_SOON);
+        }
+        byte[] raw = new byte[32];
+        rng.nextBytes(raw);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        a.setVerifyTokenHash(sha256(token));
+        a.setVerifyTokenExpiresAt(now.plus(VERIFY_TTL));
+        a.setVerifyTokenSentAt(now);
+        accounts.save(a);
+        return token;
+    }
+
+    @Transactional
+    public Account verifyEmail(String token) {
+        Account a = accounts.findByVerifyTokenHash(sha256(token))
+                .orElseThrow(() -> new AppException(ErrorCode.VERIFY_TOKEN_INVALID));
+        if (a.getVerifyTokenExpiresAt() == null || a.getVerifyTokenExpiresAt().isBefore(Instant.now())) {
+            throw new AppException(ErrorCode.VERIFY_TOKEN_EXPIRED);
+        }
+        a.setEmailVerifiedAt(Instant.now());
+        // Xoá token ngay: link chỉ dùng được MỘT lần.
+        a.setVerifyTokenHash(null);
+        a.setVerifyTokenExpiresAt(null);
+        return accounts.save(a);
+    }
+
+    /** Cửa chặn spam. Gọi trước mọi việc tiêu tài nguyên thật. */
+    private void requireVerified(Account a) {
+        if (!a.isEmailVerified()) throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
+    }
+
+    private static String sha256(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("JVM không có SHA-256", e);
+        }
+    }
+
     /**
      * Bật gói. CHƯA thu tiền — cổng thanh toán là tính năng khác.
      * Đặt ở đây vì gói là thứ QUYẾT ĐỊNH VAI, mà vai thì thuộc auth.
@@ -88,6 +154,7 @@ public class AuthService {
     @Transactional
     public Account setPlans(UUID accountId, boolean parentPlan, boolean teacherPlan) {
         Account a = require(accountId);
+        requireVerified(a);
         a.setParentPlan(parentPlan);
         a.setTeacherPlan(teacherPlan);
         return accounts.save(a);
@@ -98,6 +165,7 @@ public class AuthService {
     @Transactional
     public Issued createSlot(UUID ownerId, String displayName, LearningContext context) {
         Account owner = require(ownerId);
+        requireVerified(owner);
         boolean allowed = context == LearningContext.FAMILY ? owner.isParentPlan() : owner.isTeacherPlan();
         if (!allowed) throw new AppException(ErrorCode.PLAN_REQUIRED);
 

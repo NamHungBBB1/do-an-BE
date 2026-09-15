@@ -48,11 +48,35 @@ public class Account {
     @Column(name = "teacher_plan", nullable = false)
     private boolean teacherPlan;
 
+    /**
+     * Null = chưa bấm link trong mail. Đây là CÁNH CỬA CHẶN SPAM thật sự:
+     * đăng ký thì ai cũng đăng ký được, nhưng chưa xác thực thì không mua gói,
+     * không tạo được slot nào — tức không tiêu tài nguyên gì của hệ thống.
+     */
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
+    /**
+     * SHA-256 của token trong link, KHÔNG lưu token gốc: nó là một thứ bearer nằm
+     * trên URL, ai đọc được DB mà có token gốc là tự xác thực hộ người khác được.
+     */
+    @Column(name = "verify_token_hash", length = 64)
+    private String verifyTokenHash;
+
+    @Column(name = "verify_token_expires_at")
+    private Instant verifyTokenExpiresAt;
+
+    /** Để chặn bấm "gửi lại" liên tục — mỗi lần gửi lại là một mail thật đi ra. */
+    @Column(name = "verify_token_sent_at")
+    private Instant verifyTokenSentAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     void onCreate() { createdAt = Instant.now(); }
+
+    public boolean isEmailVerified() { return emailVerifiedAt != null; }
 
     /** Vai suy ra từ gói, không lưu. Chưa mua gì thì là khách. */
     public Set<Role> roles() {
@@ -76,5 +100,13 @@ public class Account {
     public void setParentPlan(boolean v) { this.parentPlan = v; }
     public boolean isTeacherPlan() { return teacherPlan; }
     public void setTeacherPlan(boolean v) { this.teacherPlan = v; }
+    public Instant getEmailVerifiedAt() { return emailVerifiedAt; }
+    public void setEmailVerifiedAt(Instant v) { this.emailVerifiedAt = v; }
+    public String getVerifyTokenHash() { return verifyTokenHash; }
+    public void setVerifyTokenHash(String v) { this.verifyTokenHash = v; }
+    public Instant getVerifyTokenExpiresAt() { return verifyTokenExpiresAt; }
+    public void setVerifyTokenExpiresAt(Instant v) { this.verifyTokenExpiresAt = v; }
+    public Instant getVerifyTokenSentAt() { return verifyTokenSentAt; }
+    public void setVerifyTokenSentAt(Instant v) { this.verifyTokenSentAt = v; }
     public Instant getCreatedAt() { return createdAt; }
 }

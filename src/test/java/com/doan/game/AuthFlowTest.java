@@ -1,5 +1,8 @@
 package com.doan.game;
 
+import com.doan.game.auth.AuthService;
+import com.doan.game.auth.domain.Account;
+import com.doan.game.auth.repository.AccountRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -15,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Giữ đúng những chốt mà hỏng thì không ai phát hiện bằng mắt:
@@ -26,6 +30,8 @@ class AuthFlowTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired AccountRepository accounts;
+    @Autowired AuthService authService;
 
     /** Mỗi test một email khác nhau — H2 dùng chung cho cả lớp test. */
     private static final AtomicInteger SEQ = new AtomicInteger();
@@ -108,15 +114,86 @@ class AuthFlowTest {
         assertThat(call(get("/api/auth/me"), 401).at("/code").asInt()).isEqualTo(3003);
     }
 
+    // ---- cửa chặn spam: xác thực email ----
+
+    @Test
+    void chua_xac_thuc_email_thi_khong_mua_duoc_goi() throws Exception {
+        String token = register("chuaxacthuc" + SEQ.incrementAndGet() + "@gmail.com");
+
+        JsonNode me = call(get("/api/auth/me").header("Authorization", "Bearer " + token), 200);
+        assertThat(me.at("/result/emailVerified").asBoolean()).isFalse();
+
+        JsonNode denied = call(post("/api/auth/plan").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(new Plan(true, false))), 403);
+        assertThat(denied.at("/code").asInt()).isEqualTo(3011);
+    }
+
+    @Test
+    void bam_link_xong_thi_mua_duoc_goi_va_me_bao_da_xac_thuc() throws Exception {
+        String email = "xacthuc" + SEQ.incrementAndGet() + "@gmail.com";
+        String token = register(email);
+        clickVerifyLink(email);
+
+        String after = call(post("/api/auth/plan").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(new Plan(true, false))), 200)
+                .at("/result/token").asText();
+        JsonNode me = call(get("/api/auth/me").header("Authorization", "Bearer " + after), 200);
+        assertThat(me.at("/result/emailVerified").asBoolean()).isTrue();
+    }
+
+    @Test
+    void link_dung_hai_lan_thi_lan_hai_hong() throws Exception {
+        String email = "motlan" + SEQ.incrementAndGet() + "@gmail.com";
+        register(email);
+        Account a = accounts.findByEmailIgnoreCase(email).orElseThrow();
+        a.setVerifyTokenSentAt(null);
+        accounts.save(a);
+        String raw = authService.issueVerification(a.getId());
+
+        mvc.perform(get("/api/auth/verify").param("token", raw)).andExpect(status().isOk());
+        // Lần hai: token đã bị xoá khỏi DB nên không tra ra ai -> trang báo lỗi, không phải 500.
+        String html = mvc.perform(get("/api/auth/verify").param("token", raw))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("Không xác thực được");
+    }
+
+    @Test
+    void gui_lai_ngay_sau_khi_dang_ky_thi_bi_chan() throws Exception {
+        String token = register("guilai" + SEQ.incrementAndGet() + "@gmail.com");
+        JsonNode r = call(post("/api/auth/verify/resend").header("Authorization", "Bearer " + token), 429);
+        assertThat(r.at("/code").asInt()).isEqualTo(3015);
+    }
+
     // ---- tiện ích ----
 
-    private String adultWithPlans(boolean parent, boolean teacher) throws Exception {
-        String email = "ph" + SEQ.incrementAndGet() + "@gmail.com";
-        String token = call(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+    private String register(String email) throws Exception {
+        return call(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(
                         new Register(email, "0912345678", "matkhau123", "Phụ huynh"))), 200)
                 .at("/result/token").asText();
+    }
+
+    /**
+     * Bấm link xác thực y như người dùng thật: xin token gốc rồi GET /api/auth/verify.
+     * Phải xoá verifyTokenSentAt trước vì register vừa gửi xong — đó là chống bấm
+     * "gửi lại" liên tục, ở đây giả lập một phút đã trôi qua.
+     */
+    private void clickVerifyLink(String email) throws Exception {
+        Account a = accounts.findByEmailIgnoreCase(email).orElseThrow();
+        a.setVerifyTokenSentAt(null);
+        accounts.save(a);
+        String raw = authService.issueVerification(a.getId());
+        mvc.perform(get("/api/auth/verify").param("token", raw))
+                .andExpect(status().isOk());
+    }
+
+    private String adultWithPlans(boolean parent, boolean teacher) throws Exception {
+        String email = "ph" + SEQ.incrementAndGet() + "@gmail.com";
+        String token = register(email);
         if (!parent && !teacher) return token;
+        clickVerifyLink(email);
         // Mua gói xong phải lấy token MỚI: vai nằm trong token.
         return call(post("/api/auth/plan").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)

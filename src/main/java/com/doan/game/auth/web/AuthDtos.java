@@ -68,8 +68,12 @@ public final class AuthDtos {
         }
     }
 
+    /**
+     * `emailVerified = false` thì FE phải hiện màn "vào hộp thư bấm link" và chặn
+     * đường mua gói — gọi lên cũng bị BE trả 3011.
+     */
     public record AdultMeView(UUID id, String email, String phone, String displayName,
-                              Set<String> roles, List<SlotView> slots,
+                              boolean emailVerified, Set<String> roles, List<SlotView> slots,
                               List<SlotView> linkedContexts) {}
 
     /**

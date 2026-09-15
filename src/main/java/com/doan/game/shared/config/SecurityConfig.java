@@ -43,7 +43,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/swagger/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 // Cửa vào phải mở, còn lại phải có token.
-                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/child/login").permitAll()
+                // /verify là link người dùng bấm từ hộp thư — không thể có token ở đó.
+                // Bảo vệ của nó là bản thân token ngẫu nhiên 32 byte trên URL, dùng một lần.
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/child/login",
+                        "/api/auth/verify").permitAll()
                 // Telemetry là sổ ghi ẩn danh của client, chốt D3 bảo game phải chạy được
                 // cả khi server chết — bắt đăng nhập ở đây là đi ngược chốt đó.
                 .requestMatchers("/api/telemetry/**").permitAll()

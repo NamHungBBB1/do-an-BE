@@ -35,7 +35,15 @@ public enum ErrorCode {
     SLOT_NOT_FOUND(3007, "Không tìm thấy slot", HttpStatus.NOT_FOUND),
     SLOT_LOCKED(3008, "Nhập sai PIN quá nhiều lần, thử lại sau 15 phút", HttpStatus.LOCKED),
     SLOT_ARCHIVED(3009, "Lớp học đã kết thúc, mã này không dùng được nữa", HttpStatus.GONE),
-    SLOT_ALREADY_LINKED(3010, "Slot đã liên kết với tài khoản khác", HttpStatus.CONFLICT);
+    SLOT_ALREADY_LINKED(3010, "Slot đã liên kết với tài khoản khác", HttpStatus.CONFLICT),
+
+    EMAIL_NOT_VERIFIED(3011, "Chưa xác thực email — mở hộp thư và bấm link trong mail",
+            HttpStatus.FORBIDDEN),
+    VERIFY_TOKEN_INVALID(3012, "Link xác thực không đúng hoặc đã dùng rồi", HttpStatus.BAD_REQUEST),
+    VERIFY_TOKEN_EXPIRED(3013, "Link xác thực đã hết hạn, bấm gửi lại", HttpStatus.GONE),
+    EMAIL_ALREADY_VERIFIED(3014, "Email này đã xác thực rồi", HttpStatus.CONFLICT),
+    VERIFY_TOO_SOON(3015, "Vừa gửi mail xong, đợi một phút rồi thử lại",
+            HttpStatus.TOO_MANY_REQUESTS);
 
     private final int code;
     private final String message;

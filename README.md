@@ -92,6 +92,8 @@ Lỗi mới → thêm vào `ErrorCode`, cấp dải số mới, **đừng chen s
 | `POST /api/auth/child/login` | trẻ: `code` (QR) + `pin` → token gắn 1 slot | không |
 | `POST /api/auth/plan` | bật gói phụ huynh/giáo viên → **token mới** | người lớn |
 | `GET /api/auth/me` | hồ sơ; trả hai hình dạng khác nhau cho người lớn và trẻ | có |
+| `GET /api/auth/verify?token=` | link trong mail, trả **HTML** chứ không phải JSON | không |
+| `POST /api/auth/verify/resend` | gửi lại mail xác thực, tối đa 1 lần/phút | người lớn |
 | `POST /api/auth/child/link` | gắn slot vào tài khoản trẻ (kèm QR + PIN) | có |
 | `POST /api/auth/context` | trẻ đã liên kết CHỌN bối cảnh → token của bối cảnh đó | có |
 | `POST /api/slots` | tạo slot → **PIN chỉ hiện một lần** | đã mua gói |
@@ -110,6 +112,10 @@ bắt đăng nhập ở cổng ghi log là đi ngược chốt đó.
 
 Toàn bộ thiết kế lấy từ biên bản `docs/brainstorming/brainstorm-luong-authen-2026-09-14`.
 
+**0. SĐT chỉ được LƯU, KHÔNG được xác thực.** Không có hạ tầng SMS và sẽ không có —
+SMS OTP ở Việt Nam phải đăng ký brandname với nhà mạng, mất tiền cả lúc đăng ký lẫn mỗi tin.
+Đừng viết trong tài liệu rằng SĐT đã xác thực. Thứ chứng minh người thật là **email**.
+
 **1. Trẻ không tự đăng ký.** Người lớn tạo slot, hệ thống sinh `code` (in ra QR) + `pin` 6 số.
 PIN gốc trả về **đúng một lần** ở response tạo slot; sau đó chỉ còn bản băm. Mất thì `reset-pin`.
 
@@ -123,7 +129,17 @@ Cô giáo cần biết bé đã từng chơi trước đó, nếu không thì so
 **4. Trẻ có cả nhà lẫn lớp thì phải CHỌN.** Không có phiên nào gộp hai bối cảnh:
 `login` → `GET /me` (xem `linkedContexts`) → `POST /context` với `slotId` → nhận token của bối cảnh đó.
 
-**5. Vai nằm trong token.** Mua gói xong mà FE giữ token cũ thì vẫn bị chặn ở `/api/slots`.
+**5. Xác thực email là cánh cửa chặn spam.** Đăng ký thì ai cũng đăng ký được và CÓ token ngay
+— để FE hiện được màn "vào hộp thư bấm link". Nhưng chưa xác thực thì **không mua được gói,
+không tạo được slot nào**: cả hai trả `403 · 3011`. Đọc cờ `emailVerified` trong `GET /me`.
+
+Link sống 24 giờ, **dùng một lần** (bấm xong là token bị xoá khỏi DB). Trong DB chỉ lưu
+SHA-256 của token, không lưu token gốc. Gửi lại tối đa 1 lần/phút, quá thì `429 · 3015`.
+
+Chạy ở máy mà không đặt `MAIL_HOST` thì **không gửi mail thật** — link xác thực được in
+thẳng ra log, copy dán vào trình duyệt là xong. Team FE không cần tài khoản SMTP nào.
+
+**6. Vai nằm trong token.** Mua gói xong mà FE giữ token cũ thì vẫn bị chặn ở `/api/slots`.
 Vì thế `POST /api/auth/plan` trả về **token mới** — thay ngay, đừng chỉ đọc rồi bỏ.
 
 Hạn mức: phụ huynh **4** slot, giáo viên **40**. Slot đã lưu trữ không tính — đó là ý nghĩa

@@ -2,6 +2,7 @@ package com.doan.game.auth.web;
 
 import com.doan.game.auth.AuthService;
 import com.doan.game.auth.JwtService;
+import com.doan.game.auth.MailService;
 import com.doan.game.auth.domain.Account;
 import com.doan.game.auth.domain.ChildSlot;
 import com.doan.game.auth.domain.Role;
@@ -10,10 +11,14 @@ import com.doan.game.shared.error.AppException;
 import com.doan.game.shared.error.ErrorCode;
 import com.doan.game.shared.web.ApiResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -35,16 +40,54 @@ public class AuthController {
 
     private final AuthService auth;
     private final JwtService jwt;
+    private final MailService mail;
+    private final String baseUrl;
 
-    public AuthController(AuthService auth, JwtService jwt) {
+    public AuthController(AuthService auth, JwtService jwt, MailService mail,
+                          @Value("${app.public-base-url}") String baseUrl) {
         this.auth = auth;
         this.jwt = jwt;
+        this.mail = mail;
+        this.baseUrl = baseUrl.replaceAll("/+$", "");
     }
 
+    /**
+     * Đăng ký xong là CÓ token ngay, nhưng tài khoản chưa xác thực thì chưa mua được gói
+     * và chưa tạo được slot nào. Trả token luôn để FE hiện được màn "vào hộp thư đi"
+     * thay vì bắt đăng nhập lại.
+     */
     @PostMapping("/register")
     public ApiResponse<TokenView> register(@RequestBody @Valid RegisterRequest r) {
         Account a = auth.register(r.email(), r.phone(), r.password(), r.displayName());
+        sendVerification(a);
         return ApiResponse.ok(token(jwt.forAdult(a), "adult"));
+    }
+
+    /** Link trong mail trỏ thẳng vào đây, nên trả HTML chứ không phải JSON. */
+    @GetMapping(value = "/verify", produces = MediaType.TEXT_HTML_VALUE)
+    public String verify(@RequestParam String token) {
+        try {
+            Account a = auth.verifyEmail(token);
+            return page("✅", "Xác thực xong",
+                    "Tài khoản <b>" + esc(a.getEmail()) + "</b> đã sẵn sàng. Quay lại ứng dụng và đăng nhập.");
+        } catch (AppException e) {
+            // Người dùng cuối đang đứng ở trình duyệt — trả trang đọc được, đừng trả JSON lỗi.
+            return page("⚠️", "Không xác thực được", esc(e.getMessage()));
+        }
+    }
+
+    /** Mất mail, mail vào spam, hoặc link hết hạn thì bấm lại từ đây. */
+    @PostMapping("/verify/resend")
+    public ApiResponse<Void> resend(@AuthenticationPrincipal Jwt j) {
+        sendVerification(auth.require(adultId(j)));
+        return ApiResponse.ok();
+    }
+
+    private void sendVerification(Account a) {
+        String token = auth.issueVerification(a.getId());
+        String link = baseUrl + "/api/auth/verify?token="
+                + URLEncoder.encode(token, StandardCharsets.UTF_8);
+        mail.sendVerification(a.getEmail(), a.getDisplayName(), link);
     }
 
     @PostMapping("/login")
@@ -114,7 +157,7 @@ public class AuthController {
         // slot (là trẻ đã tạo tài khoản). Hai danh sách tách riêng, không trộn.
         List<SlotView> linked = auth.contextsOf(id).stream().map(SlotView::of).toList();
         return ApiResponse.ok(new AdultMeView(a.getId(), a.getEmail(), a.getPhone(),
-                a.getDisplayName(), roles, owned, linked));
+                a.getDisplayName(), a.isEmailVerified(), roles, owned, linked));
     }
 
     /** Token của trẻ không được dùng cho các cửa của người lớn. */
@@ -125,5 +168,23 @@ public class AuthController {
 
     private static TokenView token(JwtService.Issued i, String typ) {
         return new TokenView(i.token(), typ, i.expiresIn());
+    }
+
+    private static String esc(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** Trang tối giản cho người bấm link từ hộp thư. Không tải font ngoài, không JS. */
+    private static String page(String icon, String title, String body) {
+        return """
+                <!doctype html><html lang="vi"><meta charset="utf-8">
+                <meta name="viewport" content="width=device-width,initial-scale=1">
+                <title>%s — FinTeen</title>
+                <div style="font-family:'Segoe UI',Roboto,Arial,sans-serif;max-width:32rem;margin:18vh auto;
+                     padding:0 1.5rem;text-align:center;color:#1f2937">
+                  <div style="font-size:3rem;line-height:1">%s</div>
+                  <h1 style="font-size:1.35rem;margin:.75rem 0 .5rem">%s</h1>
+                  <p style="color:#6b7280;line-height:1.6">%s</p>
+                </div>""".formatted(title, icon, title, body);
     }
 }

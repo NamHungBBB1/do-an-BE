@@ -11,4 +11,7 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     Optional<Account> findByEmailIgnoreCase(String email);
 
     boolean existsByEmailIgnoreCase(String email);
+
+    /** Tra theo BĂM của token trong link, không phải token gốc. */
+    Optional<Account> findByVerifyTokenHash(String verifyTokenHash);
 }
