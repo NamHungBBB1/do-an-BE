@@ -1,6 +1,6 @@
-package com.doan.game.shared.error;
+package com.doan.game.exception;
 
-import com.doan.game.shared.web.ApiResponse;
+import com.doan.game.DTO.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

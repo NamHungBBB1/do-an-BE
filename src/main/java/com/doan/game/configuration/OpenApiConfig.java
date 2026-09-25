@@ -1,4 +1,4 @@
-package com.doan.game.shared.config;
+package com.doan.game.configuration;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;

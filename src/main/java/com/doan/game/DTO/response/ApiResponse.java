@@ -1,4 +1,4 @@
-package com.doan.game.shared.web;
+package com.doan.game.DTO.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 

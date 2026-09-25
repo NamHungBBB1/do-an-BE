@@ -1,4 +1,4 @@
-package com.doan.game.shared.config;
+package com.doan.game.configuration;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

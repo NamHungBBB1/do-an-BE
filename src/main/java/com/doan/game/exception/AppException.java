@@ -1,4 +1,4 @@
-package com.doan.game.shared.error;
+package com.doan.game.exception;
 
 /** Ném cái này cho mọi lỗi nghiệp vụ. GlobalExceptionHandler lo phần còn lại. */
 public class AppException extends RuntimeException {

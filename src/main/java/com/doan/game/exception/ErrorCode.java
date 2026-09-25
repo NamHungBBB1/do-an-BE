@@ -1,4 +1,4 @@
-package com.doan.game.shared.error;
+package com.doan.game.exception;
 
 import org.springframework.http.HttpStatus;
 

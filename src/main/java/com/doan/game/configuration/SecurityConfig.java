@@ -1,7 +1,7 @@
-package com.doan.game.shared.config;
+package com.doan.game.configuration;
 
-import com.doan.game.shared.error.ErrorCode;
-import com.doan.game.shared.web.ApiResponse;
+import com.doan.game.exception.ErrorCode;
+import com.doan.game.DTO.response.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.beans.factory.annotation.Value;
