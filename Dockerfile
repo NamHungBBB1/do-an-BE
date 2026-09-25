@@ -1,4 +1,5 @@
-# Ảnh chạy được ở mọi nền tảng free: Koyeb, Render, Railway, Fly, Cloud Run.
+# HIỆN KHÔNG DÙNG. Từ 14/09 BE chạy jar qua systemd trên VPS Vietnix, không qua Docker.
+# Giữ lại phòng khi cần đóng ảnh; đừng đọc tệp này để đoán BE đang chạy ở đâu.
 # Hai tầng để ảnh cuối chỉ có JRE + jar, không kéo theo Maven và ~/.m2.
 
 FROM maven:3.9-eclipse-temurin-17 AS build

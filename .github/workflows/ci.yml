@@ -1,5 +1,5 @@
-# Chạy test mỗi lần push. Koyeb tự deploy khi main đổi, nên đây là lưới duy nhất
-# đứng giữa một commit hỏng và bản đang chạy thật.
+# Chạy test mỗi lần push. BE chạy trên VPS Vietnix và deploy BẰNG TAY qua
+# ops/finteen-deploy/redeploy.sh (thư mục đồ án) — main đổi không tự lên máy chủ.
 name: ci
 
 on:
