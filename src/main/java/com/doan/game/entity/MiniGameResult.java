@@ -11,7 +11,8 @@ import lombok.Setter;
  * Một đáp án trong một mini-game, kèm chuyện nó đúng hay sai. Đây là dòng dữ liệu duy nhất trò
  * chơi sinh ra mà CÓ đáp án đúng, nên cũng là dòng duy nhất gánh được kết luận nghiên cứu. Đổi tên
  * từ EstimateEvent ngày 25/09: hình dạng cũ giữ guess và truth — cặp giá trị trò chơi không bao
- * giờ sinh ra.
+ * giờ sinh ra. Cột concept (thêm 26/09) ghi khái niệm câu đó kiểm tra; một chương phủ nhiều khái
+ * niệm.
  */
 @Entity
 @Table(name = "mini_game_result")
@@ -40,6 +41,9 @@ public class MiniGameResult {
 
     @Column(name = "item_id", length = 64)
     private String itemId;
+
+    @Column(name = "concept", length = 40)
+    private String concept;
 
     @Column(name = "chosen", length = 64)
     private String chosen;

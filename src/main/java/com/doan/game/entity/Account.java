@@ -8,8 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một người lớn, hoặc chính admin. Vai trò SUY RA từ gói đang giữ chứ không lưu thành cột. Trẻ
- * không bao giờ có một dòng ở đây.
+ * Một người lớn, hoặc chính admin. Vai phụ huynh và giáo viên SUY RA từ gói đang giữ; vai admin là
+ * cờ admin (thêm 26/09), chỉ bật lúc gieo dữ liệu khi khởi động, vì admin không mua gói. Trẻ không
+ * bao giờ có một dòng ở đây.
  */
 @Entity
 @Table(name = "account")
@@ -36,6 +37,9 @@ public class Account {
 
     @Column(name = "teacher_plan")
     private boolean teacherPlan;
+
+    @Column(name = "admin")
+    private boolean admin;
 
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;

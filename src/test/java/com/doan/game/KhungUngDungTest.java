@@ -12,11 +12,14 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * Nó nhỏ nhưng không vô dụng: mọi @Service, @RestController và @Entity đều phải nạp
  * được, nên một bean thiếu phụ thuộc hay một ánh xạ JPA sai là hỏng ngay ở đây. Với một
- * khung 104 lớp thì đó đúng là thứ dễ gãy nhất.
+ * khung hơn trăm lớp thì đó đúng là thứ dễ gãy nhất.
+ *
+ * halt_on_error: mặc định Hibernate gặp lỗi tạo bảng chỉ ghi log rồi chạy tiếp, nên test vẫn xanh
+ * trong khi bảng không tồn tại. Gặp thật ngày 26/09 với cột `day` trùng từ khoá của H2.
  *
  * Có nghiệp vụ thật thì thay bằng test thật — đừng để mỗi test này.
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true")
 class KhungUngDungTest {
 
     @Test

@@ -26,7 +26,7 @@ public class Question {
     @Column(name = "pool", length = 40)
     private String pool;
 
-    @Column(name = "stem")
+    @Column(name = "stem", length = 8000)
     private String stem;
 
     @Column(name = "options")
