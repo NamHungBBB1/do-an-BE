@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Bài làm của một học sinh cho một đề. Gắn vào slot, nên không bao giờ lọt sang phạm vi gia đình.
+ * Bài làm của một học sinh cho một đề. Gắn vào slot, nên không bao giờ lọt sang nhóm khác.
  */
 @Entity
 @Table(name = "quiz_result")

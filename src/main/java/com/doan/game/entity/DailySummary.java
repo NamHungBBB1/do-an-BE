@@ -9,9 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Bản tổng kết mỗi đêm do mô hình ngôn ngữ bên thứ ba viết, cho một slot hoặc cho cả lớp. Giữ
- * model và promptVersion vì đổi mô hình là đổi giọng văn và kết luận. Mỗi ngày một dòng nên chạy
- * lại job chỉ ghi đè.
+ * Bản tổng kết mỗi đêm do mô hình ngôn ngữ bên thứ ba viết, cho một slot hoặc cho cả nhóm (gói
+ * Edu). Giữ model và promptVersion vì đổi mô hình là đổi giọng văn và kết luận. Mỗi ngày một dòng
+ * nên chạy lại job chỉ ghi đè.
  */
 @Entity
 @Table(name = "daily_summary")

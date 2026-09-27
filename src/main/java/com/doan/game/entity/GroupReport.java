@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Báo cáo tổng kết lớp, đông cứng đúng lúc nhóm đóng và không bao giờ tính lại. Công thức chấm
- * điểm chưa chốt và sẽ còn đổi; tính lại là âm thầm làm đổi một báo cáo cô giáo đã phát ra rồi.
+ * Báo cáo tổng kết nhóm, đông cứng đúng lúc nhóm đóng và không bao giờ tính lại. Công thức chấm
+ * điểm chưa chốt và sẽ còn đổi; tính lại là âm thầm làm đổi một báo cáo người lớn đã dùng rồi.
  */
 @Entity
 @Table(name = "group_report")

@@ -9,7 +9,7 @@ import lombok.Setter;
 
 /**
  * Một chỗ ngồi cho một đứa trẻ: bản thân nó CHÍNH LÀ thông tin đăng nhập. Là một suất thuê chứ
- * không phải danh tính vĩnh viễn — kết thúc lớp là lưu trữ nó lại và trả chỗ về cho lớp dùng tiếp.
+ * không phải danh tính vĩnh viễn — kết thúc nhóm là lưu trữ nó lại và trả chỗ về cho nhóm mới.
  */
 @Entity
 @Table(name = "child_slot")

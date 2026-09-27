@@ -18,6 +18,13 @@ Khuôn lấy từ `build/swp-kien-truc.drawio`, tức đúng cách nhóm đã l�
 
 Nền là `entity` — ánh xạ 1–1 với 19 thực thể trong Capstone Register.
 
+## Gói (27/09)
+
+Một tài khoản giữ đúng một gói ở cột `Account.plan`: `NONE`, `STANDARD` (4 slot) hoặc `EDU`
+(40 slot, quiz, phân nhóm hành vi). Edu là nâng cấp của Standard: nâng thì nhóm đang mở giữ nguyên,
+hạn mức 4 → 40. Mỗi tài khoản tối đa một nhóm đang mở. Không còn vai giáo viên hay phân biệt
+gia đình/lớp.
+
 ## Bốn nhóm cắt ngang
 
 `DTO/request` · `DTO/response` — dùng `record` của Java 17. **Entity không bao giờ lọt thẳng ra API**;
@@ -25,7 +32,7 @@ lộ một cột nội bộ ra ngoài thì về sau không rút lại được.
 
 `mapper` — viết tay, phương thức tĩnh. Không MapStruct, đúng như SWP.
 
-`enums` — `Role`, `LearningContext`, `AuthProvider`, `PackageKind`, `TransactionStatus`.
+`enums` — `Role`, `Plan`, `AuthProvider`, `PackageKind`, `TransactionStatus`.
 
 `exception` — `ErrorCode` → `AppException` → `GlobalExceptionHandler` → `ApiResponse`.
 
@@ -38,7 +45,7 @@ lộ một cột nội bộ ra ngoài thì về sau không rút lại được.
 | Service | Giữ bảng nào | Làm gì |
 |---|---|---|
 | `AuthService` | Account, Credential | Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập |
-| `GroupService` | LearnerGroup | Mở lớp, đóng lớp, đếm chỗ trống |
+| `GroupService` | LearnerGroup | Mở nhóm, kết thúc nhóm (cả hai gói), đếm chỗ trống |
 | `SlotService` | ChildSlot | Phát chỗ, trả chỗ, xoá sạch, đường trẻ đăng nhập |
 | `PlayService` | ChoiceEvent, MiniGameResult, RunState | Nhận lô một chương |
 | `QuizService` | Question, Quiz, QuizResult | Kho câu hỏi, soạn quiz, chấm |
@@ -46,15 +53,15 @@ lộ một cột nội bộ ra ngoài thì về sau không rút lại được.
 | `RewardService` | Achievement, RewardItem, Redemption | Thành tựu và đổi thưởng |
 | `PaymentService` | Transaction | Cổng thanh toán và webhook |
 | `AdminService` | RoleGrantLog | Phát và thu vai, kèm sổ ghi |
-| `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, bản tổng kết mỗi đêm (FR-25 đến FR-27) |
+| `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm nhóm (Edu), bản tổng kết mỗi đêm (FR-25 đến FR-27) |
 
 ---
 
 ## Bốn điều phải giữ khi điền ruột
 
-**1. Truy vấn dữ liệu trẻ lọc theo `groupId`, không bao giờ theo `ownerId`.** Một người lớn có thể
-giữ cả gói phụ huynh lẫn gói giáo viên; lọc theo tài khoản là gộp con mình với học sinh mình dạy
-vào một danh sách — và **không có gì báo lỗi**, danh sách chỉ dài hơn bình thường. Luật `BR-116`.
+**1. Truy vấn dữ liệu trẻ lọc theo `groupId`, không bao giờ theo `ownerId`.** Một tài khoản sở hữu
+nhiều nhóm theo thời gian (kết thúc nhóm này, mở nhóm khác); lọc theo tài khoản là gộp các đợt vào
+một danh sách — và **không có gì báo lỗi**, danh sách chỉ dài hơn bình thường. Luật `BR-116`.
 
 **2. `Credential` khoá trên `(provider, subject)`, không khoá trên email.** OpenID Connect Core
 mục 5.7 nói rõ email KHÔNG được dùng làm định danh duy nhất: nó đổi được và có thể cấp lại cho
@@ -94,7 +101,7 @@ tệp đã có — hoặc đừng chạy nữa.
 
 **5. Ra ngoài chỉ có con số.** Job tổng kết mỗi đêm gọi mô hình ngôn ngữ của bên thứ ba. Thứ gửi
 đi chỉ là con số đã tính (mức nắm khái niệm, nhóm hành vi) kèm mã slot. Không bao giờ gửi tên, tên
-lớp hay lịch sử lựa chọn thô. Luật `BR-404`, yêu cầu `NFR-08`. Gọi lỗi thì để đêm sau thử lại,
+nhóm hay lịch sử lựa chọn thô. Luật `BR-404`, yêu cầu `NFR-08`. Gọi lỗi thì để đêm sau thử lại,
 không được làm chậm việc chơi.
 
 ## Còn thiếu, cần chốt trước khi code

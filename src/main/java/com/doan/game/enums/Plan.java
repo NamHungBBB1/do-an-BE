@@ -1,9 +1,7 @@
 package com.doan.game.enums;
 
-public enum Role {
-    ADMIN,
-    CHILD,
+public enum Plan {
     EDU,
-    GUEST,
+    NONE,
     STANDARD
 }

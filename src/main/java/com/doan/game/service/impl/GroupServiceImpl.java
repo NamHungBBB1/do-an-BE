@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Vòng đời nhóm: mở lớp, đóng lớp, đếm chỗ trống.
+ * Vòng đời nhóm cho cả hai gói: mở nhóm, kết thúc nhóm, đếm chỗ trống.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.

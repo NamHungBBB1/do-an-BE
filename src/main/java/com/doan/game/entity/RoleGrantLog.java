@@ -9,7 +9,7 @@ import lombok.Setter;
 
 /**
  * Nhật ký cho mọi lần đổi vai bằng tay. Trả lời đúng câu người rà soát sẽ hỏi: vì sao tài khoản
- * này giữ vai giáo viên mà không có khoản thanh toán nào?
+ * này giữ gói Edu mà không có khoản thanh toán nào?
  */
 @Entity
 @Table(name = "role_grant_log")

@@ -1,6 +1,5 @@
 package com.doan.game.entity;
 
-import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,9 +8,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Cái hộp giữa người lớn và các chỗ ngồi: một gia đình hoặc một lớp học. Giữ hạn mức 4/40 và ngày
- * mở, ngày đóng. Tài khoản sống nhiều năm còn lớp chết mỗi kỳ, nên treo chỗ ngồi thẳng vào tài
- * khoản là trộn ba lứa học sinh với nhau vĩnh viễn.
+ * Cái hộp giữa người lớn và các chỗ ngồi: một đợt học. Giữ hạn mức chép từ gói (4 hoặc 40) và ngày
+ * mở, ngày đóng; mỗi tài khoản tối đa một nhóm đang mở. Tài khoản sống nhiều năm còn một đợt thì
+ * kết thúc, nên treo chỗ ngồi thẳng vào tài khoản là trộn các đợt với nhau vĩnh viễn. Bỏ phân biệt
+ * gia đình/lớp từ 27/09.
  */
 @Entity
 @Table(name = "learner_group")
@@ -28,10 +28,6 @@ public class LearnerGroup {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)
     private Account owner;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "context")
-    private LearningContext context;
 
     @Column(name = "name", length = 80)
     private String name;

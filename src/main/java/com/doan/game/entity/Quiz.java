@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một đề trắc nghiệm giáo viên ghép từ kho câu hỏi dùng chung.
+ * Một đề trắc nghiệm người dùng gói Edu ghép từ kho câu hỏi dùng chung.
  */
 @Entity
 @Table(name = "quiz")

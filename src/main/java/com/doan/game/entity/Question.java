@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một câu hỏi trong kho dùng chung để giáo viên chọn. Trước 25/09 không hề tồn tại:
+ * Một câu hỏi trong kho dùng chung để người dùng gói Edu chọn. Trước 25/09 không hề tồn tại:
  * Quiz.questionIds trỏ vào hư không. Cột standard ghi câu hỏi đo theo khung nào, source ghi nó lấy
  * từ đâu — để nghiên cứu nói được rằng câu hỏi không do nhóm tự nghĩ ra.
  */
