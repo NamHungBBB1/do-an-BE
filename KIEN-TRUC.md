@@ -1,8 +1,8 @@
 # Kiến trúc BE — bản khung
 
-Sinh lần đầu 25/09/2026, **sinh lại 02/10/2026** theo ERD bản 01/10 (role cơ bản). **Toàn bộ là khung:
-chưa có một dòng nghiệp vụ nào.** Mọi hàm còn ném `UnsupportedOperationException("chua cai dat")` — cố ý,
-để không ai gọi một lớp rỗng rồi tưởng nó đã chạy.
+Sinh lần đầu 25/09/2026, **sinh lại 02/10/2026** theo ERD bản 01/10 (role cơ bản). **Hầu hết là khung:**
+mọi hàm còn ném `UnsupportedOperationException("chua cai dat")` — cố ý, để không ai gọi một lớp rỗng rồi
+tưởng nó đã chạy. **Đã có ruột (02/10): `PaymentService`** — thanh toán PayOS và cấp gói, xem mục riêng dưới.
 
 Khuôn lấy từ `build/swp-kien-truc.drawio`, tức đúng cách nhóm đã làm ở SWP.
 
@@ -49,7 +49,10 @@ trị** chứ không theo tên cột (`purpose` có ở hai bảng khác nghĩa;
 `configuration` — CORS, OpenAPI, Security, **PayOS**: `PayOsProperties` (record, đọc `app.payos.*`) và
 `PayOsConfig` tạo bean `PayOS` từ SDK chính chủ `vn.payos:payos-java`; **không có khoá thì không có bean**,
 nên máy dev không bao giờ gọi PayOS thật. Khoá đặt trong `/etc/finteen.env` (`PAYOS_CLIENT_ID`,
-`PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`), không nằm trong git.
+`PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`), không nằm trong git. `PlanProperties` (`app.plan.*`: giá hai gói và
+số tháng — **giá bán chưa chốt**, mặc định 2000 đ chỉ để thử thanh toán thật, giá thật đặt qua env
+`PLAN_PRICE_PARENT` / `PLAN_PRICE_TEACHER`). `ClockConfig` cấp một `Clock` múi giờ Việt Nam dùng chung;
+service lấy "hôm nay" từ nó, test thay bằng `Clock.fixed`.
 
 ---
 
@@ -65,7 +68,7 @@ nên máy dev không bao giờ gọi PayOS thật. Khoá đặt trong `/etc/fint
 | `QuizService` | Question, Quiz, QuizResult, QuizAnswer | Soạn quiz từ kho, phát cho lớp, chấm, kết quả từng em |
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
-| `PaymentService` | Transaction | PayOS theo demo chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron quét PENDING |
+| `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
 | `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
@@ -102,6 +105,29 @@ bằng `ZoneId.of("Asia/Ho_Chi_Minh")`, không dùng giờ máy chủ.
 
 ---
 
+## PaymentService — cách nó chạy
+
+Mã lỗi dải **4xxx**. Ba quy tắc, cả ba đều có test (`PaymentServiceImplTest`, Mockito, không cần Spring):
+
+1. **Trạng thái chỉ đi tới.** `PENDING → PAID` hoặc `PENDING → FAILED`, không bao giờ lùi. Giao dịch lưu
+   PENDING **trước** khi gọi PayOS; PayOS lỗi thì rollback, không có link thì không có giao dịch.
+2. **Ghi nhận PAID là idempotent.** Webhook về hai lần, hay webhook và trang `returnUrl` cùng lúc, chỉ cấp gói
+   một lần: khoá hàng (`khoaTheoOrderCode`, PESSIMISTIC_WRITE) + `Entitlement.transactionId UNIQUE`. Số tiền
+   lệch thì **không cấp**, chỉ ghi log để đối soát tay. `orderCode` không có trong bảng (PayOS gửi webhook thử
+   lúc đăng ký URL) thì bỏ qua, vẫn 200.
+3. **Ngày gói theo giờ Việt Nam.** Gói mới `startsOn = hôm nay`; gia hạn sớm thì `startsOn = expiresOn cũ + 1`
+   (không mất ngày); `expiresOn = startsOn + 3 tháng − 1 ngày`, dùng hết ngày đó.
+
+Ba đường biết tiền đã về, cái nào tới trước cũng được: webhook (chính), `GET /api/payments/{orderCode}` hỏi
+lại PayOS khi còn PENDING (trang returnUrl gọi), và cron `quetGiaoDichTreo` mỗi 2 phút đối soát giao dịch
+PENDING từ 2 phút tới 25 giờ tuổi (link PayOS tự hết hạn sau 24 giờ → FAILED).
+
+Controller đọc "tôi là ai" từ `Jwt.getSubject()` (UUID tài khoản) — quy ước chung cho mọi controller sau này.
+`POST /api/payments/webhook` là chỗ **duy nhất** controller bắt lỗi, vì PayOS đòi 200.
+
+**Còn thiếu:** đăng ký URL webhook với PayOS (`POST /api/payments/webhook/confirm`, admin) — chỉ làm sau khi
+VPS chạy bản này; và giá bán thật.
+
 ## Sinh lại
 
 Lược đồ đổi thì **chạy lại script, đừng sửa tay**:
@@ -115,8 +141,10 @@ Script hiện đọc `brainstorm-hub/public/erd-0110.json` (bản nháp 01/10, c
 `6.Entities` đã sửa theo bản này thì trỏ lại `erd.json`.
 
 **Cẩn thận:** script **xoá rồi sinh lại** các gói `entity`, `enums`, `repository`, `service`,
-`controller` (trừ `HealthController`). Khi đã có nghiệp vụ thật trong `service/impl`, phải sửa script cho
-nó bỏ qua những tệp đã có — hoặc đừng chạy nữa.
+`controller`. Tệp **đã có ruột** phải nằm trong `GIU_LAI` của `ops/sinh-khung-be.py` (hiện: HealthController,
+PaymentController, PaymentService, PaymentServiceImpl, TransactionRepository, EntitlementRepository): script
+đọc chúng trước, sinh khung xong rồi **ghi lại y nguyên**. Viết ruột cho phần nào thì thêm tệp vào đó ngay,
+trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — ruột chỉ nên nằm ở service/controller/repository.
 
 ## Chưa vào khung, cố ý
 

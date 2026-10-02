@@ -19,7 +19,7 @@ import vn.payos.core.ClientOptions;
  *   client.webhooks().confirm(url)                                                 -> đăng ký URL
  */
 @Configuration
-@EnableConfigurationProperties(PayOsProperties.class)
+@EnableConfigurationProperties({PayOsProperties.class, PlanProperties.class})
 public class PayOsConfig {
 
     @Bean
