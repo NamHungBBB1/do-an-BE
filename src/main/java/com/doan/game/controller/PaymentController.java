@@ -19,8 +19,23 @@ public class PaymentController {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    @GetMapping("/{orderCode}")
+    public void xemGiaoDich() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @PostMapping("/{orderCode}/cancel")
+    public void huyGiaoDich() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
     @PostMapping("/webhook")
     public void nhanWebhook() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @PostMapping("/webhook/confirm")
+    public void xacNhanWebhook() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

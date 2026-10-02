@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Giao dịch PayOS: tạo giao dịch mua mới hoặc gia hạn; webhook PAID thì tạo Entitlement (gia hạn sớm nối tiếp hạn cũ); trạng thái chỉ chuyển tiến, webhook trùng bỏ qua; cron quét giao dịch PENDING quá hạn.
+ * PayOS qua SDK chính chủ (bean PayOS trong configuration/PayOsConfig). Tạo link (orderCode do mình sinh, lưu Transaction PENDING); xem / huỷ theo orderCode; webhook: client.webhooks().verify(body) rồi PAID thì tạo Entitlement (gia hạn sớm nối tiếp hạn cũ), trùng thì bỏ qua, LUÔN trả 200; returnUrl cũng chủ động hỏi lại PayOS; cron quét PENDING quá hạn; admin đăng ký URL webhook bằng webhooks().confirm.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
@@ -24,7 +24,22 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public void nhanWebhook(String chuKy, String noiDung) {
+    public PaymentStatusResponse xemGiaoDich(long orderCode) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public void huyGiaoDich(long orderCode, String lyDo) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public void nhanWebhook(String body) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public String xacNhanWebhook(String url) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

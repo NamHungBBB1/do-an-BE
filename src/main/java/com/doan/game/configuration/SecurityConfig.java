@@ -53,6 +53,9 @@ public class SecurityConfig {
                 // cả khi server chết — bắt đăng nhập ở đây là đi ngược chốt đó.
                 .requestMatchers("/api/telemetry/**").permitAll()
                 // Phát và thu slot là việc của người lớn ĐÃ MUA GÓI. Vai nằm trong token.
+                // Việc của admin: cấp / thu vai, cấp gói không thanh toán, đăng ký URL webhook PayOS.
+                .requestMatchers("/api/admin/**", "/api/entitlements/grant",
+                        "/api/payments/webhook/confirm").hasAuthority("SCOPE_ADMIN")
                 .requestMatchers("/api/slots/**").hasAnyAuthority("SCOPE_PARENT", "SCOPE_TEACHER")
                 .anyRequest().authenticated())
             .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))

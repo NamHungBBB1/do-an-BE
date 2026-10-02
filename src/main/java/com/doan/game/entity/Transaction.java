@@ -9,8 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một lần thanh toán PayOS: mua mới hoặc gia hạn gói Phụ huynh / Giáo viên. Trạng thái chỉ chuyển
- * tiến; webhook trùng bỏ qua. Bỏ UPGRADE.
+ * Một lần thanh toán PayOS: mua mới hoặc gia hạn gói Phụ huynh / Giáo viên. orderCode là số do
+ * mình sinh, PayOS bắt buộc (02/10, theo tài liệu SDK); gatewayRef là paymentLinkId PayOS trả về.
+ * Trạng thái chỉ chuyển tiến; webhook trùng bỏ qua. Bỏ UPGRADE.
  */
 @Entity
 @Table(name = "transaction")
@@ -27,6 +28,9 @@ public class Transaction {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
+
+    @Column(name = "order_code", unique = true)
+    private Long orderCode;
 
     @Column(name = "gateway_ref", length = 64, unique = true)
     private String gatewayRef;

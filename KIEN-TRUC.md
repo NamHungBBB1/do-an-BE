@@ -46,7 +46,10 @@ trị** chứ không theo tên cột (`purpose` có ở hai bảng khác nghĩa;
 
 `exception` — `ErrorCode` → `AppException` → `GlobalExceptionHandler` → `ApiResponse`.
 
-`configuration` — CORS, OpenAPI, Security.
+`configuration` — CORS, OpenAPI, Security, **PayOS**: `PayOsProperties` (record, đọc `app.payos.*`) và
+`PayOsConfig` tạo bean `PayOS` từ SDK chính chủ `vn.payos:payos-java`; **không có khoá thì không có bean**,
+nên máy dev không bao giờ gọi PayOS thật. Khoá đặt trong `/etc/finteen.env` (`PAYOS_CLIENT_ID`,
+`PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`), không nằm trong git.
 
 ---
 
@@ -62,7 +65,7 @@ trị** chứ không theo tên cột (`purpose` có ở hai bảng khác nghĩa;
 | `QuizService` | Question, Quiz, QuizResult, QuizAnswer | Soạn quiz từ kho, phát cho lớp, chấm, kết quả từng em |
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
-| `PaymentService` | Transaction | PayOS: mua mới / gia hạn, webhook tạo Entitlement, quét giao dịch treo |
+| `PaymentService` | Transaction | PayOS theo demo chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron quét PENDING |
 | `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
