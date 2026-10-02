@@ -46,6 +46,7 @@ public class SecurityConfig {
                 // /verify là link người dùng bấm từ hộp thư — không thể có token ở đó.
                 // Bảo vệ của nó là bản thân token ngẫu nhiên 32 byte trên URL, dùng một lần.
                 .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/verify",
+                        "/api/auth/verify/resend",
                         "/api/auth/password/forgot", "/api/auth/password/reset",
                         // Trẻ đăng nhập bằng mã + PIN nên chưa có token; webhook PayOS tự kiểm chữ ký.
                         "/api/slots/login", "/api/payments/webhook",
