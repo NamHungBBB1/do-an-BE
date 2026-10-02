@@ -44,6 +44,15 @@ public enum ErrorCode {
     EMAIL_ALREADY_VERIFIED(3014, "Email này đã xác thực rồi", HttpStatus.CONFLICT),
     VERIFY_TOO_SOON(3015, "Vừa gửi mail xong, đợi một phút rồi thử lại",
             HttpStatus.TOO_MANY_REQUESTS),
+    ACCOUNT_LOCKED(3016, "Sai mật khẩu quá nhiều lần, thử lại sau 15 phút",
+            HttpStatus.LOCKED),
+    /** Tách khỏi 3012/3013 vì câu chữ trong mail là "link đặt lại mật khẩu", đọc chung sẽ thành sai ngữ cảnh. */
+    RESET_TOKEN_INVALID(3017, "Link đặt lại mật khẩu không đúng hoặc đã dùng rồi", HttpStatus.BAD_REQUEST),
+    RESET_TOKEN_EXPIRED(3018, "Link đặt lại mật khẩu đã hết hạn, xin một link mới",
+            HttpStatus.GONE),
+    /** Không giới hạn số lần xin link thì chính chỗ này thành công cụ spam mail tới người khác. */
+    RESET_TOO_SOON(3019, "Vừa gửi link đặt lại mật khẩu xong, đợi một phút rồi thử lại",
+            HttpStatus.TOO_MANY_REQUESTS),
     // 4xxx  thanh toán và gói
     PLAN_KIND_INVALID(4001, "Loại gói không hợp lệ — chỉ PARENT hoặc TEACHER", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_NOT_SET(4002, "Admin chưa đặt giá cho gói này", HttpStatus.CONFLICT),
