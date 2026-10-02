@@ -1,7 +1,7 @@
 package com.doan.game.mapper;
 
 import com.doan.game.DTO.response.SlotResponse;
-import com.doan.game.entity.ChildSlot;
+import com.doan.game.entity.LearnerSlot;
 
 /**
  * Mapper viết tay, phương thức tĩnh — đúng khuôn SWP, không dùng MapStruct.
@@ -14,7 +14,7 @@ public final class SlotMapper {
     private SlotMapper() {
     }
 
-    public static SlotResponse sang(ChildSlot nguon) {
+    public static SlotResponse sang(LearnerSlot nguon) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập.
+ * Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập, quên mật khẩu.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
@@ -40,6 +40,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void lienKetCachDangNhap(UUID accountId, LinkCredentialRequest req) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public void quenMatKhau(ForgotPasswordRequest req) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public void datLaiMatKhau(ResetPasswordRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

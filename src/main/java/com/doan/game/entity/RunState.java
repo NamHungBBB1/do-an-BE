@@ -9,7 +9,8 @@ import lombok.Setter;
 
 /**
  * Trạng thái bền của một người học: đã xong chương nào và năm chỉ số — chúng cộng dồn suốt cả lượt
- * chứ không reset mỗi chương. Máy khách gửi số tổng nên lô gửi lại chỉ ghi đè vô hại.
+ * chứ không reset mỗi chương. Máy khách gửi số tổng nên lô gửi lại chỉ ghi đè vô hại. Ràng buộc:
+ * CHECK: 5 chỉ số trong 0..100
  */
 @Entity
 @Table(name = "run_state")
@@ -22,10 +23,10 @@ public class RunState {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    @JoinColumn(name = "slot_id", nullable = false, unique = true)
+    private LearnerSlot slot;
 
     @Column(name = "chapters_done")
     private String chaptersDone;

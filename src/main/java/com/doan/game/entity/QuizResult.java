@@ -8,10 +8,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Bài làm của một học sinh cho một đề. Gắn vào slot, nên không bao giờ lọt sang nhóm khác.
+ * Bài làm của một học sinh. Mỗi em làm 1 lần; chưa mở quiz thì không có dòng. Ràng buộc:
+ * UNIQUE(quizId, slotId): mỗi em làm 1 lần
  */
 @Entity
-@Table(name = "quiz_result")
+@Table(name = "quiz_result", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"quiz_id", "slot_id"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,10 +29,10 @@ public class QuizResult {
     @JoinColumn(name = "quiz_id", nullable = false)
     private Quiz quiz;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "score")
     private Integer score;

@@ -19,6 +19,11 @@ public class GroupController {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    @PostMapping("/{id}/consent")
+    public void xacNhanDongY() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
     @PostMapping("/{id}/close")
     public void dongNhom() {
         throw new UnsupportedOperationException("chua cai dat");

@@ -29,4 +29,9 @@ public class QuizController {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    @GetMapping("/{id}/results")
+    public void xemKetQuaLop() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
 }

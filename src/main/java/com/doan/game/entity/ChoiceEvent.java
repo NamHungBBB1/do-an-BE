@@ -11,10 +11,12 @@ import lombok.Setter;
  * Một lựa chọn người học đưa ra trong đoạn thoại. KHÔNG có đáp án đúng — cột effects ghi lựa chọn
  * đó làm năm chỉ số dịch chuyển ra sao. Cố ý tách khỏi MiniGameResult: nhét sở thích chung bảng
  * với đáp án đúng–sai thì hoặc để một cột rỗng vĩnh viễn, hoặc mời người ta đi chấm điểm một sở
- * thích.
+ * thích. Ràng buộc: UNIQUE(slotId, chapter, attemptIndex, sceneId): chống ghi trùng khi gửi lại lô
  */
 @Entity
-@Table(name = "choice_event")
+@Table(name = "choice_event", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"slot_id", "chapter", "attempt_index", "scene_id"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,10 +26,10 @@ public class ChoiceEvent {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "chapter")
     private Integer chapter;

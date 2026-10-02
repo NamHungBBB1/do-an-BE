@@ -9,10 +9,12 @@ import lombok.Setter;
 
 /**
  * Một huy hiệu hoặc chứng chỉ người học kiếm được. Người lớn quản lý đọc được; còn lịch sử chơi
- * chi tiết thì vẫn riêng tư.
+ * chi tiết thì vẫn riêng tư. Ràng buộc: UNIQUE(slotId, code)
  */
 @Entity
-@Table(name = "achievement")
+@Table(name = "achievement", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"slot_id", "code"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,10 +24,10 @@ public class Achievement {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "code", length = 40)
     private String code;

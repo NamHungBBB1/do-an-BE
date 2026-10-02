@@ -6,14 +6,16 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Giao dịch qua cổng thanh toán và webhook bật vai.
+ * Giao dịch PayOS: tạo giao dịch mua mới hoặc gia hạn; webhook PAID thì tạo Entitlement (gia hạn sớm nối tiếp hạn cũ); trạng thái chỉ chuyển tiến, webhook trùng bỏ qua; cron quét giao dịch PENDING quá hạn.
  *
  * Bảng phụ trách: Transaction
  */
 public interface PaymentService {
 
-    PaymentResponse taoGiaoDich(UUID accountId, BuyPackageRequest req);
+    PaymentResponse taoGiaoDich(UUID accountId, BuyPlanRequest req);
 
     void nhanWebhook(String chuKy, String noiDung);
+
+    void quetGiaoDichTreo();
 
 }

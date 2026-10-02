@@ -1,5 +1,5 @@
 package com.doan.game.DTO.response;
 
-/** PIN không bao giờ trả về; chỉ trả mã QR lúc vừa phát. */
-public record SlotResponse(java.util.UUID id, String code, String displayName, String badge, boolean archived) {
+/** PIN không bao giờ trả về. locked tính từ lockedUntil, không phải cột status. */
+public record SlotResponse(java.util.UUID id, String code, String displayName, String badge, String status, boolean locked) {
 }

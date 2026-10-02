@@ -6,9 +6,9 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Phát và thu vai bằng tay, kèm sổ ghi.
+ * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do.
  *
- * Bảng phụ trách: RoleGrantLog
+ * Bảng phụ trách: AccountRole, RoleGrantLog
  */
 public interface AdminService {
 

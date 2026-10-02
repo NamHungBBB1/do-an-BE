@@ -1,6 +1,6 @@
 package com.doan.game.controller;
 
-import com.doan.game.service.RewardService;
+import com.doan.game.service.AchievementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -8,14 +8,14 @@ import org.springframework.web.bind.annotation.*;
  * Cửa vào HTTP. Tầng này MỎNG: nhận, gọi service, trả về. Không nghiệp vụ.
  */
 @RestController
-@RequestMapping("/api/rewards")
+@RequestMapping("/api/achievements")
 @RequiredArgsConstructor
-public class RewardController {
+public class AchievementController {
 
-    private final RewardService rewardService;
+    private final AchievementService achievementService;
 
-    @PostMapping("/redeem")
-    public void doiThuong() {
+    @GetMapping
+    public void xemThanhTuu() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

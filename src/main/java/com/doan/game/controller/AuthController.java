@@ -34,4 +34,14 @@ public class AuthController {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    @PostMapping("/password/forgot")
+    public void quenMatKhau() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @PostMapping("/password/reset")
+    public void datLaiMatKhau() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
 }

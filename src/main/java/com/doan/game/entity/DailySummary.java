@@ -1,5 +1,6 @@
 package com.doan.game.entity;
 
+import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -9,12 +10,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Bản tổng kết mỗi đêm do mô hình ngôn ngữ bên thứ ba viết, cho một slot hoặc cho cả nhóm (gói
- * Edu). Giữ model và promptVersion vì đổi mô hình là đổi giọng văn và kết luận. Mỗi ngày một dòng
- * nên chạy lại job chỉ ghi đè.
+ * Tổng kết hằng ngày. Parent: một bản mỗi slot; Teacher: một bản mỗi slot + một bản cho cả lớp
+ * (groupId). source = RULE khi AI lỗi và dùng bản theo luật. UNIQUE theo ngày để job chạy lại
+ * không sinh bản thứ hai. Ràng buộc: CHECK: đúng một trong slotId / groupId khác NULL ·
+ * UNIQUE(slotId, summaryDate) · UNIQUE(groupId, summaryDate)
  */
 @Entity
-@Table(name = "daily_summary")
+@Table(name = "daily_summary", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"slot_id", "summary_date"}),
+    @UniqueConstraint(columnNames = {"group_id", "summary_date"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,10 +29,10 @@ public class DailySummary {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "slot_id", nullable = true)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     /** LearnerGroup. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
@@ -39,6 +44,10 @@ public class DailySummary {
 
     @Column(name = "summary", length = 8000)
     private String summary;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source")
+    private SummarySource source;
 
     @Column(name = "model", length = 80)
     private String model;

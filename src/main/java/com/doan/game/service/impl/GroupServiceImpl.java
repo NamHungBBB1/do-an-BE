@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Vòng đời nhóm cho cả hai gói: mở nhóm, kết thúc nhóm, đếm chỗ trống.
+ * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
@@ -20,6 +20,11 @@ public class GroupServiceImpl implements GroupService {
 
     @Override
     public LearnerGroupResponse moNhom(UUID ownerId, CreateGroupRequest req) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public void xacNhanDongY(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

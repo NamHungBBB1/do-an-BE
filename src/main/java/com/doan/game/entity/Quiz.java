@@ -8,7 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một đề trắc nghiệm người dùng gói Edu ghép từ kho câu hỏi dùng chung.
+ * Đề giáo viên tự chọn câu từ kho chung, phát cho một nhóm CLASS, có hạn nộp. Child không bao giờ
+ * có quiz.
  */
 @Entity
 @Table(name = "quiz")
@@ -26,11 +27,19 @@ public class Quiz {
     @JoinColumn(name = "owner_id", nullable = false)
     private Account owner;
 
+    /** LearnerGroup. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "group_id", nullable = false)
+    private LearnerGroup group;
+
     @Column(name = "title", length = 120)
     private String title;
 
     @Column(name = "question_ids")
     private String questionIds;
+
+    @Column(name = "due_at")
+    private Instant dueAt;
 
     @Column(name = "published_at")
     private Instant publishedAt;

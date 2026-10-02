@@ -10,10 +10,13 @@ import lombok.Setter;
 
 /**
  * Ước lượng knowledge tracing cho một người học và một khái niệm: xác suất đã nắm, và dựa trên bao
- * nhiêu câu trả lời. Tính lại được từ MiniGameResult bất cứ lúc nào.
+ * nhiêu câu trả lời. Tính lại được từ MiniGameResult bất cứ lúc nào. Ràng buộc: UNIQUE(slotId,
+ * concept)
  */
 @Entity
-@Table(name = "concept_mastery")
+@Table(name = "concept_mastery", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"slot_id", "concept"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,10 +26,10 @@ public class ConceptMastery {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "concept", length = 40)
     private String concept;

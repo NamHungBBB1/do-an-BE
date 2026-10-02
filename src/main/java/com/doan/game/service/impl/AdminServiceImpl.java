@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Phát và thu vai bằng tay, kèm sổ ghi.
+ * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.

@@ -15,17 +15,27 @@ public class SlotController {
     private final SlotService slotService;
 
     @PostMapping
-    public void phatCho() {
+    public void moSlot() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @PostMapping("/bulk")
+    public void moNhieuSlot() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/return")
-    public void traCho() {
+    public void traSlot() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @DeleteMapping("/{id}")
     public void xoaSach() {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @PostMapping("/{id}/pin")
+    public void doiPin() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

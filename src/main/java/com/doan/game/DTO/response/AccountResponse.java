@@ -1,5 +1,5 @@
 package com.doan.game.DTO.response;
 
-/** Một tài khoản giữ đúng một gói: NONE, STANDARD hoặc EDU. */
-public record AccountResponse(java.util.UUID id, String email, String displayName, String plan) {
+/** plans = gói còn hạn (PARENT / TEACHER, có thể cả hai); roles = vai nội bộ (ADMIN...). */
+public record AccountResponse(java.util.UUID id, String email, String displayName, java.util.List<String> plans, java.util.List<String> roles) {
 }

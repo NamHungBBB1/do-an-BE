@@ -9,8 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một lần thanh toán qua PayOS. gatewayRef là UNIQUE nên một webhook bị gửi hai lần không thể cấp
- * gói hai lần.
+ * Một lần thanh toán PayOS: mua mới hoặc gia hạn gói Phụ huynh / Giáo viên. Trạng thái chỉ chuyển
+ * tiến; webhook trùng bỏ qua. Bỏ UPGRADE.
  */
 @Entity
 @Table(name = "transaction")
@@ -32,8 +32,12 @@ public class Transaction {
     private String gatewayRef;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "package")
-    private PackageKind packageValue;
+    @Column(name = "kind")
+    private PlanKind kind;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose")
+    private TransactionPurpose purpose;
 
     @Column(name = "amount")
     private Long amount;
@@ -41,6 +45,9 @@ public class Transaction {
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private TransactionStatus status;
+
+    @Column(name = "created_at")
+    private Instant createdAt;
 
     @Column(name = "paid_at")
     private Instant paidAt;

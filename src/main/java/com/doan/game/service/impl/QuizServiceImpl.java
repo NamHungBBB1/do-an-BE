@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Kho câu hỏi dùng chung, soạn quiz và đọc kết quả.
+ * Kho câu hỏi chung, giáo viên tự chọn câu soạn quiz, phát cho một lớp (chỉ nhóm CLASS), mỗi em làm một lần, máy chủ chấm, lưu từng câu trả lời.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
@@ -30,6 +30,11 @@ public class QuizServiceImpl implements QuizService {
 
     @Override
     public QuizResultResponse nopBai(UUID quizId, UUID slotId, SubmitQuizRequest req) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    @Override
+    public java.util.List<QuizResultResponse> xemKetQuaLop(UUID quizId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

@@ -6,7 +6,7 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Nhận dữ liệu một chương gửi lên và ghi vào ba dòng đo lường.
+ * Nhận lô một chương và ghi vào ba dòng đo lường. Lô gửi lại nhận ra nhờ UNIQUE (slot, chương, lần chơi, cảnh). Luôn nhận lô kể cả khi gói đã hết hạn; chỉ không mở khoá chương mới.
  *
  * Bảng phụ trách: ChoiceEvent, MiniGameResult, RunState
  */

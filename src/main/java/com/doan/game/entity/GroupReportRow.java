@@ -27,10 +27,10 @@ public class GroupReportRow {
     @JoinColumn(name = "report_id", nullable = false)
     private GroupReport report;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "figures")
     private String figures;

@@ -6,13 +6,15 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Vòng đời nhóm cho cả hai gói: mở nhóm, kết thúc nhóm, đếm chỗ trống.
+ * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
  *
  * Bảng phụ trách: LearnerGroup
  */
 public interface GroupService {
 
     LearnerGroupResponse moNhom(UUID ownerId, CreateGroupRequest req);
+
+    void xacNhanDongY(UUID groupId);
 
     void dongNhom(UUID groupId);
 

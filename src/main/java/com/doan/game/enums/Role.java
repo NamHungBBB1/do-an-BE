@@ -3,7 +3,7 @@ package com.doan.game.enums;
 public enum Role {
     ADMIN,
     CHILD,
-    EDU,
     GUEST,
-    STANDARD
+    PARENT,
+    TEACHER
 }

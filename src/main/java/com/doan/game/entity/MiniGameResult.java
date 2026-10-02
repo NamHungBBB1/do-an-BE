@@ -12,10 +12,12 @@ import lombok.Setter;
  * chơi sinh ra mà CÓ đáp án đúng, nên cũng là dòng duy nhất gánh được kết luận nghiên cứu. Đổi tên
  * từ EstimateEvent ngày 25/09: hình dạng cũ giữ guess và truth — cặp giá trị trò chơi không bao
  * giờ sinh ra. Cột concept (thêm 26/09) ghi khái niệm câu đó kiểm tra; một chương phủ nhiều khái
- * niệm.
+ * niệm. Ràng buộc: UNIQUE(slotId, chapter, attemptIndex, gameId, itemId): chống ghi trùng
  */
 @Entity
-@Table(name = "mini_game_result")
+@Table(name = "mini_game_result", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"slot_id", "chapter", "attempt_index", "game_id", "item_id"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,10 +27,10 @@ public class MiniGameResult {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** ChildSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "slot_id", nullable = false)
-    private ChildSlot slot;
+    private LearnerSlot slot;
 
     @Column(name = "chapter")
     private Integer chapter;

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Đông cứng báo cáo lúc đóng nhóm và đọc lại báo cáo cũ.
+ * Đông cứng báo cáo lúc kết thúc nhóm và đọc lại báo cáo cũ.
  *
  * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.

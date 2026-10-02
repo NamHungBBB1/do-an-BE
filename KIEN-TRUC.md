@@ -1,8 +1,8 @@
 # Kiến trúc BE — bản khung
 
-Sinh ngày 25/09/2026 từ lược đồ ERD đã chốt. **Toàn bộ là khung: chưa có một dòng nghiệp vụ nào.**
-Mọi hàm còn ném `UnsupportedOperationException("chua cai dat")` — cố ý, để không ai gọi một lớp
-rỗng rồi tưởng nó đã chạy.
+Sinh lần đầu 25/09/2026, **sinh lại 02/10/2026** theo ERD bản 01/10 (role cơ bản). **Toàn bộ là khung:
+chưa có một dòng nghiệp vụ nào.** Mọi hàm còn ném `UnsupportedOperationException("chua cai dat")` — cố ý,
+để không ai gọi một lớp rỗng rồi tưởng nó đã chạy.
 
 Khuôn lấy từ `build/swp-kien-truc.drawio`, tức đúng cách nhóm đã làm ở SWP.
 
@@ -16,14 +16,22 @@ Khuôn lấy từ `build/swp-kien-truc.drawio`, tức đúng cách nhóm đã l�
 | Nghiệp vụ | `service` + `service.impl` | Toàn bộ luật, giao dịch, kiểm quyền | Không đụng thẳng HTTP |
 | Dữ liệu | `repository` | Spring Data JPA | Không chứa luật |
 
-Nền là `entity` — ánh xạ 1–1 với 19 thực thể trong Capstone Register.
+Nền là `entity` — ánh xạ 1–1 với **21 thực thể** của ERD bản 01/10 (`brainstorm-hub/public/erd-0110.json`).
 
-## Gói (27/09)
+## Vai và gói (02/10)
 
-Một tài khoản giữ đúng một gói ở cột `Account.plan`: `NONE`, `STANDARD` (4 slot) hoặc `EDU`
-(40 slot, quiz, phân nhóm hành vi). Edu là nâng cấp của Standard: nâng thì nhóm đang mở giữ nguyên,
-hạn mức 4 → 40. Mỗi tài khoản tối đa một nhóm đang mở. Không còn vai giáo viên hay phân biệt
-gia đình/lớp.
+- **Parent / Teacher không lưu ở `Account`.** Vai suy từ `Entitlement` còn hạn: có dòng `PARENT` còn hạn
+  là Parent, có dòng `TEACHER` còn hạn là Teacher; một tài khoản giữ được cả hai. Hai gói độc lập, mỗi gói
+  **3 tháng, tính theo NGÀY** giờ Việt Nam (`startsOn`, `expiresOn` kiểu `DATE`, dùng hết ngày `expiresOn`).
+- **Mọi thao tác cần gói đều gọi `EntitlementService.activePlans(accountId)`**, không tin scope trong JWT:
+  gói có thể hết hạn giữa phiên.
+- Admin cấp được gói **không cần thanh toán** (`Entitlement.source = ADMIN`, ghi `grantedById`).
+- Vai nội bộ (`ADMIN`, sau này `GAME_EDITOR` / `GAME_REVIEWER` / `GAME_MANAGER`) lưu ở `AccountRole`,
+  mỗi lần cấp / thu ghi `RoleGrantLog` kèm lý do.
+- **Child / Student không có tài khoản**: slot là danh tính. Child hay Student suy từ `context` của nhóm
+  (`FAMILY` / `CLASS`). Một trẻ ở cả nhà lẫn lớp có hai slot riêng, dữ liệu tự tách.
+- Mỗi tài khoản **tối đa một nhóm đang mở cho mỗi context**: `LearnerGroup.openContext` = `context` khi
+  đang mở, `NULL` khi đã đóng, `UNIQUE(ownerId, openContext)` — chạy được trên cả H2 lẫn PostgreSQL.
 
 ## Bốn nhóm cắt ngang
 
@@ -32,7 +40,9 @@ lộ một cột nội bộ ra ngoài thì về sau không rút lại được.
 
 `mapper` — viết tay, phương thức tĩnh. Không MapStruct, đúng như SWP.
 
-`enums` — `Role`, `Plan`, `AuthProvider`, `PackageKind`, `TransactionStatus`.
+`enums` — `Role`, `PlanKind`, `EntitlementSource`, `LearningContext`, `SlotStatus`, `AuthProvider`,
+`TokenPurpose`, `TransactionPurpose`, `TransactionStatus`, `SummarySource`. Tên enum lấy theo **tập giá
+trị** chứ không theo tên cột (`purpose` có ở hai bảng khác nghĩa; `context` và `openContext` dùng chung).
 
 `exception` — `ErrorCode` → `AppException` → `GlobalExceptionHandler` → `ApiResponse`.
 
@@ -44,37 +54,48 @@ lộ một cột nội bộ ra ngoài thì về sau không rút lại được.
 
 | Service | Giữ bảng nào | Làm gì |
 |---|---|---|
-| `AuthService` | Account, Credential | Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập |
-| `GroupService` | LearnerGroup | Mở nhóm, kết thúc nhóm (cả hai gói), đếm chỗ trống |
-| `SlotService` | ChildSlot | Phát chỗ, trả chỗ, xoá sạch, đường trẻ đăng nhập |
-| `PlayService` | ChoiceEvent, MiniGameResult, RunState | Nhận lô một chương |
-| `QuizService` | Question, Quiz, QuizResult | Kho câu hỏi, soạn quiz, chấm |
-| `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc đóng nhóm |
-| `RewardService` | Achievement, RewardItem, Redemption | Thành tựu và đổi thưởng |
-| `PaymentService` | Transaction | Cổng thanh toán và webhook |
-| `AdminService` | RoleGrantLog | Phát và thu vai, kèm sổ ghi |
-| `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm nhóm (Edu), bản tổng kết mỗi đêm (FR-25 đến FR-27) |
+| `AuthService` | Account, Credential, VerificationToken | Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập, quên / đặt lại mật khẩu |
+| `EntitlementService` | Entitlement | Gói đang giữ (`activePlans`), admin cấp gói, nhắc sắp hết hạn |
+| `GroupService` | LearnerGroup | Mở nhóm gia đình / lớp, xác nhận đồng ý phụ huynh, kết thúc nhóm, đếm chỗ trống |
+| `SlotService` | LearnerSlot | Mở slot (một hoặc nhiều), trả, xoá sạch, đổi PIN, trẻ đăng nhập |
+| `PlayService` | ChoiceEvent, MiniGameResult, RunState | Nhận lô một chương, chống ghi trùng |
+| `QuizService` | Question, Quiz, QuizResult, QuizAnswer | Soạn quiz từ kho, phát cho lớp, chấm, kết quả từng em |
+| `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
+| `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
+| `PaymentService` | Transaction | PayOS: mua mới / gia hạn, webhook tạo Entitlement, quét giao dịch treo |
+| `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi |
+| `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
 ---
 
-## Bốn điều phải giữ khi điền ruột
+## Những điều phải giữ khi điền ruột
 
 **1. Truy vấn dữ liệu trẻ lọc theo `groupId`, không bao giờ theo `ownerId`.** Một tài khoản sở hữu
-nhiều nhóm theo thời gian (kết thúc nhóm này, mở nhóm khác); lọc theo tài khoản là gộp các đợt vào
-một danh sách — và **không có gì báo lỗi**, danh sách chỉ dài hơn bình thường. Luật `BR-116`.
+nhiều nhóm theo thời gian; lọc theo tài khoản là gộp các đợt vào một danh sách — và **không có gì báo
+lỗi**, danh sách chỉ dài hơn bình thường.
 
-**2. `Credential` khoá trên `(provider, subject)`, không khoá trên email.** OpenID Connect Core
-mục 5.7 nói rõ email KHÔNG được dùng làm định danh duy nhất: nó đổi được và có thể cấp lại cho
-người khác. Gộp tài khoản cần **hai vế** — email đã xác minh *và* người dùng chứng minh được quyền
-sở hữu tài khoản cũ.
+**2. `Credential` khoá trên `(provider, subject)`, không khoá trên email.** OpenID Connect Core mục 5.7
+nói rõ email KHÔNG được dùng làm định danh duy nhất. Gộp tài khoản cần **hai vế** — email đã xác minh *và*
+người dùng chứng minh được quyền sở hữu tài khoản cũ.
 
-**3. Bia mộ không ăn chỗ.** Chỗ trống = `slotLimit` trừ số slot **chưa `archived` và chưa
-`deletedAt`**. Xoá sạch một em thì hàng vẫn còn (để báo cáo cũ không thủng dòng) nhưng thôi chiếm
-chỗ ngay. Luật `BR-103`.
+**3. AVAILABLE không có dòng; bia mộ không ăn chỗ.** Chỗ trống = `slotLimit` trừ số slot `ACTIVE`. Mở slot
+mới tạo dòng và sinh mã. Xoá sạch một em (`WIPED`) thì hàng vẫn còn nhưng thôi chiếm chỗ.
 
-**4. Số thì đóng băng, danh tính thì đọc sống.** `GroupReportRow` chỉ giữ con số và một tham chiếu
-tới slot — **không chép tên vào**. Nhờ vậy xoá một em là mọi báo cáo cũ tự hiện tên mặc định, không
-phải đi sửa một bản đã đông cứng.
+**4. LOCKED không lưu.** "Đang khoá" = `lockedUntil > now`. Không có job mở khoá, nên không có cách nào
+để `status` và đồng hồ lệch nhau.
+
+**5. Số thì đóng băng, danh tính thì đọc sống.** `GroupReportRow` chỉ giữ con số và một tham chiếu tới
+slot — **không chép tên vào**.
+
+**6. Chống ghi trùng bằng UNIQUE thật.** `ChoiceEvent(slot, chapter, attempt, scene)` và
+`MiniGameResult(slot, chapter, attempt, game, item)` là `@UniqueConstraint`; lô gửi lại thì ghi đè vô
+hại, không cộng hai lần. **Luôn nhận lô kể cả khi gói đã hết hạn**, chỉ không mở khoá chương mới.
+
+**7. Ra ngoài chỉ có con số.** Job tổng kết gửi mô hình ngôn ngữ con số đã tính kèm mã slot. Không bao
+giờ gửi tên. AI lỗi thì ghi bản theo luật với `DailySummary.source = RULE`, người lớn vẫn có báo cáo.
+
+**8. Ngày theo giờ Việt Nam.** `Entitlement.startsOn / expiresOn` và `DailySummary.summaryDate` tính
+bằng `ZoneId.of("Asia/Ho_Chi_Minh")`, không dùng giờ máy chủ.
 
 ---
 
@@ -87,26 +108,17 @@ python ops/sinh-khung-be.py      # entity · enums · repository · service · c
 python ops/sinh-dto-mapper.py    # DTO · mapper
 ```
 
-Script đọc thẳng `brainstorm-hub/public/erd.json`, thứ được sinh từ sheet `6.Entities` của
-Capstone Register. Lược đồ vừa nhảy từ 10 lên 17 thực thể trong một ngày — sửa tay 100 tệp một
-lần nữa là không xong.
+Script hiện đọc `brainstorm-hub/public/erd-0110.json` (bản nháp 01/10, chờ ghi vào Register). Khi sheet
+`6.Entities` đã sửa theo bản này thì trỏ lại `erd.json`.
 
 **Cẩn thận:** script **xoá rồi sinh lại** các gói `entity`, `enums`, `repository`, `service`,
-`controller`. Khi đã có nghiệp vụ thật trong `service/impl`, phải sửa script cho nó bỏ qua những
-tệp đã có — hoặc đừng chạy nữa.
+`controller` (trừ `HealthController`). Khi đã có nghiệp vụ thật trong `service/impl`, phải sửa script cho
+nó bỏ qua những tệp đã có — hoặc đừng chạy nữa.
 
----
+## Chưa vào khung, cố ý
 
-## Luật riêng của phần AI
-
-**5. Ra ngoài chỉ có con số.** Job tổng kết mỗi đêm gọi mô hình ngôn ngữ của bên thứ ba. Thứ gửi
-đi chỉ là con số đã tính (mức nắm khái niệm, nhóm hành vi) kèm mã slot. Không bao giờ gửi tên, tên
-nhóm hay lịch sử lựa chọn thô. Luật `BR-404`, yêu cầu `NFR-08`. Gọi lỗi thì để đêm sau thử lại,
-không được làm chậm việc chơi.
-
-## Còn thiếu, cần chốt trước khi code
-
-- **Bảng số dư tiền trong game.** Nhóm đã chốt 26/09 là CÓ bảng này (`FR-19` cần nó), nhưng chưa
-  rõ nó giữ những gì — đang chờ làm rõ trước khi thêm vào sổ đăng ký.
-- **Nhà cung cấp mô hình ngôn ngữ** cho `FR-27` chưa chọn, và nó thường tính tiền theo lượt gọi,
-  trái với ràng buộc `C-04` (chỉ dùng công cụ miễn phí). Cần chốt trước khi viết job tổng kết.
+- **Question** chưa sửa: cần `concept` (để QuizAnswer cập nhật ConceptMastery) và `retiredAt` (câu đã dùng
+  không xoá cứng). Hưng bảo để sau.
+- **Studio** (Chapter, ChapterDraft, ContentReview, GameRelease, ReleaseChapter, VoiceClip) và ba vai
+  Game Editor / Reviewer / Manager: làm sau khi chốt xong role cơ bản. `buildVersion` lúc đó thành khoá
+  ngoại tới `GameRelease`.

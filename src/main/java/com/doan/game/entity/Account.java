@@ -1,6 +1,5 @@
 package com.doan.game.entity;
 
-import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,9 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một người lớn, hoặc chính admin. Cột plan giữ NONE, STANDARD hoặc EDU: một tài khoản một gói,
- * Edu là nâng cấp của Standard (27/09); vai admin là cờ admin (thêm 26/09), chỉ bật lúc gieo dữ
- * liệu khi khởi động, vì admin không mua gói. Trẻ không bao giờ có một dòng ở đây.
+ * Một người lớn. Không còn cột gói hay cờ admin: Parent / Teacher suy ra từ Entitlement còn hạn;
+ * vai nội bộ (ADMIN, sau này EDITOR / REVIEWER / MANAGER) nằm ở AccountRole.
  */
 @Entity
 @Table(name = "account")
@@ -32,13 +30,6 @@ public class Account {
 
     @Column(name = "display_name", length = 80)
     private String displayName;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "plan")
-    private Plan plan;
-
-    @Column(name = "admin")
-    private boolean admin;
 
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;

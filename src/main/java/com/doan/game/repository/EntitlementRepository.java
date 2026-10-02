@@ -1,11 +1,11 @@
 package com.doan.game.repository;
 
-import com.doan.game.entity.Redemption;
+import com.doan.game.entity.Entitlement;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
 @Repository
-public interface RedemptionRepository extends JpaRepository<Redemption, UUID> {
+public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> {
 }
