@@ -2,7 +2,9 @@
 
 Sinh lần đầu 25/09/2026, **sinh lại 02/10/2026** theo ERD bản 01/10 (role cơ bản). **Hầu hết là khung:**
 mọi hàm còn ném `UnsupportedOperationException("chua cai dat")` — cố ý, để không ai gọi một lớp rỗng rồi
-tưởng nó đã chạy. **Đã có ruột (02/10): `PaymentService`** — thanh toán PayOS và cấp gói, xem mục riêng dưới.
+tưởng nó đã chạy. **Đã có ruột (02/10): `PaymentService`, `PlanService`, luồng admin giá gói / giao dịch** — xem mục riêng dưới.
+**Chưa có ruột nhưng cần sớm: `AuthService`** — ruột auth cũ (commit a982abc, ce0d937, có AuthFlowTest 10 test)
+đã bị bộ sinh xoá ở lần sinh lại 25/09; hiện không phát được JWT, nên mọi endpoint cần token chưa gọi được từ ngoài.
 
 Khuôn lấy từ `build/swp-kien-truc.drawio`, tức đúng cách nhóm đã làm ở SWP.
 
@@ -49,10 +51,9 @@ trị** chứ không theo tên cột (`purpose` có ở hai bảng khác nghĩa;
 `configuration` — CORS, OpenAPI, Security, **PayOS**: `PayOsProperties` (record, đọc `app.payos.*`) và
 `PayOsConfig` tạo bean `PayOS` từ SDK chính chủ `vn.payos:payos-java`; **không có khoá thì không có bean**,
 nên máy dev không bao giờ gọi PayOS thật. Khoá đặt trong `/etc/finteen.env` (`PAYOS_CLIENT_ID`,
-`PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`), không nằm trong git. `PlanProperties` (`app.plan.*`: giá hai gói và
-số tháng — **giá bán chưa chốt**, mặc định 2000 đ chỉ để thử thanh toán thật, giá thật đặt qua env
-`PLAN_PRICE_PARENT` / `PLAN_PRICE_TEACHER`). `ClockConfig` cấp một `Clock` múi giờ Việt Nam dùng chung;
-service lấy "hôm nay" từ nó, test thay bằng `Clock.fixed`.
+`PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`), không nằm trong git. Giá gói **không** nằm trong cấu hình: admin đặt
+trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi giờ Việt Nam dùng chung; service lấy
+"hôm nay" từ nó, test thay bằng `Clock.fixed`.
 
 ---
 
@@ -69,7 +70,8 @@ service lấy "hôm nay" từ nó, test thay bằng `Clock.fixed`.
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
-| `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi |
+| `PlanService` **(có ruột)** | Plan | Bảng giá công khai; admin đặt giá và số tháng từng gói (chưa có dòng thì chưa bán được gói đó) |
+| `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi (khung). `AdminController` đã có ruột phần giá gói và giao dịch |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
 ---
@@ -125,8 +127,15 @@ PENDING từ 2 phút tới 25 giờ tuổi (link PayOS tự hết hạn sau 24 g
 Controller đọc "tôi là ai" từ `Jwt.getSubject()` (UUID tài khoản) — quy ước chung cho mọi controller sau này.
 `POST /api/payments/webhook` là chỗ **duy nhất** controller bắt lỗi, vì PayOS đòi 200.
 
-**Còn thiếu:** đăng ký URL webhook với PayOS (`POST /api/payments/webhook/confirm`, admin) — chỉ làm sau khi
-VPS chạy bản này; và giá bán thật.
+**Luồng admin (02/10):** `PUT /api/admin/plans/{kind}` `{price, months?}` đặt giá (tạo hoặc sửa, ghi `updatedBy`);
+`GET /api/plans` công khai; `GET /api/admin/transactions?status=&page=&size=` bảng giao dịch mới nhất trước
+(không trả tổng số dòng, FE lật tới khi rỗng); `POST /api/admin/transactions/{orderCode}/reconcile` hỏi lại PayOS
+cho một giao dịch còn PENDING. Giá đọc từ `Plan` lúc tạo giao dịch và chép vào `Transaction.amount`; số tháng đọc
+từ `Plan` lúc cấp gói. Mua gói chưa có giá → lỗi 4002. Test: `AdminPlanFlowTest` (MockMvc + JWT giả bằng
+spring-security-test, không cần AuthService).
+
+**Còn thiếu:** đăng ký URL webhook với PayOS (`POST /api/payments/webhook/confirm`, admin, hoặc gọi API
+confirm-webhook ngay trên VPS) — chỉ làm sau khi VPS chạy bản này; và `AuthService` để có JWT thật.
 
 ## Sinh lại
 
@@ -142,7 +151,8 @@ Script hiện đọc `brainstorm-hub/public/erd-0110.json` (bản nháp 01/10, c
 
 **Cẩn thận:** script **xoá rồi sinh lại** các gói `entity`, `enums`, `repository`, `service`,
 `controller`. Tệp **đã có ruột** phải nằm trong `GIU_LAI` của `ops/sinh-khung-be.py` (hiện: HealthController,
-PaymentController, PaymentService, PaymentServiceImpl, TransactionRepository, EntitlementRepository): script
+PaymentController, PlanController, AdminController, PaymentService, PlanService và hai Impl, TransactionRepository,
+EntitlementRepository, PlanRepository): script
 đọc chúng trước, sinh khung xong rồi **ghi lại y nguyên**. Viết ruột cho phần nào thì thêm tệp vào đó ngay,
 trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — ruột chỉ nên nằm ở service/controller/repository.
 

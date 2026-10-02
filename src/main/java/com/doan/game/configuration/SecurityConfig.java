@@ -48,7 +48,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/verify",
                         "/api/auth/password/forgot", "/api/auth/password/reset",
                         // Trẻ đăng nhập bằng mã + PIN nên chưa có token; webhook PayOS tự kiểm chữ ký.
-                        "/api/slots/login", "/api/payments/webhook").permitAll()
+                        "/api/slots/login", "/api/payments/webhook",
+                        // Bảng giá công khai: trang mua gói hiện trước khi đăng nhập.
+                        "/api/plans").permitAll()
                 // Telemetry là sổ ghi ẩn danh của client, chốt D3 bảo game phải chạy được
                 // cả khi server chết — bắt đăng nhập ở đây là đi ngược chốt đó.
                 .requestMatchers("/api/telemetry/**").permitAll()

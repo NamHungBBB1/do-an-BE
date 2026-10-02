@@ -2,13 +2,14 @@ package com.doan.game.service;
 
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.configuration.PayOsProperties;
-import com.doan.game.configuration.PlanProperties;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.TransactionStatus;
+import com.doan.game.entity.Plan;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.PlanRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.TransactionRepository;
 import com.doan.game.service.impl.PaymentServiceImpl;
@@ -46,6 +47,7 @@ class PaymentServiceImplTest {
     @Mock TransactionRepository transactionRepo;
     @Mock EntitlementRepository entitlementRepo;
     @Mock AccountRepository accountRepo;
+    @Mock PlanRepository planRepo;
     @Mock ObjectProvider<PayOS> payOSProvider;
     @Mock PayOS payOS;
     @Mock WebhooksService webhooks;
@@ -58,9 +60,9 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void dung() {
-        svc = new PaymentServiceImpl(transactionRepo, entitlementRepo, accountRepo, payOSProvider,
+        svc = new PaymentServiceImpl(transactionRepo, entitlementRepo, accountRepo, planRepo, payOSProvider,
                 new PayOsProperties("id", "key", "sum", "https://x/webhook", "https://fe/ok", "https://fe/cancel"),
-                new PlanProperties(2000, 2000, 3), clock, new ObjectMapper());
+                clock, new ObjectMapper());
         account = new Account();
         account.setId(UUID.randomUUID());
         tx = new Transaction();
@@ -83,9 +85,18 @@ class PaymentServiceImplTest {
         when(webhooks.verify(any())).thenReturn(data);
     }
 
+    private void goi3Thang() {
+        Plan p = new Plan();
+        p.setKind(PlanKind.PARENT);
+        p.setPrice(2000L);
+        p.setMonths(3);
+        when(planRepo.findByKind(PlanKind.PARENT)).thenReturn(Optional.of(p));
+    }
+
     @Test
     void webhookPaidCapGoiTuHomNay() {
         payOSBao(123L, 2000L, "00");
+        goi3Thang();
         when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
         when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
                 .thenReturn(Optional.empty());
@@ -104,6 +115,7 @@ class PaymentServiceImplTest {
     @Test
     void giaHanSomNoiTiepHanCu() {
         payOSBao(123L, 2000L, "00");
+        goi3Thang();
         when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
         Entitlement cu = new Entitlement();
         cu.setExpiresOn(LocalDate.of(2026, 11, 15));

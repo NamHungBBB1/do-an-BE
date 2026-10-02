@@ -3,10 +3,11 @@ package com.doan.game.service.impl;
 import com.doan.game.DTO.request.BuyPlanRequest;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
+import com.doan.game.DTO.response.TransactionAdminResponse;
 import com.doan.game.configuration.PayOsProperties;
-import com.doan.game.configuration.PlanProperties;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
+import com.doan.game.entity.Plan;
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
@@ -16,6 +17,7 @@ import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
+import com.doan.game.repository.PlanRepository;
 import com.doan.game.repository.TransactionRepository;
 import com.doan.game.service.PaymentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,10 +66,10 @@ public class PaymentServiceImpl implements PaymentService {
     private final TransactionRepository transactionRepo;
     private final EntitlementRepository entitlementRepo;
     private final AccountRepository accountRepo;
+    private final PlanRepository planRepo;
     /** Không có khoá thì không có bean (PayOsConfig); getIfAvailable() trả null thay vì chết lúc khởi động. */
     private final ObjectProvider<PayOS> payOS;
     private final PayOsProperties payOsProps;
-    private final PlanProperties planProps;
     private final Clock clock;
     private final ObjectMapper objectMapper;
 
@@ -73,11 +77,9 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResponse taoGiaoDich(UUID accountId, BuyPlanRequest req) {
-        PlanKind kind = docKind(req.kind());
-        long gia = planProps.giaCua(kind);
-        if (gia <= 0) {
-            throw new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name());
-        }
+        PlanKind kind = PlanServiceImpl.docKind(req.kind());
+        long gia = planRepo.findByKind(kind).map(Plan::getPrice)
+                .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));
         Account account = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
         PayOS client = client();
@@ -117,17 +119,17 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentStatusResponse xemGiaoDich(UUID accountId, long orderCode) {
-        Transaction tx = cuaToi(accountId, orderCode, true);
+        Transaction tx = cuaToi(accountId, orderCode);
         if (tx.getStatus() == TransactionStatus.PENDING) {
             doiSoatVoiPayOS(tx);
         }
-        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt());
+        return toStatus(tx);
     }
 
     @Override
     @Transactional
     public void huyGiaoDich(UUID accountId, long orderCode, String lyDo) {
-        Transaction tx = cuaToi(accountId, orderCode, true);
+        Transaction tx = cuaToi(accountId, orderCode);
         if (tx.getStatus() != TransactionStatus.PENDING) {
             throw new AppException(ErrorCode.TRANSACTION_NOT_PENDING, String.valueOf(orderCode));
         }
@@ -208,6 +210,28 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    // ------------------------------------------------------------------ admin
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransactionAdminResponse> danhSachGiaoDich(TransactionStatus status, int page, int size) {
+        Pageable trang = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        var ds = status == null
+                ? transactionRepo.findAllByOrderByCreatedAtDesc(trang)
+                : transactionRepo.findByStatusOrderByCreatedAtDesc(status, trang);
+        return ds.map(PaymentServiceImpl::toAdmin).getContent();
+    }
+
+    @Override
+    @Transactional
+    public PaymentStatusResponse doiSoat(long orderCode) {
+        Transaction tx = transactionRepo.khoaTheoOrderCode(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
+        if (tx.getStatus() == TransactionStatus.PENDING) {
+            doiSoatVoiPayOS(tx);
+        }
+        return toStatus(tx);
+    }
+
     // ------------------------------------------------------------------ lõi
     /** Hỏi PayOS trạng thái thật của một giao dịch PENDING và áp vào. Lỗi mạng thì để nguyên, lần sau quét lại. */
     private void doiSoatVoiPayOS(Transaction tx) {
@@ -245,7 +269,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     /**
      * Gói mới bắt đầu từ hôm nay, hoặc từ ngày sau hạn của gói còn hiệu lực (gia hạn sớm không mất ngày);
-     * dùng hết ngày expiresOn, nên expiresOn = startsOn + N tháng − 1 ngày.
+     * dùng hết ngày expiresOn, nên expiresOn = startsOn + N tháng − 1 ngày. N đọc từ Plan lúc cấp
+     * (dòng Plan không có đường xoá; orElse chỉ để webhook không bao giờ ném).
      */
     private Entitlement capGoiTu(Transaction tx) {
         LocalDate homNay = LocalDate.now(clock);
@@ -254,13 +279,14 @@ public class PaymentServiceImpl implements PaymentService {
                 .map(e -> e.getExpiresOn().plusDays(1))
                 .filter(d -> d.isAfter(homNay))
                 .orElse(homNay);
+        int thang = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.THANG_MAC_DINH);
         Entitlement e = new Entitlement();
         e.setAccount(tx.getAccount());
         e.setKind(tx.getKind());
         e.setSource(EntitlementSource.PAYMENT);
         e.setTransaction(tx);
         e.setStartsOn(batDau);
-        e.setExpiresOn(batDau.plusMonths(planProps.months()).minusDays(1));
+        e.setExpiresOn(batDau.plusMonths(thang).minusDays(1));
         e.setCreatedAt(Instant.now(clock));
         return e;
     }
@@ -272,8 +298,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .isPresent();
     }
 
-    private Transaction cuaToi(UUID accountId, long orderCode, boolean khoa) {
-        Transaction tx = (khoa ? transactionRepo.khoaTheoOrderCode(orderCode) : transactionRepo.findByOrderCode(orderCode))
+    private Transaction cuaToi(UUID accountId, long orderCode) {
+        Transaction tx = transactionRepo.khoaTheoOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
         if (!tx.getAccount().getId().equals(accountId)) {
             throw new AppException(ErrorCode.FORBIDDEN);
@@ -287,14 +313,6 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.PAYOS_NOT_CONFIGURED);
         }
         return c;
-    }
-
-    private static PlanKind docKind(String kind) {
-        try {
-            return PlanKind.valueOf(kind == null ? "" : kind.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new AppException(ErrorCode.PLAN_KIND_INVALID, String.valueOf(kind));
-        }
     }
 
     /**
@@ -312,5 +330,15 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (Exception e) {
             return Instant.now(clock);
         }
+    }
+
+    private static PaymentStatusResponse toStatus(Transaction tx) {
+        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt());
+    }
+
+    private static TransactionAdminResponse toAdmin(Transaction tx) {
+        return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
+                tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getStatus().name(),
+                tx.getCreatedAt(), tx.getPaidAt());
     }
 }

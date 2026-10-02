@@ -46,11 +46,12 @@ public enum ErrorCode {
             HttpStatus.TOO_MANY_REQUESTS),
     // 4xxx  thanh toán và gói
     PLAN_KIND_INVALID(4001, "Loại gói không hợp lệ — chỉ PARENT hoặc TEACHER", HttpStatus.BAD_REQUEST),
-    PLAN_PRICE_NOT_SET(4002, "Chưa cấu hình giá gói trên máy chủ", HttpStatus.INTERNAL_SERVER_ERROR),
+    PLAN_PRICE_NOT_SET(4002, "Admin chưa đặt giá cho gói này", HttpStatus.CONFLICT),
     PAYOS_NOT_CONFIGURED(4003, "Chưa cấu hình khoá PayOS trên máy chủ", HttpStatus.SERVICE_UNAVAILABLE),
     PAYOS_ERROR(4004, "Cổng thanh toán báo lỗi", HttpStatus.BAD_GATEWAY),
     TRANSACTION_NOT_FOUND(4005, "Không tìm thấy giao dịch", HttpStatus.NOT_FOUND),
-    TRANSACTION_NOT_PENDING(4006, "Giao dịch không còn ở trạng thái chờ", HttpStatus.CONFLICT);
+    TRANSACTION_NOT_PENDING(4006, "Giao dịch không còn ở trạng thái chờ", HttpStatus.CONFLICT),
+    PLAN_PRICE_INVALID(4007, "Giá gói phải là số dương (VND)", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;

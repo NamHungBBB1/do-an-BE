@@ -3,6 +3,8 @@ package com.doan.game.repository;
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.TransactionStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -29,4 +31,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     Optional<Transaction> khoaTheoOrderCode(@Param("orderCode") Long orderCode);
 
     List<Transaction> findByStatusAndCreatedAtBetween(TransactionStatus status, Instant tu, Instant den);
+
+    Page<Transaction> findAllByOrderByCreatedAtDesc(Pageable p);
+
+    Page<Transaction> findByStatusOrderByCreatedAtDesc(TransactionStatus status, Pageable p);
 }
