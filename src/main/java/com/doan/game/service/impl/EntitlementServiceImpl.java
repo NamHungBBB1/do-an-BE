@@ -1,26 +1,44 @@
 package com.doan.game.service.impl;
 
-import com.doan.game.service.EntitlementService;
 import com.doan.game.DTO.request.*;
 import com.doan.game.DTO.response.*;
+import com.doan.game.enums.PlanKind;
+import com.doan.game.repository.EntitlementRepository;
+import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Gói đang giữ. Parent / Teacher KHÔNG lưu ở Account mà suy từ Entitlement còn hạn, tính theo NGÀY giờ Việt Nam; mọi thao tác cần gói đều gọi lại activePlans, không tin vai trong JWT. Admin cấp được gói không cần thanh toán.
  *
- * KHUNG — chưa có nghiệp vụ. Mọi hàm còn ném UnsupportedOperationException
+ * CÓ RUỘT phần activePlans (02/10, làm cùng đợt AuthService): đây là nơi duy nhất quyết định
+ * một tài khoản có gói hay không, nên nó phải chạy được TRƯỚC khi AuthService phát token.
+ * activePlans xong thì AccountResponse và scope PARENT / TEACHER mới lấp được.
+ *
+ * Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
  */
 @Service
 @RequiredArgsConstructor
 public class EntitlementServiceImpl implements EntitlementService {
 
+    private final EntitlementRepository entitlementRepo;
+    private final Clock clock;
+
+    /**
+     * Loại gói còn hiệu lực HÔM NAY. "Hôm nay" lấy từ Clock múi giờ Việt Nam, không phải UTC của
+     * máy chủ — dùng đêm thì hai bên lệch nhau một ngày và gói vừa mua bị coi là chưa bắt đầu.
+     */
     @Override
-    public java.util.Set<com.doan.game.enums.PlanKind> activePlans(UUID accountId) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional(readOnly = true)
+    public Set<PlanKind> activePlans(UUID accountId) {
+        return entitlementRepo.goiConHan(accountId, LocalDate.now(clock));
     }
 
     @Override
