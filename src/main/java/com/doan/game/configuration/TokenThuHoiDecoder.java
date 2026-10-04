@@ -16,13 +16,15 @@ import java.util.UUID;
  * Kiểm chữ ký HẾT rồi mới đối chiếu với database. Lớp này là thứ khiến token hết hiệu lực
  * NGAY LẬP TỨC thay vì đợi 168 giờ.
  *
- * Ba điều kiện, thiếu một là từ chối (401, người dùng phải xin token mới):
+ * Hai điều kiện, thiếu một là từ chối (401, người dùng phải đăng nhập lại):
  *
  *  1. Tài khoản vẫn tồn tại — xoá tài khoản thì token cũ phải chết theo.
  *  2. `tv` trong token bằng `Account.tokenVersion` — tăng số này mỗi lần đổi mật khẩu là đuổi
  *     được kẻ đang cầm token cũ (xem Account.tokenVersion).
- *  3. `scope` trong token bằng vai + gói ĐANG CÓ trong database — không thì ai đó bị thu vai
- *     ADMIN hoặc gói hết hạn vẫn giữ quyền tới khi token hết hạn.
+ *
+ * Còn `scope` thì KHÔNG từ chối mà THAY bằng vai + gói đang có trong database (L-13, 04/10):
+ * mua gói xong có quyền ngay, gói hết hạn hay bị thu ADMIN thì mất quyền ngay, mà không ai bị
+ * đá ra phải đăng nhập lại.
  *
  * Token trẻ (typ=SLOT) bỏ qua cả ba: trẻ không có Account để mà so.
  *
@@ -67,10 +69,21 @@ public class TokenThuHoiDecoder implements JwtDecoder {
             throw new BadJwtException("token đã bị thu hồi (đổi mật khẩu)");
         }
 
-        if (!phamViTrongToken(jwt).equals(phamViHienTai(id))) {
-            throw new BadJwtException("phạm vi token không còn khớp với vai/gói hiện tại");
+        // L-13 (04/10, Hưng chốt): KHÔNG từ chối khi scope lệch — mua gói xong hay gói hết hạn lúc
+        // 0h mà đá người dùng ra thì họ phải đăng nhập lại bằng mật khẩu, mà không có cách lấy
+        // token mới. Thay vào đó THAY scope bằng vai + gói đang có trong DB: quyền luôn đúng hiện
+        // tại, token vẫn sống. Thu hồi thật (đổi mật khẩu, xoá tài khoản) vẫn đi qua tv ở trên.
+        Set<String> hienTai = phamViHienTai(id);
+        if (phamViTrongToken(jwt).equals(hienTai)) {
+            return jwt;
         }
-        return jwt;
+        return Jwt.withTokenValue(jwt.getTokenValue())
+                .headers(h -> h.putAll(jwt.getHeaders()))
+                .claims(c -> {
+                    c.putAll(jwt.getClaims());
+                    c.put("scope", String.join(" ", hienTai));
+                })
+                .build();
     }
 
     /**

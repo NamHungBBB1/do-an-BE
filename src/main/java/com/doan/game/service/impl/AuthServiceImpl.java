@@ -35,9 +35,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -97,6 +99,8 @@ public class AuthServiceImpl implements AuthService {
     private final Clock clock;
     private final ApplicationEventPublisher events;
     private final FirebaseIdTokenDecoder firebaseDecoder;
+    /** Giao dịch tự quản cho đăng nhập Google: va chạm thì phải tra lại trong giao dịch MỚI (L-18). */
+    private final TransactionTemplate giaoDich;
 
     private final SecureRandom rng = new SecureRandom();
 
@@ -363,26 +367,56 @@ public class AuthServiceImpl implements AuthService {
      * KHÔNG tự gộp khi email đã có tài khoản: người kia có thể đăng ký bằng mật khẩu từ trước
      * và chưa từng biết Google. Trả 3020 để họ đăng nhập mật khẩu rồi tự liên kết (hàm dưới).
      */
+    /**
+     * CỐ Ý KHÔNG @Transactional (L-18, 04/10). Bấm nút Google hai lần ở lần đầu là hai request cùng
+     * tạo một tài khoản: request sau đụng UNIQUE (PostgreSQL) hoặc chờ khoá tới hết giờ (H2). Trong
+     * một @Transactional duy nhất thì giao dịch đã hỏng, không tra lại được gì — người dùng nhận 500
+     * (H2) hoặc 3020 "email đã có tài khoản" (PostgreSQL), mà đó chính là họ.
+     *
+     * Nên: kiểm ID token NGOÀI giao dịch (gọi mạng tới Google, không giữ khoá DB trong lúc chờ),
+     * tạo / tìm tài khoản trong một giao dịch, va chạm thì tra lại Credential(GOOGLE, sub) trong
+     * giao dịch MỚI — thấy thì đăng nhập vào đúng tài khoản request kia vừa tạo. Chỉ khi email thuộc
+     * một tài khoản KHÁC (đăng ký mật khẩu) mới trả 3020.
+     */
     @Override
-    @Transactional
     public TokenResponse dangNhapGoogle(LinkCredentialRequest req) {
         FirebaseIdTokenDecoder.NguoiFirebase nguoi = kiemTraReqGoogle(req);
 
-        Credential co = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
-                .orElse(null);
-        Account a;
-        if (co != null) {
-            a = co.getAccount();
-            co.setLastUsedAt(Instant.now(clock));
-            credentialRepo.save(co);
-        } else {
-            a = accountRepo.findByEmailIgnoreCase(chuanHoa(nguoi.email())).orElse(null);
-            if (a != null) {
+        // Phát token NGAY TRONG giao dịch: Account lấy qua Credential là proxy lười, ra ngoài giao
+        // dịch mới đọc tokenVersion là LazyInitializationException.
+        try {
+            return giaoDich.execute(trangThai -> phatToken(timHoacTaoGoogle(nguoi)));
+        } catch (DataIntegrityViolationException | PessimisticLockingFailureException vaCham) {
+            log.info("Đăng nhập Google {} va chạm với request song song — tra lại", nguoi.sub());
+            TokenResponse t = giaoDich.execute(trangThai -> credentialRepo
+                    .findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+                    .map(c -> phatToken(c.getAccount()))
+                    .orElse(null));
+            if (t == null) {
+                // Không phải chính người này tạo song song: email vừa bị một đăng ký mật khẩu chiếm.
                 throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
             }
-            a = taoTaiKhoanGoogle(nguoi);
+            return t;
         }
+    }
+
+    private TokenResponse phatToken(Account a) {
         return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
+    }
+
+    /** Một giao dịch: có Credential thì cập nhật lần dùng; chưa có thì tạo tài khoản mới. */
+    private Account timHoacTaoGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi) {
+        Credential co = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+                .orElse(null);
+        if (co != null) {
+            co.setLastUsedAt(Instant.now(clock));
+            credentialRepo.save(co);
+            return co.getAccount();
+        }
+        if (accountRepo.findByEmailIgnoreCase(chuanHoa(nguoi.email())).isPresent()) {
+            throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+        }
+        return taoTaiKhoanGoogle(nguoi);
     }
 
     /**
@@ -472,23 +506,23 @@ public class AuthServiceImpl implements AuthService {
         a.setFailedAttempts(0);
         a.setMustChangePassword(false);
         a.setCreatedAt(now);
-        try {
-            a = accountRepo.saveAndFlush(a);
+        // Va chạm UNIQUE / khoá KHÔNG bắt ở đây: để nó thoát ra, giao dịch rollback sạch, rồi
+        // dangNhapGoogle tra lại trong giao dịch mới (L-18).
+        a = accountRepo.saveAndFlush(a);
 
-            Credential c = new Credential();
-            c.setAccount(a);
-            c.setProvider(AuthProvider.GOOGLE);
-            // subject là uid Firebase, KHÔNG phải email: email đổi được, uid thì không.
-            c.setSubject(nguoi.sub());
-            c.setEmailAtProvider(a.getEmail());
-            c.setCreatedAt(now);
-            c.setLastUsedAt(now);
-            credentialRepo.save(c);
-        } catch (DataIntegrityViolationException e) {
-            // Hai request Google cùng email cùng chèn, hoặc ai đó vừa đăng ký mật khẩu trong lúc này.
-            // Không bắt là 500; ném AppException để rollback, không chừa Account nửa vời.
-            throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
-        }
+        Credential c = new Credential();
+        c.setAccount(a);
+        c.setProvider(AuthProvider.GOOGLE);
+        // subject là uid Firebase, KHÔNG phải email: email đổi được, uid thì không.
+        c.setSubject(nguoi.sub());
+        c.setEmailAtProvider(a.getEmail());
+        c.setCreatedAt(now);
+        c.setLastUsedAt(now);
+        credentialRepo.saveAndFlush(c);
+
+        // L-16: email đã được Google xác minh, nên người trong ADMIN_EMAILS đăng ký bằng Google cũng
+        // được cấp ADMIN như khi xác minh mail — trước đây chỉ luồng mật khẩu mới cấp.
+        capAdminDauTien(a);
         log.info("Tài khoản {} tạo bằng Google", a.getId());
         return a;
     }

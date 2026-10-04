@@ -67,7 +67,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true",
         // Cố ý chọn email mà có email khác là CHUỖI CON của nó: min@fifteen.com nằm trong
         // admin@fifteen.com. Ca 10 dùng đúng cái bẫy này.
-        "app.admin-emails=admin@fifteen.com"})
+        "app.admin-emails=admin@fifteen.com,gg-admin@gmail.com"})
 @AutoConfigureMockMvc
 class AuthFlowTest {
 
@@ -537,6 +537,95 @@ class AuthFlowTest {
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + gg))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.email").value(email));
+    }
+
+    // ------------------------------------------------------------------ 20 (L-18)
+    /**
+     * Bấm nút Google hai lần ở lần ĐẦU (gặp thật 04/10 với token Google thật): nhiều request cùng
+     * tạo một tài khoản. Tất cả phải 200 và ra CÙNG một tài khoản — trước khi sửa, request sau ra
+     * 500 (khoá bảng H2 hết giờ) hoặc 3020 (UNIQUE trên PostgreSQL).
+     */
+    @Test
+    void dangNhapGoogleLanDauGuiDongThoiVanRaMotTaiKhoan() throws Exception {
+        String email = "gg-dup-" + System.nanoTime() + "@gmail.com";
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase("uid-dup-" + System.nanoTime(), email, "Bam Dup", true);
+        long truoc = accountRepo.count();
+
+        int soLuong = 4;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(soLuong);
+        java.util.concurrent.CountDownLatch xuatPhat = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<String>> kq = new java.util.ArrayList<>();
+        for (int i = 0; i < soLuong; i++) {
+            kq.add(pool.submit(() -> {
+                xuatPhat.await();
+                var r = mvc.perform(dangNhapGoogle("GOOGLE", "token-that")).andReturn().getResponse();
+                return r.getStatus() + " " + r.getContentAsString(StandardCharsets.UTF_8);
+            }));
+        }
+        xuatPhat.countDown();
+        java.util.Set<String> taiKhoan = new java.util.HashSet<>();
+        for (var f : kq) {
+            String r = f.get(60, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(r).as("moi request phai 200: " + r).startsWith("200 ");
+            String jwt = jwtRa(r);
+            taiKhoan.add(new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[1]), StandardCharsets.UTF_8)
+                    .replaceAll(".*\"sub\":\"([^\"]+)\".*", "$1"));
+        }
+        pool.shutdown();
+        assertThat(taiKhoan).as("cung mot tai khoan").hasSize(1);
+        assertThat(accountRepo.count()).isEqualTo(truoc + 1);
+    }
+
+    // ------------------------------------------------------------------ 21 (L-16)
+    /** Người trong ADMIN_EMAILS đăng ký bằng Google cũng được ADMIN (email đã do Google xác minh). */
+    @Test
+    void emailAdminDangKyBangGoogleCungDuocAdmin() throws Exception {
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase("uid-adm-" + System.nanoTime(),
+                "gg-admin@gmail.com", "Admin Google", true);
+        String jwt = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(scopeRa(jwt)).isEqualTo("ADMIN");
+    }
+
+    // ------------------------------------------------------------------ 22 (L-13)
+    /**
+     * Mua gói SAU khi đã đăng nhập: token cũ (scope rỗng) không bị đá ra 401 mà có quyền PARENT
+     * ngay ở request kế tiếp — decoder thay scope bằng vai + gói hiện có trong DB.
+     */
+    @Test
+    void muaGoiSauKhiDangNhapThiTokenCuCoQuyenNgayKhongBiDaRa() throws Exception {
+        String email = "muasau-" + System.nanoTime() + "@test.local";
+        dangKy(email);
+        xacMinh(tokenTrongMail());
+        String jwt = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(scopeRa(jwt)).isEmpty();
+
+        mvc.perform(post("/api/slots").header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
+
+        Account a = accountRepo.findByEmailIgnoreCase(email).orElseThrow();
+        Entitlement e = new Entitlement();
+        e.setAccount(a);
+        e.setKind(PlanKind.PARENT);
+        e.setStartsOn(LocalDate.now(LUC));
+        e.setExpiresOn(LocalDate.now(LUC).plusMonths(3).minusDays(1));
+        e.setSource(EntitlementSource.ADMIN);
+        e.setGrantedBy(a);
+        e.setCreatedAt(Instant.now(LUC));
+        entitlementRepo.save(e);
+
+        // Cùng token cũ: vẫn đăng nhập (không 401), và giờ qua được cửa PARENT (không 403).
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.plans[0]").value("PARENT"));
+        var tren = mvc.perform(post("/api/slots").header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andReturn();
+        assertThat(tren.getResponse().getStatus()).isNotIn(401, 403);
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu
