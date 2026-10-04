@@ -160,9 +160,12 @@ class AuthFlowTest {
         String token = tokenTrongMail();
 
         xacMinh(token);
+        // Vẫn 400 (mã lỗi nghiệp vụ giữ nguyên), nhưng THÂN TRANG là HTML cho người bấm link
+        // bằng trình duyệt — không tung {"code":3012,...} lên màn hình trắng.
         mvc.perform(get("/api/auth/verify").param("token", token))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(3012));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Không hoàn tất được")));
     }
 
     // ------------------------------------------------------------------ 6
@@ -326,6 +329,103 @@ class AuthFlowTest {
         mvc.perform(dangNhap(email, "matkhaumoi123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
+    }
+
+    // ------------------------------------------------------------------ 12  (C1)
+    /** FE cần "tôi là ai" sau khi đăng nhập: email, tên, gói và vai lấy từ database. */
+    @Test
+    void cuaToiTraVeEmailVaGoiVaVai() throws Exception {
+        String email = "toilaai-" + System.nanoTime() + "@test.local";
+        dangKy(email);
+        xacMinh(tokenTrongMail());
+
+        String jwt = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.email").value(email))
+                .andExpect(jsonPath("$.result.displayName").value("Nguyen Test"))
+                .andExpect(jsonPath("$.result.plans").isArray())
+                .andExpect(jsonPath("$.result.roles").isArray());
+    }
+
+    // ------------------------------------------------------------------ 13  (C2 + C3)
+    /**
+     * Đổi mật khẩu phải đưa mật khẩu cũ, và làm token CŨ chết ngay — nếu không thì kẻ đang
+     * giữ token bị đánh cắp vẫn đi lại được cả tuần dù chủ đã đổi mật khẩu.
+     */
+    @Test
+    void doiMatKhauTraTokenMoiVaThuHoiTokenCu() throws Exception {
+        String email = "doimk-" + System.nanoTime() + "@test.local";
+        dangKy(email);
+        xacMinh(tokenTrongMail());
+
+        String cu = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        // Không có mật khẩu cũ thì token đánh cắp cũng đổi được mật khẩu -> bị từ chối.
+        mvc.perform(post("/api/auth/password/change")
+                        .header("Authorization", "Bearer " + cu)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"oldPassword\":\"sai-het\",\"newPassword\":\"matkhaumoi123\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3002));
+
+        // Mật khẩu cũ đúng -> 200 và trả token MỚI, vì token cũ vừa bị chính cú này thu hồi.
+        var res = mvc.perform(post("/api/auth/password/change")
+                        .header("Authorization", "Bearer " + cu)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"oldPassword\":\"matkhau123\",\"newPassword\":\"matkhaumoi123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
+                .andReturn();
+        String moi = jwtRa(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + cu))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + moi))
+                .andExpect(status().isOk());
+
+        // Vào được bằng mật khẩu mới, còn mật khẩu cũ thì không.
+        mvc.perform(dangNhap(email, "matkhau123")).andExpect(status().isUnauthorized());
+        mvc.perform(dangNhap(email, "matkhaumoi123")).andExpect(status().isOk());
+    }
+
+    // ------------------------------------------------------------------ 14  (C4)
+    /**
+     * Token trẻ (typ=SLOT, sub là id slot) không được gọi API người lớn: controller đọc
+     * jwt.getSubject() như id tài khoản thì sẽ tra ra slotId và không ra tài khoản nào.
+     */
+    @Test
+    void tokenTreKhongVaoDuocApiNguoiLon() throws Exception {
+        String code = "MA" + (System.nanoTime() % 100000);
+        slot(code, "123456", SlotStatus.ACTIVE);
+
+        String tre = jwtRa(mvc.perform(dangNhapTre(code, "123456"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(scopeRa(tre)).isEqualTo("CHILD");
+
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tre))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(get("/api/payments/1").header("Authorization", "Bearer " + tre))
+                .andExpect(status().isForbidden());
+    }
+
+    // ------------------------------------------------------------------ 15
+    /**
+     * Token sai / hết hạn phải ra CÙNG vỏ ApiResponse như mọi lỗi khác. Nếu không ghi
+     * authenticationEntryPoint riêng thì Spring trả 401 với thân rỗng, FE không có code để bắt.
+     */
+    @Test
+    void tokenSaiVanTraVeVoApiResponse() throws Exception {
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer khong-phai-jwt"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3003));
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu

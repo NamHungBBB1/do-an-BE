@@ -43,19 +43,23 @@ public class TokenService {
         this.childTtlHours = childTtlHours;
     }
 
-    /** Token người lớn: subject là id tài khoản — mọi controller đọc "tôi là ai" theo cách này. */
-    public TokenResponse choNguoiLon(UUID accountId, Set<String> scopes) {
-        return phat(accountId.toString(), "ACCOUNT", scopes, adultTtlHours);
+    /**
+     * Token người lớn: subject là id tài khoản — mọi controller đọc "tôi là ai" theo cách này.
+     * tokenVersion đi kèm để TokenThuHoiDecoder biết token này phát trước hay sau lần đổi
+     * mật khẩu gần nhất.
+     */
+    public TokenResponse choNguoiLon(UUID accountId, Set<String> scopes, int tokenVersion) {
+        return phat(accountId.toString(), "ACCOUNT", scopes, adultTtlHours, tokenVersion);
     }
 
     /** Token trẻ: subject là id slot, KHÔNG phải id tài khoản — trẻ không có tài khoản. */
     public TokenResponse choTre(UUID slotId) {
-        return phat(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours);
+        return phat(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1);
     }
 
-    private TokenResponse phat(String sub, String typ, Set<String> scopes, long soGio) {
+    private TokenResponse phat(String sub, String typ, Set<String> scopes, long soGio, int tokenVersion) {
         Instant now = Instant.now(clock);
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder b = JwtClaimsSet.builder()
                 .issuer("finteen")
                 .subject(sub)
                 .issuedAt(now)
@@ -63,8 +67,12 @@ public class TokenService {
                 .claim("typ", typ)
                 // Spring Security mặc định đọc đúng claim tên "scope" và thêm tiền tố "SCOPE_",
                 // nên hasAuthority("SCOPE_ADMIN") trong SecurityConfig chạy luôn, không phải sửa.
-                .claim("scope", String.join(" ", scopes))
-                .build();
+                .claim("scope", String.join(" ", scopes));
+        // Trẻ không có Account nên không có phiên bản token — đừng nhét số -1 vào làm gì.
+        if (tokenVersion >= 0) {
+            b.claim("tv", tokenVersion);
+        }
+        JwtClaimsSet claims = b.build();
         // BẮT BUỘC khai HS256 trong header: JwtEncoderParameters không có header thì Nimbus đi tìm
         // khoá RS256 và ném "Failed to select a JWK signing key" — khoá của ta là khoá đối xứng.
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();

@@ -5,6 +5,7 @@ import com.doan.game.DTO.request.SlotLoginRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.TokenResponse;
 import com.doan.game.service.SlotService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -47,7 +48,7 @@ public class SlotController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> dangNhapTre(@RequestBody SlotLoginRequest req) {
+    public ApiResponse<TokenResponse> dangNhapTre(@Valid @RequestBody SlotLoginRequest req) {
         return ApiResponse.ok(slotService.dangNhapTre(req.code(), req.pin()));
     }
 
