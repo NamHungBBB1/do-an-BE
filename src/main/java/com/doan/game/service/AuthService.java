@@ -24,8 +24,16 @@ public interface AuthService {
 
     TokenResponse dangNhap(LoginRequest req);
 
-    TokenResponse dangNhapGoogle(String idToken);
+    /**
+     * Đăng nhập/đăng ký bằng Google (qua Firebase): BE kiểm ID token rồi phát JWT FinTeen,
+     * không giữ phiên nào của Google. Nhận cả req để kiểm provider chứ không chỉ idToken.
+     */
+    TokenResponse dangNhapGoogle(LinkCredentialRequest req);
 
+    /**
+     * Gắn cách đăng nhập Google vào tài khoản ĐANG đăng nhập (accountId lấy từ JWT FinTeen).
+     * Không tự gộp lúc đăng nhập — chỉ người chứng minh được quyền sở hữu tài khoản cũ mới gộp.
+     */
     void lienKetCachDangNhap(UUID accountId, LinkCredentialRequest req);
 
     void quenMatKhau(ForgotPasswordRequest req);

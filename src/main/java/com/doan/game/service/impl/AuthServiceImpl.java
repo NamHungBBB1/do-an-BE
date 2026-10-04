@@ -8,6 +8,7 @@ import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.TokenResponse;
+import com.doan.game.configuration.FirebaseIdTokenDecoder;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
 import com.doan.game.entity.Credential;
@@ -95,6 +96,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final FirebaseIdTokenDecoder firebaseDecoder;
 
     private final SecureRandom rng = new SecureRandom();
 
@@ -353,20 +355,142 @@ public class AuthServiceImpl implements AuthService {
         return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
 
-    // ================================================================ Google (để sau)
+    // ================================================================ Google (Firebase)
+    /**
+     * Nút "Đăng nhập bằng Google". FE lấy ID token của Firebase rồi gửi vào đây; BE kiểm chữ ký
+     * Google rồi phát JWT FinTeen như đăng nhập mật khẩu — không giữ lại phiên nào của Google.
+     *
+     * KHÔNG tự gộp khi email đã có tài khoản: người kia có thể đăng ký bằng mật khẩu từ trước
+     * và chưa từng biết Google. Trả 3020 để họ đăng nhập mật khẩu rồi tự liên kết (hàm dưới).
+     */
     @Override
-    public TokenResponse dangNhapGoogle(String idToken) {
-        // Cần spring-security-oauth2-client + GoogleIdTokenVerifier, và chưa có OAuth client ID.
-        // AppException chứ không phải UnsupportedOperationException: ném loại kia rơi xuống lưới
-        // cuối thành 500 "Lỗi chưa phân loại" — endpoint này permitAll nên FE gọi thử là thấy lỗi máy.
-        throw new AppException(ErrorCode.NOT_IMPLEMENTED, "cần OAuth client ID của Google");
+    @Transactional
+    public TokenResponse dangNhapGoogle(LinkCredentialRequest req) {
+        FirebaseIdTokenDecoder.NguoiFirebase nguoi = kiemTraReqGoogle(req);
+
+        Credential co = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+                .orElse(null);
+        Account a;
+        if (co != null) {
+            a = co.getAccount();
+            co.setLastUsedAt(Instant.now(clock));
+            credentialRepo.save(co);
+        } else {
+            a = accountRepo.findByEmailIgnoreCase(chuanHoa(nguoi.email())).orElse(null);
+            if (a != null) {
+                throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+            }
+            a = taoTaiKhoanGoogle(nguoi);
+        }
+        return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
 
+    /**
+     * Gắn Google vào tài khoản ĐANG đăng nhập. Chỉ người đang cầm JWT FinTeen mới gọi được
+     * (controller lấy accountId từ token), nên không cần hỏi lại mật khẩu.
+     *
+     * Không cho một uid đã gắn tài khoản khác đổi chủ: đó là dấu hiệu gộp nhầm hoặc cố chiếm —
+     * trả 3021 thay vì lặng lẽ đổi liên kết.
+     */
     @Override
+    @Transactional
     public void lienKetCachDangNhap(UUID accountId, LinkCredentialRequest req) {
-        // Chỉ gộp được khi Google xác nhận email đã verify VÀ người dùng đang đăng nhập bằng
-        // mật khẩu của chính tài khoản đó (accountId lấy từ JWT). Không tự gộp vì trùng email.
-        throw new UnsupportedOperationException("chua cai dat — can OAuth client ID cua Google");
+        FirebaseIdTokenDecoder.NguoiFirebase nguoi = kiemTraReqGoogle(req);
+        Account a = accountRepo.findById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+
+        Credential daCo = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+                .orElse(null);
+        if (daCo != null) {
+            if (!accountId.equals(daCo.getAccount().getId())) {
+                throw new AppException(ErrorCode.GOOGLE_ALREADY_LINKED);
+            }
+            return; // đã gắn rồi — gọi lại là lặp vô hại, không tạo Credential thứ hai
+        }
+
+        Instant now = Instant.now(clock);
+        Credential c = new Credential();
+        c.setAccount(a);
+        c.setProvider(AuthProvider.GOOGLE);
+        c.setSubject(nguoi.sub());
+        c.setEmailAtProvider(chuanHoa(nguoi.email()));
+        c.setCreatedAt(now);
+        c.setLastUsedAt(now);
+        credentialRepo.save(c);
+
+        // Chỉ công nhận "email đã xác minh" khi hai email TRÙNG: Google xác minh email của nó,
+        // không phải email đang đứng trong tài khoản này.
+        if (a.getEmailVerifiedAt() == null && chuanHoa(nguoi.email()).equals(chuanHoa(a.getEmail()))) {
+            a.setEmailVerifiedAt(now);
+            accountRepo.save(a);
+        }
+        log.info("Tài khoản {} liên kết Google {}", accountId, nguoi.sub());
+    }
+
+    /**
+     * Bean chỉ xác minh được chữ ký / hạn / project. Còn email và việc đã xác minh hay chưa là
+     * điều kiện MỞ tài khoản nên phải kiểm lại ở đây — không tin một claim chỉ vì chữ ký đúng.
+     */
+    private FirebaseIdTokenDecoder.NguoiFirebase kiemTraReqGoogle(LinkCredentialRequest req) {
+        if (req == null || req.idToken() == null || req.idToken().isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu idToken");
+        }
+        if (req.provider() != null && !AuthProvider.GOOGLE.name().equalsIgnoreCase(req.provider().trim())) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "provider phải là GOOGLE");
+        }
+
+        FirebaseIdTokenDecoder.NguoiFirebase nguoi = firebaseDecoder.decode(req.idToken());
+        if (nguoi.sub() == null || nguoi.sub().isBlank()) {
+            throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token thiếu subject");
+        }
+        String email = chuanHoa(nguoi.email());
+        if (email == null || !DANG_EMAIL.matcher(email).matches()) {
+            throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token thiếu email hợp lệ");
+        }
+        if (!nguoi.emailDaXacMinh()) {
+            throw new AppException(ErrorCode.BAD_CREDENTIALS, "email của Google chưa xác minh");
+        }
+        return nguoi;
+    }
+
+    /** Tên lấy từ Google; không có thì cắt phần trước @ của email. Cắt 80 ký tự cho vừa cột. */
+    private static String tenCuaGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi, String email) {
+        String ten = trim(nguoi.ten());
+        if (ten == null || ten.isBlank()) {
+            ten = email.substring(0, email.indexOf('@'));
+        }
+        return ten.length() > 80 ? ten.substring(0, 80) : ten;
+    }
+
+    private Account taoTaiKhoanGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi) {
+        Instant now = Instant.now(clock);
+        Account a = new Account();
+        a.setEmail(chuanHoa(nguoi.email()));
+        a.setDisplayName(tenCuaGoogle(nguoi, a.getEmail()));
+        // Google đã xác minh email này nên không bắt người dùng xác minh thêm lần nữa.
+        a.setEmailVerifiedAt(now);
+        a.setFailedAttempts(0);
+        a.setMustChangePassword(false);
+        a.setCreatedAt(now);
+        try {
+            a = accountRepo.saveAndFlush(a);
+
+            Credential c = new Credential();
+            c.setAccount(a);
+            c.setProvider(AuthProvider.GOOGLE);
+            // subject là uid Firebase, KHÔNG phải email: email đổi được, uid thì không.
+            c.setSubject(nguoi.sub());
+            c.setEmailAtProvider(a.getEmail());
+            c.setCreatedAt(now);
+            c.setLastUsedAt(now);
+            credentialRepo.save(c);
+        } catch (DataIntegrityViolationException e) {
+            // Hai request Google cùng email cùng chèn, hoặc ai đó vừa đăng ký mật khẩu trong lúc này.
+            // Không bắt là 500; ném AppException để rollback, không chừa Account nửa vời.
+            throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+        }
+        log.info("Tài khoản {} tạo bằng Google", a.getId());
+        return a;
     }
 
     // ================================================================ lõi

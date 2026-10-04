@@ -1,6 +1,7 @@
 package com.doan.game;
 
 import com.doan.game.configuration.ClockConfig;
+import com.doan.game.configuration.FirebaseIdTokenDecoder;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerGroup;
@@ -9,6 +10,8 @@ import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.SlotStatus;
+import com.doan.game.exception.AppException;
+import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
@@ -78,10 +81,12 @@ class AuthFlowTest {
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired PasswordEncoder encoder;
     @Autowired ThuThung thung;
+    @Autowired GoogleGia gia;
 
     @BeforeEach
     void xoaThu() {
         thung.daGui.clear();
+        gia.nguoi = null;
     }
 
     // ------------------------------------------------------------------ 1
@@ -439,18 +444,99 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.code").value(3003));
     }
 
-    // ------------------------------------------------------------------ 16
+    // ------------------------------------------------------------------ 16 (Google)
     /**
-     * Google chưa cài (thiếu OAuth client ID) phải trả 501/1004 rõ ràng. Ném
-     * UnsupportedOperationException thì rơi xuống lưới cuối thành 500 "Lỗi chưa phân loại".
+     * Nút Google cho người CHƯA có tài khoản: BE kiểm ID token rồi tạo Account + Credential
+     * GOOGLE và phát JWT như đăng nhập mật khẩu. Bean kiểm token được thay bằng stub nên test
+     * không gọi Google thật — chữ ký thật do FirebaseIdTokenDecoderTest kiểm riêng.
      */
     @Test
-    void dangNhapGoogleChuaCaiDatTra501() throws Exception {
-        mvc.perform(post("/api/auth/login/google")
+    void dangNhapGoogleTaoTaiKhoanMoiVaLanSauVaoDungTaiKhoan() throws Exception {
+        String email = "gg-" + System.nanoTime() + "@gmail.com";
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+                "uid-" + System.nanoTime(), email, "Nguyen Test", true);
+
+        String jwt = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.email").value(email));
+
+        // Đăng nhập lần hai bằng CÙNG uid: vào đúng tài khoản cũ, không sinh bản sao.
+        long truoc = accountRepo.count();
+        mvc.perform(dangNhapGoogle("GOOGLE", "token-that")).andExpect(status().isOk());
+        assertThat(accountRepo.count()).isEqualTo(truoc);
+    }
+
+    // ------------------------------------------------------------------ 17 (Google)
+    /** Email đã có tài khoản mật khẩu → 3020, KHÔNG gộp (gộp là nuốt mất mật khẩu người ta). */
+    @Test
+    void dangNhapGoogleVoiEmailDaCoMatKhauThi3020() throws Exception {
+        String email = "co-mk-" + System.nanoTime() + "@test.local";
+        dangKy(email);
+        xacMinh(tokenTrongMail());
+
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+                "uid-" + System.nanoTime(), email, "Nguyen Test", true);
+        mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3020));
+    }
+
+    // ------------------------------------------------------------------ 18 (Google)
+    /** Token không kiểm được và email Google chưa xác minh: cả hai 3002, không lộ khác biệt. */
+    @Test
+    void dangNhapGoogleTokenSaiHayEmailChuaXacMinhThi3002() throws Exception {
+        mvc.perform(dangNhapGoogle("GOOGLE", "token-sai"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3002));
+
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+                "uid-" + System.nanoTime(), "chua-xac-minh@gmail.com", "Ten", false);
+        mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3002));
+    }
+
+    // ------------------------------------------------------------------ 19 (Google)
+    /**
+     * Liên kết: người đang đăng nhập bằng mật khẩu gắn Google vào tài khoản của mình, rồi đăng
+     * nhập bằng Google ra CÙNG tài khoản. Khóa là uid Firebase nên email Google khác vẫn vào đúng.
+     */
+    @Test
+    void lienKetGoogleRoiDangNhapBangGoogleVaoDungTaiKhoan() throws Exception {
+        String email = "gop-" + System.nanoTime() + "@test.local";
+        dangKy(email);
+        xacMinh(tokenTrongMail());
+        String uid = "uid-gop-" + System.nanoTime();
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(uid, email, "Nguyen Test", true);
+
+        String mk = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        mvc.perform(post("/api/auth/link/google")
+                        .header("Authorization", "Bearer " + mk)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"provider\":\"GOOGLE\",\"idToken\":\"gia-mao\"}"))
-                .andExpect(status().isNotImplemented())
-                .andExpect(jsonPath("$.code").value(1004));
+                        .content(dangNhapGoogleJson("GOOGLE", "token-that")))
+                .andExpect(status().isOk());
+
+        // Gắn lại lần nữa: lặp vô hại, không tạo Credential thứ hai.
+        mvc.perform(post("/api/auth/link/google")
+                        .header("Authorization", "Bearer " + mk)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(dangNhapGoogleJson("GOOGLE", "token-that")))
+                .andExpect(status().isOk());
+
+        // Cùng uid, email KHÁC: vẫn vào tài khoản cũ vì khóa là uid chứ không phải email.
+        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(uid, "google-khac@gmail.com", "Ten khac", true);
+        String gg = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + gg))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.email").value(email));
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu
@@ -508,6 +594,17 @@ class AuthFlowTest {
                 .content("{\"code\":\"" + code + "\",\"pin\":\"" + pin + "\"}");
     }
 
+    /** Body mà FE gửi cho nút Google (xem context Firebase 04/10, mục 5). */
+    private static String dangNhapGoogleJson(String provider, String idToken) {
+        return "{\"provider\":\"" + provider + "\",\"idToken\":\"" + idToken + "\"}";
+    }
+
+    private static MockHttpServletRequestBuilder dangNhapGoogle(String provider, String idToken) {
+        return post("/api/auth/login/google")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(dangNhapGoogleJson(provider, idToken));
+    }
+
     private static String jwtRa(String body) {
         Matcher m = Pattern.compile("\"accessToken\":\"([^\"]+)\"").matcher(body);
         assertThat(m.find()).as("phai co accessToken").isTrue();
@@ -549,6 +646,23 @@ class AuthFlowTest {
         }
     }
 
+    /**
+     * Thay bean kiểm ID token Firebase bằng stub: test đăng nhập Google không được gọi Google
+     * thật (chữ ký thật do FirebaseIdTokenDecoderTest kiểm riêng, cũng không gọi mạng).
+     */
+    static class GoogleGia implements FirebaseIdTokenDecoder {
+        /** null = token không kiểm được. */
+        NguoiFirebase nguoi;
+
+        @Override
+        public NguoiFirebase decode(String idToken) {
+            if (nguoi == null) {
+                throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token của Firebase không hợp lệ");
+            }
+            return nguoi;
+        }
+    }
+
     @TestConfiguration
     static class CauHinhTest {
 
@@ -562,6 +676,13 @@ class AuthFlowTest {
         @Bean
         ThuThung thu() {
             return new ThuThung();
+        }
+
+        /** @Primary vì ngoài đây còn bean thật; khai kiểu GoogleGia để test ghi thẳng dữ liệu vào. */
+        @Bean
+        @Primary
+        GoogleGia googleGia() {
+            return new GoogleGia();
         }
     }
 }

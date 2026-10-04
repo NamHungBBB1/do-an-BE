@@ -54,6 +54,14 @@ public enum ErrorCode {
     /** Không giới hạn số lần xin link thì chính chỗ này thành công cụ spam mail tới người khác. */
     RESET_TOO_SOON(3019, "Vừa gửi link đặt lại mật khẩu xong, đợi một phút rồi thử lại",
             HttpStatus.TOO_MANY_REQUESTS),
+
+    /**
+     * Google (Firebase) trả email mà đã có tài khoản đăng ký bằng mật khẩu. KHÔNG tự gộp:
+     * người ta có thể chưa từng biết Google, gộp là nuốt luôn mật khẩu họ đang dùng.
+     */
+    GOOGLE_EMAIL_EXISTS(3020, "Email này đã có tài khoản — đăng nhập bằng mật khẩu rồi liên kết Google trong Tài khoản",
+            HttpStatus.CONFLICT),
+    GOOGLE_ALREADY_LINKED(3021, "Google này đã liên kết với một tài khoản khác", HttpStatus.CONFLICT),
     // 4xxx  thanh toán và gói
     PLAN_KIND_INVALID(4001, "Loại gói không hợp lệ — chỉ PARENT hoặc TEACHER", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_NOT_SET(4002, "Admin chưa đặt giá cho gói này", HttpStatus.CONFLICT),

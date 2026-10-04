@@ -102,10 +102,25 @@ public class AuthController {
         return UUID.fromString(jwt.getSubject());
     }
 
-    /** Còn khung: chưa có OAuth client ID của Google nên chưa kiểm được idToken. */
+    /**
+     * Nút "Đăng nhập bằng Google": FE lấy ID token của Firebase rồi gửi thẳng vào đây.
+     * permitAll — không có JWT của FinTeen trong tay người dùng mới (đang định đăng nhập).
+     */
     @PostMapping("/login/google")
     public ApiResponse<TokenResponse> dangNhapGoogle(@RequestBody LinkCredentialRequest req) {
-        return ApiResponse.ok(authService.dangNhapGoogle(req.idToken()));
+        return ApiResponse.ok(authService.dangNhapGoogle(req));
+    }
+
+    /**
+     * Gắn Google vào tài khoản đang đăng nhập. KHÔNG nằm trong permitAll: chỉ người cầm JWT
+     * FinTeen mới được thêm cách đăng nhập — nếu cho ẩn danh thì ai lấy được idToken Google của
+     * người khác cũng gắn vào tài khoản mình.
+     */
+    @PostMapping("/link/google")
+    public ApiResponse<Void> lienKetGoogle(@AuthenticationPrincipal Jwt jwt,
+                                           @RequestBody LinkCredentialRequest req) {
+        authService.lienKetCachDangNhap(taiKhoan(jwt), req);
+        return ApiResponse.ok();
     }
 
     /** Luôn 200, kể cả khi email không tồn tại — xem chú thích ở AuthServiceImpl.quenMatKhau. */
