@@ -3,6 +3,7 @@ package com.doan.game.configuration;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.security.RevocationAwareJwtDecoder;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.service.EntitlementService;
 import com.fasterxml.jackson.databind.ObjectMapper;

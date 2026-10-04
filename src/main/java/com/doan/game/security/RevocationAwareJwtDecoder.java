@@ -1,4 +1,4 @@
-package com.doan.game.configuration;
+package com.doan.game.security;
 
 import com.doan.game.entity.Account;
 import com.doan.game.repository.AccountRepository;

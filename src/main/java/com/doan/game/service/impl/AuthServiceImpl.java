@@ -8,7 +8,7 @@ import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.TokenResponse;
-import com.doan.game.configuration.FirebaseIdTokenDecoder;
+import com.doan.game.security.FirebaseIdTokenDecoder;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
 import com.doan.game.entity.Credential;

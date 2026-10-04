@@ -1,7 +1,7 @@
 package com.doan.game;
 
 import com.doan.game.configuration.ClockConfig;
-import com.doan.game.configuration.FirebaseIdTokenDecoder;
+import com.doan.game.security.FirebaseIdTokenDecoder;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerGroup;
@@ -338,7 +338,7 @@ class AuthFlowTest {
                         .param("newPassword", "matkhaumoi123"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
-                .andExpect(content().string(containsString("Bấm lại link trong mail")));
+                .andExpect(content().string(containsString("xin link mới")));
 
         mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isUnauthorized());

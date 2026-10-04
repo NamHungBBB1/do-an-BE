@@ -1,4 +1,4 @@
-package com.doan.game.configuration;
+package com.doan.game.security;
 
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;

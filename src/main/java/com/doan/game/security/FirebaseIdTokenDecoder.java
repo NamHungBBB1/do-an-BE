@@ -1,4 +1,4 @@
-package com.doan.game.configuration;
+package com.doan.game.security;
 
 /**
  * Kiểm ID token của Firebase (RS256, khoá công khai của Google) rồi giao các claim mà service cần.
