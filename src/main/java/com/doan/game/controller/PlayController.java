@@ -15,12 +15,12 @@ public class PlayController {
     private final PlayService playService;
 
     @PostMapping("/chapter")
-    public void nhanLoChuong() {
+    public void submitChapterBatch() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @GetMapping("/state")
-    public void xemTrangThai() {
+    public void getRunState() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

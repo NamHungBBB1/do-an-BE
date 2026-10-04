@@ -14,7 +14,7 @@ public final class AchievementMapper {
     private AchievementMapper() {
     }
 
-    public static AchievementResponse sang(Achievement nguon) {
+    public static AchievementResponse toResponse(Achievement source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

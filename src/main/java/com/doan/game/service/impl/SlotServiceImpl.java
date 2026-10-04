@@ -25,7 +25,7 @@ import java.util.UUID;
 /**
  * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
  *
- * CÓ RUỘT phần dangNhapTre (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng
+ * CÓ RUỘT phần loginSlot (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng
  * TokenService. Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
  */
@@ -34,8 +34,8 @@ import java.util.UUID;
 public class SlotServiceImpl implements SlotService {
 
     /** PIN gốc 6 số là 1 triệu tổ hợp. Không khoá thì dò hết trong một buổi. */
-    private static final int LAN_SAI_PIN_TOI_DA = 5;
-    private static final Duration KHOA_SAI_PIN = Duration.ofMinutes(15);
+    private static final int MAX_PIN_ATTEMPTS = 5;
+    private static final Duration PIN_LOCK_DURATION = Duration.ofMinutes(15);
 
     private final LearnerSlotRepository slotRepo;
     private final TokenService tokenService;
@@ -43,39 +43,39 @@ public class SlotServiceImpl implements SlotService {
     private final Clock clock;
 
     @Override
-    public SlotResponse moSlot(UUID groupId, CreateSlotRequest req) {
+    public SlotResponse openSlot(UUID groupId, CreateSlotRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public List<SlotResponse> moNhieuSlot(UUID groupId, CreateSlotsRequest req) {
+    public List<SlotResponse> openSlots(UUID groupId, CreateSlotsRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void traSlot(UUID slotId) {
+    public void returnSlot(UUID slotId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void xoaSach(UUID slotId) {
+    public void wipeSlot(UUID slotId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void doiPin(UUID slotId, ChangePinRequest req) {
+    public void changePin(UUID slotId, ChangePinRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     /**
      * Trẻ vào bằng mã in trên giấy + PIN 6 số.
      *
-     * CỐ Ý KHÔNG @Transactional, y hệt dangNhap: sai PIN thì phải tăng bộ đếm rồi NÉM lỗi, mà ném
+     * CỐ Ý KHÔNG @Transactional, y hệt login: sai PIN thì phải tăng bộ đếm rồi NÉM lỗi, mà ném
      * lỗi trong transaction là rollback — bộ đếm bị xoá và khoá chống dò không bao giờ đóng. Đây
      * là bẫy đã có test ở commit a982abc; học theo nguyên văn lần này.
      */
     @Override
-    public TokenResponse dangNhapTre(String code, String pin) {
+    public TokenResponse loginSlot(String code, String pin) {
         if (code == null || code.isBlank() || pin == null || pin.isBlank()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
         }
@@ -98,12 +98,12 @@ public class SlotServiceImpl implements SlotService {
         }
 
         if (!passwordEncoder.matches(pin, s.getPinHash())) {
-            int lan = (s.getFailedAttempts() == null ? 0 : s.getFailedAttempts()) + 1;
-            if (lan >= LAN_SAI_PIN_TOI_DA) {
+            int attempts = (s.getFailedAttempts() == null ? 0 : s.getFailedAttempts()) + 1;
+            if (attempts >= MAX_PIN_ATTEMPTS) {
                 s.setFailedAttempts(0);
-                s.setLockedUntil(now.plus(KHOA_SAI_PIN));
+                s.setLockedUntil(now.plus(PIN_LOCK_DURATION));
             } else {
-                s.setFailedAttempts(lan);
+                s.setFailedAttempts(attempts);
             }
             slotRepo.save(s);
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
@@ -112,7 +112,7 @@ public class SlotServiceImpl implements SlotService {
         s.setFailedAttempts(0);
         s.setLockedUntil(null);
         slotRepo.save(s);
-        return tokenService.choTre(s.getId());
+        return tokenService.issueForSlot(s.getId());
     }
 
 }

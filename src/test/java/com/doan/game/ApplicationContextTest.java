@@ -20,9 +20,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  * Có nghiệp vụ thật thì thay bằng test thật — đừng để mỗi test này.
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true")
-class KhungUngDungTest {
+class ApplicationContextTest {
 
     @Test
-    void nguCanhDungDuoc() {
+    void contextLoads() {
     }
 }

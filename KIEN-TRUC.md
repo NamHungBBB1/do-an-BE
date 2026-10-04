@@ -114,14 +114,14 @@ Mã lỗi dải **4xxx**. Ba quy tắc, cả ba đều có test (`PaymentService
 1. **Trạng thái chỉ đi tới.** `PENDING → PAID` hoặc `PENDING → FAILED`, không bao giờ lùi. Giao dịch lưu
    PENDING **trước** khi gọi PayOS; PayOS lỗi thì rollback, không có link thì không có giao dịch.
 2. **Ghi nhận PAID là idempotent.** Webhook về hai lần, hay webhook và trang `returnUrl` cùng lúc, chỉ cấp gói
-   một lần: khoá hàng (`khoaTheoOrderCode`, PESSIMISTIC_WRITE) + `Entitlement.transactionId UNIQUE`. Số tiền
+   một lần: khoá hàng (`lockByOrderCode`, PESSIMISTIC_WRITE) + `Entitlement.transactionId UNIQUE`. Số tiền
    lệch thì **không cấp**, chỉ ghi log để đối soát tay. `orderCode` không có trong bảng (PayOS gửi webhook thử
    lúc đăng ký URL) thì bỏ qua, vẫn 200.
 3. **Ngày gói theo giờ Việt Nam.** Gói mới `startsOn = hôm nay`; gia hạn sớm thì `startsOn = expiresOn cũ + 1`
    (không mất ngày); `expiresOn = startsOn + 3 tháng − 1 ngày`, dùng hết ngày đó.
 
 Ba đường biết tiền đã về, cái nào tới trước cũng được: webhook (chính), `GET /api/payments/{orderCode}` hỏi
-lại PayOS khi còn PENDING (trang returnUrl gọi), và cron `quetGiaoDichTreo` mỗi 2 phút đối soát giao dịch
+lại PayOS khi còn PENDING (trang returnUrl gọi), và cron `sweepPendingTransactions` mỗi 2 phút đối soát giao dịch
 PENDING từ 2 phút tới 25 giờ tuổi (link PayOS tự hết hạn sau 24 giờ → FAILED).
 
 Controller đọc "tôi là ai" từ `Jwt.getSubject()` (UUID tài khoản) — quy ước chung cho mọi controller sau này.
@@ -163,3 +163,24 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 - **Studio** (Chapter, ChapterDraft, ContentReview, GameRelease, ReleaseChapter, VoiceClip) và ba vai
   Game Editor / Reviewer / Manager: làm sau khi chốt xong role cơ bản. `buildVersion` lúc đó thành khoá
   ngoại tới `GameRelease`.
+
+
+## Quy ước tên và gói (04/10/2026)
+
+- **Mọi định danh tiếng Anh** (lớp, hàm, biến, tham số, hằng, record component). Chú thích và thông báo cho
+  người dùng vẫn tiếng Việt. Bộ sinh khung cũng sinh tên tiếng Anh. Đổi 04/10: 216 tên, 4 tệp đổi tên.
+- `security` — `RevocationAwareJwtDecoder` (kiểm `tv`, thay scope bằng vai + gói hiện tại trong DB),
+  `FirebaseIdTokenDecoder` / `FirebaseNimbusIdTokenDecoder` (kiểm ID token Google, khoá công khai, không bí mật).
+- `web` — `HtmlPages`: vài trang HTML BE tự phục vụ (link mở từ mail). Controller KHÔNG dựng HTML, KHÔNG
+  try/catch: lỗi ở endpoint `produces text/html` được `GlobalExceptionHandler` dựng thành trang HTML, giữ mã lỗi.
+- `service` có vài lớp hạ tầng không interface (`TokenService`, `MailService`, `OutgoingMail`): chỉ một cách
+  làm, thêm interface là thừa. Service nghiệp vụ vẫn theo cặp interface + Impl.
+
+## Auth (merge 04/10, PR #2 + fix/auth-sau-merge)
+
+Đăng ký, xác minh mail, đăng nhập (khoá 15 phút sau 5 lần sai), quên / đặt lại / đổi mật khẩu, `/auth/me`,
+đăng nhập trẻ bằng mã + PIN, đăng nhập Google qua Firebase (`finteen-fa26`) và liên kết Google. JWT HS256,
+`sub` = id tài khoản hoặc slot, `typ` ACCOUNT / SLOT, `tv` = `Account.tokenVersion` (tăng khi đổi mật khẩu → mọi
+token cũ chết ngay). Scope không lưu cứng: mỗi request decoder thay bằng vai + gói hiện có, nên mua gói xong có
+quyền ngay mà không bị đá ra. Đăng nhập Google lần đầu gửi trùng (bấm đúp) ra cùng một tài khoản.
+Review: RV-01 → RV-03 trên hub `#/kiem-thu`.

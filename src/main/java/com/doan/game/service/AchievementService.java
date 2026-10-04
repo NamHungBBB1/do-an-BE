@@ -12,8 +12,8 @@ import java.util.UUID;
  */
 public interface AchievementService {
 
-    void traoThanhTuu(UUID slotId, String code);
+    void awardAchievement(UUID slotId, String code);
 
-    java.util.List<AchievementResponse> xemThanhTuu(UUID slotId);
+    java.util.List<AchievementResponse> listAchievements(UUID slotId);
 
 }

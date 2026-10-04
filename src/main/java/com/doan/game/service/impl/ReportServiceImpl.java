@@ -19,12 +19,12 @@ import java.util.UUID;
 public class ReportServiceImpl implements ReportService {
 
     @Override
-    public GroupReportResponse dongCung(UUID groupId) {
+    public GroupReportResponse freeze(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public GroupReportResponse xemBaoCao(UUID reportId) {
+    public GroupReportResponse getReport(UUID reportId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

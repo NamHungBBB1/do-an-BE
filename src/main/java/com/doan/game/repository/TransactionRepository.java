@@ -28,9 +28,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Transaction t where t.orderCode = :orderCode")
-    Optional<Transaction> khoaTheoOrderCode(@Param("orderCode") Long orderCode);
+    Optional<Transaction> lockByOrderCode(@Param("orderCode") Long orderCode);
 
-    List<Transaction> findByStatusAndCreatedAtBetween(TransactionStatus status, Instant tu, Instant den);
+    List<Transaction> findByStatusAndCreatedAtBetween(TransactionStatus status, Instant from, Instant to);
 
     Page<Transaction> findAllByOrderByCreatedAtDesc(Pageable p);
 

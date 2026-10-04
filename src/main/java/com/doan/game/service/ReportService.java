@@ -12,8 +12,8 @@ import java.util.UUID;
  */
 public interface ReportService {
 
-    GroupReportResponse dongCung(UUID groupId);
+    GroupReportResponse freeze(UUID groupId);
 
-    GroupReportResponse xemBaoCao(UUID reportId);
+    GroupReportResponse getReport(UUID reportId);
 
 }

@@ -19,12 +19,12 @@ import java.util.UUID;
 public class PlayServiceImpl implements PlayService {
 
     @Override
-    public void nhanLoChuong(UUID slotId, ChapterBatchRequest req) {
+    public void submitChapterBatch(UUID slotId, ChapterBatchRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public RunStateResponse xemTrangThai(UUID slotId) {
+    public RunStateResponse getRunState(UUID slotId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

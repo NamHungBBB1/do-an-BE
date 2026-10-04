@@ -19,7 +19,7 @@ public class PlanController {
     private final PlanService planService;
 
     @GetMapping
-    public ApiResponse<List<PlanResponse>> xemGia() {
-        return ApiResponse.ok(planService.xemGia());
+    public ApiResponse<List<PlanResponse>> listPrices() {
+        return ApiResponse.ok(planService.listPrices());
     }
 }

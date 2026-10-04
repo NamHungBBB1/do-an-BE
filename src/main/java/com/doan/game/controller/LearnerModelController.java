@@ -15,7 +15,7 @@ public class LearnerModelController {
     private final LearnerModelService learnerModelService;
 
     @GetMapping("/summary")
-    public void xemTongKet() {
+    public void getSummary() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

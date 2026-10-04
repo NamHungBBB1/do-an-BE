@@ -31,21 +31,21 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping
-    public ApiResponse<PaymentResponse> taoGiaoDich(@AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<PaymentResponse> createPayment(@AuthenticationPrincipal Jwt jwt,
                                                     @RequestBody BuyPlanRequest req) {
-        return ApiResponse.ok(paymentService.taoGiaoDich(taiKhoan(jwt), req));
+        return ApiResponse.ok(paymentService.createPayment(currentAccountId(jwt), req));
     }
 
     @GetMapping("/{orderCode}")
-    public ApiResponse<PaymentStatusResponse> xemGiaoDich(@AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<PaymentStatusResponse> getPayment(@AuthenticationPrincipal Jwt jwt,
                                                           @PathVariable long orderCode) {
-        return ApiResponse.ok(paymentService.xemGiaoDich(taiKhoan(jwt), orderCode));
+        return ApiResponse.ok(paymentService.getPayment(currentAccountId(jwt), orderCode));
     }
 
     @PostMapping("/{orderCode}/cancel")
-    public ApiResponse<Void> huyGiaoDich(@AuthenticationPrincipal Jwt jwt, @PathVariable long orderCode,
-                                         @RequestParam(required = false) String lyDo) {
-        paymentService.huyGiaoDich(taiKhoan(jwt), orderCode, lyDo);
+    public ApiResponse<Void> cancelPayment(@AuthenticationPrincipal Jwt jwt, @PathVariable long orderCode,
+                                         @RequestParam(required = false) String reason) {
+        paymentService.cancelPayment(currentAccountId(jwt), orderCode, reason);
         return ApiResponse.ok();
     }
 
@@ -55,9 +55,9 @@ public class PaymentController {
      * controller bắt lỗi — vì giao thức bên kia đòi, không phải để dựng response.
      */
     @PostMapping("/webhook")
-    public ApiResponse<Void> nhanWebhook(@RequestBody String body) {
+    public ApiResponse<Void> handleWebhook(@RequestBody String body) {
         try {
-            paymentService.nhanWebhook(body);
+            paymentService.handleWebhook(body);
         } catch (Exception e) {
             log.error("Xử lý webhook PayOS lỗi — vẫn trả 200: {}", e.toString());
         }
@@ -66,11 +66,11 @@ public class PaymentController {
 
     /** Admin (SecurityConfig). Body tuỳ chọn {"url": "..."}; để trống thì dùng app.payos.webhook-url. */
     @PostMapping("/webhook/confirm")
-    public ApiResponse<String> xacNhanWebhook(@RequestBody(required = false) Map<String, String> body) {
-        return ApiResponse.ok(paymentService.xacNhanWebhook(body == null ? null : body.get("url")));
+    public ApiResponse<String> confirmWebhook(@RequestBody(required = false) Map<String, String> body) {
+        return ApiResponse.ok(paymentService.confirmWebhook(body == null ? null : body.get("url")));
     }
 
-    private static UUID taiKhoan(Jwt jwt) {
+    private static UUID currentAccountId(Jwt jwt) {
         return UUID.fromString(jwt.getSubject());
     }
 }

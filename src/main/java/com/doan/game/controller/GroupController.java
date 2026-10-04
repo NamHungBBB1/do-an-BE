@@ -15,22 +15,22 @@ public class GroupController {
     private final GroupService groupService;
 
     @PostMapping
-    public void moNhom() {
+    public void openGroup() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/consent")
-    public void xacNhanDongY() {
+    public void confirmConsent() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/close")
-    public void dongNhom() {
+    public void closeGroup() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @GetMapping("/{id}/capacity")
-    public void demChoTrong() {
+    public void countFreeSlots() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

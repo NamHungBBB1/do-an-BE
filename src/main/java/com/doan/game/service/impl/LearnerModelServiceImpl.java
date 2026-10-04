@@ -19,22 +19,22 @@ import java.util.UUID;
 public class LearnerModelServiceImpl implements LearnerModelService {
 
     @Override
-    public void capNhatMucNam(UUID slotId, int chapter) {
+    public void updateMastery(UUID slotId, int chapter) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void phanCumLop(UUID groupId) {
+    public void clusterClass(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void vietTongKetDem(java.time.LocalDate ngay) {
+    public void writeNightlySummaries(java.time.LocalDate date) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public String xemTongKet(UUID slotId, java.time.LocalDate ngay) {
+    public String getSummary(UUID slotId, java.time.LocalDate date) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

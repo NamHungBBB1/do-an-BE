@@ -14,7 +14,7 @@ public final class ReportMapper {
     private ReportMapper() {
     }
 
-    public static GroupReportResponse sang(GroupReport nguon) {
+    public static GroupReportResponse toResponse(GroupReport source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

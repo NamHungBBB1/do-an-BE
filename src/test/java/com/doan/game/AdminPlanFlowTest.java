@@ -38,12 +38,12 @@ class AdminPlanFlowTest {
     }
 
     @Test
-    void adminDatGiaRoiAiCungXemDuoc() throws Exception {
+    void adminSetsPriceAndAnyoneCanRead() throws Exception {
         Account admin = admin();
-        var nhuAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
+        var asAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
                 .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"));
 
-        mvc.perform(put("/api/admin/plans/parent").with(nhuAdmin)
+        mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 99000}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.kind").value("PARENT"))
@@ -51,7 +51,7 @@ class AdminPlanFlowTest {
                 .andExpect(jsonPath("$.result.months").value(3));
 
         // sửa lại giá: vẫn một dòng, giá mới
-        mvc.perform(put("/api/admin/plans/PARENT").with(nhuAdmin)
+        mvc.perform(put("/api/admin/plans/PARENT").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 120000, \"months\": 6}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.price").value(120000))
@@ -63,7 +63,7 @@ class AdminPlanFlowTest {
     }
 
     @Test
-    void giaAmBiTuChoi() throws Exception {
+    void nonPositivePriceIsRejected() throws Exception {
         Account admin = admin();
         mvc.perform(put("/api/admin/plans/teacher")
                         .with(jwt().jwt(j -> j.subject(admin.getId().toString()))
@@ -74,7 +74,7 @@ class AdminPlanFlowTest {
     }
 
     @Test
-    void nguoiThuongKhongDatDuocGia() throws Exception {
+    void regularUserCannotSetPrice() throws Exception {
         mvc.perform(put("/api/admin/plans/parent")
                         .with(jwt().authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_PARENT")))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 1}"))

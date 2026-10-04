@@ -12,12 +12,12 @@ import java.util.UUID;
  */
 public interface QuizService {
 
-    QuizResponse soanQuiz(UUID ownerId, CreateQuizRequest req);
+    QuizResponse createQuiz(UUID ownerId, CreateQuizRequest req);
 
-    void phatHanh(UUID quizId);
+    void publish(UUID quizId);
 
-    QuizResultResponse nopBai(UUID quizId, UUID slotId, SubmitQuizRequest req);
+    QuizResultResponse submitQuiz(UUID quizId, UUID slotId, SubmitQuizRequest req);
 
-    java.util.List<QuizResultResponse> xemKetQuaLop(UUID quizId);
+    java.util.List<QuizResultResponse> getClassResults(UUID quizId);
 
 }

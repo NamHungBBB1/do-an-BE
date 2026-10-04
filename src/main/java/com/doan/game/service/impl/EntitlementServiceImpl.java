@@ -38,21 +38,21 @@ public class EntitlementServiceImpl implements EntitlementService {
     @Override
     @Transactional(readOnly = true)
     public Set<PlanKind> activePlans(UUID accountId) {
-        return entitlementRepo.goiConHan(accountId, LocalDate.now(clock));
+        return entitlementRepo.findActivePlanKinds(accountId, LocalDate.now(clock));
     }
 
     @Override
-    public java.util.List<EntitlementResponse> xemGoi(UUID accountId) {
+    public java.util.List<EntitlementResponse> listPlans(UUID accountId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public EntitlementResponse capGoi(UUID adminId, GrantPlanRequest req) {
+    public EntitlementResponse grantPlan(UUID adminId, GrantPlanRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void nhacSapHetHan(java.time.LocalDate homNay) {
+    public void remindExpiringPlans(java.time.LocalDate today) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

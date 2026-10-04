@@ -14,7 +14,7 @@ public final class RunStateMapper {
     private RunStateMapper() {
     }
 
-    public static RunStateResponse sang(RunState nguon) {
+    public static RunStateResponse toResponse(RunState source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

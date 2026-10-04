@@ -12,12 +12,12 @@ import java.util.UUID;
  */
 public interface LearnerModelService {
 
-    void capNhatMucNam(UUID slotId, int chapter);
+    void updateMastery(UUID slotId, int chapter);
 
-    void phanCumLop(UUID groupId);
+    void clusterClass(UUID groupId);
 
-    void vietTongKetDem(java.time.LocalDate ngay);
+    void writeNightlySummaries(java.time.LocalDate date);
 
-    String xemTongKet(UUID slotId, java.time.LocalDate ngay);
+    String getSummary(UUID slotId, java.time.LocalDate date);
 
 }

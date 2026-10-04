@@ -19,22 +19,22 @@ import java.util.UUID;
 public class QuizServiceImpl implements QuizService {
 
     @Override
-    public QuizResponse soanQuiz(UUID ownerId, CreateQuizRequest req) {
+    public QuizResponse createQuiz(UUID ownerId, CreateQuizRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void phatHanh(UUID quizId) {
+    public void publish(UUID quizId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public QuizResultResponse nopBai(UUID quizId, UUID slotId, SubmitQuizRequest req) {
+    public QuizResultResponse submitQuiz(UUID quizId, UUID slotId, SubmitQuizRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public java.util.List<QuizResultResponse> xemKetQuaLop(UUID quizId) {
+    public java.util.List<QuizResultResponse> getClassResults(UUID quizId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

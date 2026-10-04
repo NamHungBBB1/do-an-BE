@@ -3,6 +3,7 @@ package com.doan.game.configuration;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.security.RevocationAwareJwtDecoder;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.service.EntitlementService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -144,18 +145,18 @@ public class SecurityConfig {
         scopes.setAuthorityPrefix("SCOPE_");
         JwtAuthenticationConverter c = new JwtAuthenticationConverter();
         c.setJwtGrantedAuthoritiesConverter(jwt -> {
-            Set<GrantedAuthority> quyen = new HashSet<>(scopes.convert(jwt));
+            Set<GrantedAuthority> authorities = new HashSet<>(scopes.convert(jwt));
             String typ = jwt.getClaimAsString("typ");
             if (typ != null && !typ.isBlank()) {
-                quyen.add(new SimpleGrantedAuthority("TYP_" + typ));
+                authorities.add(new SimpleGrantedAuthority("TYP_" + typ));
             }
-            return quyen;
+            return authorities;
         });
         return c;
     }
 
     /**
-     * Decoder có kiểm database. Cho nên bean này là TokenThuHoiDecoder bọc ngoài Nimbus:
+     * Decoder có kiểm database. Cho nên bean này là RevocationAwareJwtDecoder bọc ngoài Nimbus:
      * Nimbus vẫn lo chữ ký + hạn, còn lớp bọc lo việc token có còn được phép dùng không.
      *
      * setJwtValidator là BẮT BUỘC: mặc định Nimbus kiểm hạn bằng đồng hồ hệ thống, còn ta PHÁT
@@ -168,9 +169,9 @@ public class SecurityConfig {
                           EntitlementService entitlementService, Clock clock) {
         NimbusJwtDecoder nimbus = NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256).build();
-        JwtTimestampValidator han = new JwtTimestampValidator();
-        han.setClock(clock);
-        nimbus.setJwtValidator(han);
-        return new TokenThuHoiDecoder(nimbus, accountRepo, accountRoleRepo, entitlementService);
+        JwtTimestampValidator timestampValidator = new JwtTimestampValidator();
+        timestampValidator.setClock(clock);
+        nimbus.setJwtValidator(timestampValidator);
+        return new RevocationAwareJwtDecoder(nimbus, accountRepo, accountRoleRepo, entitlementService);
     }
 }

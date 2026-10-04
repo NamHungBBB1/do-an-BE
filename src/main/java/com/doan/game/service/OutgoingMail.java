@@ -8,5 +8,5 @@ package com.doan.game.service;
  * /register treo theo SMTP, và nếu transaction rollback thì người dùng vẫn nhận được mail
  * trỏ tới một token không tồn tại — họ bấm link rồi nhận "link không đúng".
  */
-public record MailCanGui(String to, String subject, String body) {
+public record OutgoingMail(String to, String subject, String body) {
 }

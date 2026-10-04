@@ -32,35 +32,35 @@ public class AdminController {
 
     // ---- giá gói ----
     @PutMapping("/plans/{kind}")
-    public ApiResponse<PlanResponse> datGia(@AuthenticationPrincipal Jwt jwt, @PathVariable String kind,
+    public ApiResponse<PlanResponse> setPrice(@AuthenticationPrincipal Jwt jwt, @PathVariable String kind,
                                             @RequestBody SetPlanPriceRequest req) {
-        return ApiResponse.ok(planService.datGia(UUID.fromString(jwt.getSubject()), kind, req));
+        return ApiResponse.ok(planService.setPrice(UUID.fromString(jwt.getSubject()), kind, req));
     }
 
     // ---- giao dịch ----
     /** Mới nhất trước. Không trả tổng số dòng: FE lật trang tới khi nhận danh sách rỗng. */
     @GetMapping("/transactions")
-    public ApiResponse<List<TransactionAdminResponse>> danhSachGiaoDich(
+    public ApiResponse<List<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(paymentService.danhSachGiaoDich(status, page, size));
+        return ApiResponse.ok(paymentService.listTransactions(status, page, size));
     }
 
     /** Hỏi lại PayOS ngay cho một giao dịch còn PENDING (khi nghi webhook không tới). */
     @PostMapping("/transactions/{orderCode}/reconcile")
-    public ApiResponse<PaymentStatusResponse> doiSoat(@PathVariable long orderCode) {
-        return ApiResponse.ok(paymentService.doiSoat(orderCode));
+    public ApiResponse<PaymentStatusResponse> reconcile(@PathVariable long orderCode) {
+        return ApiResponse.ok(paymentService.reconcile(orderCode));
     }
 
     // ---- vai nội bộ: khung, chưa cài đặt ----
     @PostMapping("/roles/grant")
-    public void phatVai() {
+    public void grantRole() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/roles/revoke")
-    public void thuVai() {
+    public void revokeRole() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

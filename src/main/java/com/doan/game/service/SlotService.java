@@ -12,16 +12,16 @@ import java.util.UUID;
  */
 public interface SlotService {
 
-    SlotResponse moSlot(UUID groupId, CreateSlotRequest req);
+    SlotResponse openSlot(UUID groupId, CreateSlotRequest req);
 
-    java.util.List<SlotResponse> moNhieuSlot(UUID groupId, CreateSlotsRequest req);
+    java.util.List<SlotResponse> openSlots(UUID groupId, CreateSlotsRequest req);
 
-    void traSlot(UUID slotId);
+    void returnSlot(UUID slotId);
 
-    void xoaSach(UUID slotId);
+    void wipeSlot(UUID slotId);
 
-    void doiPin(UUID slotId, ChangePinRequest req);
+    void changePin(UUID slotId, ChangePinRequest req);
 
-    TokenResponse dangNhapTre(String code, String pin);
+    TokenResponse loginSlot(String code, String pin);
 
 }
