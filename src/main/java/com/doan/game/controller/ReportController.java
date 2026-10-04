@@ -15,12 +15,12 @@ public class ReportController {
     private final ReportService reportService;
 
     @PostMapping("/freeze/{groupId}")
-    public void dongCung() {
+    public void freeze() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @GetMapping("/{id}")
-    public void xemBaoCao() {
+    public void getReport() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

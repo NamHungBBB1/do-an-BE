@@ -27,5 +27,5 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
      */
     @Query("select distinct e.kind from Entitlement e "
             + "where e.account.id = :id and e.startsOn <= :homNay and e.expiresOn >= :homNay")
-    Set<PlanKind> goiConHan(@Param("id") UUID accountId, @Param("homNay") LocalDate homNay);
+    Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("homNay") LocalDate today);
 }

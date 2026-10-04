@@ -12,8 +12,8 @@ import java.util.UUID;
  */
 public interface AdminService {
 
-    void phatVai(UUID actorId, GrantRoleRequest req);
+    void grantRole(UUID actorId, GrantRoleRequest req);
 
-    void thuVai(UUID actorId, GrantRoleRequest req);
+    void revokeRole(UUID actorId, GrantRoleRequest req);
 
 }

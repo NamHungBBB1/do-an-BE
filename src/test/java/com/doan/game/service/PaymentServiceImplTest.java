@@ -59,7 +59,7 @@ class PaymentServiceImplTest {
     private Transaction tx;
 
     @BeforeEach
-    void dung() {
+    void setUp() {
         svc = new PaymentServiceImpl(transactionRepo, entitlementRepo, accountRepo, planRepo, payOSProvider,
                 new PayOsProperties("id", "key", "sum", "https://x/webhook", "https://fe/ok", "https://fe/cancel"),
                 clock, new ObjectMapper());
@@ -73,7 +73,7 @@ class PaymentServiceImplTest {
         tx.setStatus(TransactionStatus.PENDING);
     }
 
-    private void payOSBao(long orderCode, long amount, String code) {
+    private void payOSReports(long orderCode, long amount, String code) {
         // Dựng xong rồi mới stub: builder của SDK có @NonNull, NPE giữa when()...thenReturn() là UnfinishedStubbing.
         WebhookData data = WebhookData.builder()
                 .orderCode(orderCode).amount(amount).code(code).desc("ok")
@@ -85,7 +85,7 @@ class PaymentServiceImplTest {
         when(webhooks.verify(any())).thenReturn(data);
     }
 
-    private void goi3Thang() {
+    private void threeMonthPlan() {
         Plan p = new Plan();
         p.setKind(PlanKind.PARENT);
         p.setPrice(2000L);
@@ -94,70 +94,70 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    void webhookPaidCapGoiTuHomNay() {
-        payOSBao(123L, 2000L, "00");
-        goi3Thang();
-        when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
+    void paidWebhookGrantsPlanFromToday() {
+        payOSReports(123L, 2000L, "00");
+        threeMonthPlan();
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
         when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
                 .thenReturn(Optional.empty());
 
-        svc.nhanWebhook("{}");
+        svc.handleWebhook("{}");
 
         assertEquals(TransactionStatus.PAID, tx.getStatus());
-        ArgumentCaptor<Entitlement> bat = ArgumentCaptor.forClass(Entitlement.class);
-        verify(entitlementRepo).save(bat.capture());
-        assertEquals(LocalDate.of(2026, 10, 2), bat.getValue().getStartsOn());
+        ArgumentCaptor<Entitlement> captor = ArgumentCaptor.forClass(Entitlement.class);
+        verify(entitlementRepo).save(captor.capture());
+        assertEquals(LocalDate.of(2026, 10, 2), captor.getValue().getStartsOn());
         // 02/10 + 3 tháng = 02/01/2027, dùng hết ngày 01/01/2027
-        assertEquals(LocalDate.of(2027, 1, 1), bat.getValue().getExpiresOn());
-        assertEquals(tx, bat.getValue().getTransaction());
+        assertEquals(LocalDate.of(2027, 1, 1), captor.getValue().getExpiresOn());
+        assertEquals(tx, captor.getValue().getTransaction());
     }
 
     @Test
-    void giaHanSomNoiTiepHanCu() {
-        payOSBao(123L, 2000L, "00");
-        goi3Thang();
-        when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
-        Entitlement cu = new Entitlement();
-        cu.setExpiresOn(LocalDate.of(2026, 11, 15));
+    void earlyRenewalStartsAfterCurrentExpiry() {
+        payOSReports(123L, 2000L, "00");
+        threeMonthPlan();
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+        Entitlement old = new Entitlement();
+        old.setExpiresOn(LocalDate.of(2026, 11, 15));
         when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
-                .thenReturn(Optional.of(cu));
+                .thenReturn(Optional.of(old));
 
-        svc.nhanWebhook("{}");
+        svc.handleWebhook("{}");
 
-        ArgumentCaptor<Entitlement> bat = ArgumentCaptor.forClass(Entitlement.class);
-        verify(entitlementRepo).save(bat.capture());
-        assertEquals(LocalDate.of(2026, 11, 16), bat.getValue().getStartsOn());
-        assertEquals(LocalDate.of(2027, 2, 15), bat.getValue().getExpiresOn());
+        ArgumentCaptor<Entitlement> captor = ArgumentCaptor.forClass(Entitlement.class);
+        verify(entitlementRepo).save(captor.capture());
+        assertEquals(LocalDate.of(2026, 11, 16), captor.getValue().getStartsOn());
+        assertEquals(LocalDate.of(2027, 2, 15), captor.getValue().getExpiresOn());
     }
 
     @Test
-    void webhookVeHaiLanChiCapMotLan() {
-        payOSBao(123L, 2000L, "00");
+    void duplicateWebhookGrantsOnce() {
+        payOSReports(123L, 2000L, "00");
         tx.setStatus(TransactionStatus.PAID);
-        when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
 
-        svc.nhanWebhook("{}");
+        svc.handleWebhook("{}");
 
         verify(entitlementRepo, never()).save(any());
     }
 
     @Test
-    void soTienLechThiKhongCapGoi() {
-        payOSBao(123L, 1000L, "00");
-        when(transactionRepo.khoaTheoOrderCode(123L)).thenReturn(Optional.of(tx));
+    void amountMismatchGrantsNothing() {
+        payOSReports(123L, 1000L, "00");
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
 
-        svc.nhanWebhook("{}");
+        svc.handleWebhook("{}");
 
         assertEquals(TransactionStatus.PENDING, tx.getStatus());
         verify(entitlementRepo, never()).save(any());
     }
 
     @Test
-    void orderCodeLaKhongBoQuaVanOn() {
-        payOSBao(999L, 2000L, "00");
-        when(transactionRepo.khoaTheoOrderCode(999L)).thenReturn(Optional.empty());
+    void unknownOrderCodeIsIgnored() {
+        payOSReports(999L, 2000L, "00");
+        when(transactionRepo.lockByOrderCode(999L)).thenReturn(Optional.empty());
 
-        svc.nhanWebhook("{}");   // webhook thử của PayOS: không ném, không cấp gì
+        svc.handleWebhook("{}");   // webhook thử của PayOS: không ném, không cấp gì
 
         verify(entitlementRepo, never()).save(any());
     }

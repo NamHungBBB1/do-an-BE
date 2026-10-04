@@ -12,12 +12,12 @@ import java.util.UUID;
  */
 public interface GroupService {
 
-    LearnerGroupResponse moNhom(UUID ownerId, CreateGroupRequest req);
+    LearnerGroupResponse openGroup(UUID ownerId, CreateGroupRequest req);
 
-    void xacNhanDongY(UUID groupId);
+    void confirmConsent(UUID groupId);
 
-    void dongNhom(UUID groupId);
+    void closeGroup(UUID groupId);
 
-    int demChoTrong(UUID groupId);
+    int countFreeSlots(UUID groupId);
 
 }

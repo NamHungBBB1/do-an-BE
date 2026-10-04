@@ -19,12 +19,12 @@ import java.util.UUID;
 public class AchievementServiceImpl implements AchievementService {
 
     @Override
-    public void traoThanhTuu(UUID slotId, String code) {
+    public void awardAchievement(UUID slotId, String code) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public java.util.List<AchievementResponse> xemThanhTuu(UUID slotId) {
+    public java.util.List<AchievementResponse> listAchievements(UUID slotId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

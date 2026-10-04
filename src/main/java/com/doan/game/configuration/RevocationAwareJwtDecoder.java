@@ -31,16 +31,16 @@ import java.util.UUID;
  * Đắt hơn decoder thường (2 câu truy vấn mỗi request), nhưng đó là cái giá của việc thu hồi.
  * Không kiểm thì đổi mật khẩu chẳng đuổi được ai.
  */
-public class TokenThuHoiDecoder implements JwtDecoder {
+public class RevocationAwareJwtDecoder implements JwtDecoder {
 
-    private final JwtDecoder goc;
+    private final JwtDecoder delegate;
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
 
-    public TokenThuHoiDecoder(JwtDecoder goc, AccountRepository accountRepo,
+    public RevocationAwareJwtDecoder(JwtDecoder delegate, AccountRepository accountRepo,
                               AccountRoleRepository accountRoleRepo, EntitlementService entitlementService) {
-        this.goc = goc;
+        this.delegate = delegate;
         this.accountRepo = accountRepo;
         this.accountRoleRepo = accountRoleRepo;
         this.entitlementService = entitlementService;
@@ -49,7 +49,7 @@ public class TokenThuHoiDecoder implements JwtDecoder {
     @Override
     public Jwt decode(String token) {
         // Sai chữ ký, sai khoá, hết hạn: ném ngay tại đây, không đụng tới database.
-        Jwt jwt = goc.decode(token);
+        Jwt jwt = delegate.decode(token);
 
         if (!"ACCOUNT".equals(jwt.getClaimAsString("typ"))) {
             return jwt;
@@ -64,7 +64,7 @@ public class TokenThuHoiDecoder implements JwtDecoder {
         Account a = accountRepo.findById(id)
                 .orElseThrow(() -> new BadJwtException("tài khoản không còn tồn tại"));
 
-        Integer tv = phienBanTrongToken(jwt);
+        Integer tv = tokenVersionClaim(jwt);
         if (tv != null && tv != a.getTokenVersion()) {
             throw new BadJwtException("token đã bị thu hồi (đổi mật khẩu)");
         }
@@ -73,15 +73,15 @@ public class TokenThuHoiDecoder implements JwtDecoder {
         // 0h mà đá người dùng ra thì họ phải đăng nhập lại bằng mật khẩu, mà không có cách lấy
         // token mới. Thay vào đó THAY scope bằng vai + gói đang có trong DB: quyền luôn đúng hiện
         // tại, token vẫn sống. Thu hồi thật (đổi mật khẩu, xoá tài khoản) vẫn đi qua tv ở trên.
-        Set<String> hienTai = phamViHienTai(id);
-        if (phamViTrongToken(jwt).equals(hienTai)) {
+        Set<String> current = currentScopes(id);
+        if (tokenScopes(jwt).equals(current)) {
             return jwt;
         }
         return Jwt.withTokenValue(jwt.getTokenValue())
                 .headers(h -> h.putAll(jwt.getHeaders()))
                 .claims(c -> {
                     c.putAll(jwt.getClaims());
-                    c.put("scope", String.join(" ", hienTai));
+                    c.put("scope", String.join(" ", current));
                 })
                 .build();
     }
@@ -92,7 +92,7 @@ public class TokenThuHoiDecoder implements JwtDecoder {
      * Số trong JSON có thể về tới đây là Integer, Long hay Double tùy bộ parse, nên đọc qua
      * Number rồi ép int.
      */
-    private static Integer phienBanTrongToken(Jwt jwt) {
+    private static Integer tokenVersionClaim(Jwt jwt) {
         Object raw = jwt.getClaim("tv");
         if (raw instanceof Number n) {
             return n.intValue();
@@ -108,7 +108,7 @@ public class TokenThuHoiDecoder implements JwtDecoder {
     }
 
     /** Scope trong JWT là chuỗi cách nhau bởi dấu cách. Dùng TreeSet để so không phụ thuộc thứ tự. */
-    private static Set<String> phamViTrongToken(Jwt jwt) {
+    private static Set<String> tokenScopes(Jwt jwt) {
         String scope = jwt.getClaimAsString("scope");
         Set<String> s = new TreeSet<>();
         if (scope != null) {
@@ -121,7 +121,7 @@ public class TokenThuHoiDecoder implements JwtDecoder {
         return s;
     }
 
-    private Set<String> phamViHienTai(UUID accountId) {
+    private Set<String> currentScopes(UUID accountId) {
         Set<String> s = new TreeSet<>();
         accountRoleRepo.findByAccount_Id(accountId).forEach(r -> s.add(r.getRole().name()));
         entitlementService.activePlans(accountId).forEach(k -> s.add(k.name()));

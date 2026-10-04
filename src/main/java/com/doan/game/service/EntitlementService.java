@@ -14,10 +14,10 @@ public interface EntitlementService {
 
     java.util.Set<com.doan.game.enums.PlanKind> activePlans(UUID accountId);
 
-    java.util.List<EntitlementResponse> xemGoi(UUID accountId);
+    java.util.List<EntitlementResponse> listPlans(UUID accountId);
 
-    EntitlementResponse capGoi(UUID adminId, GrantPlanRequest req);
+    EntitlementResponse grantPlan(UUID adminId, GrantPlanRequest req);
 
-    void nhacSapHetHan(java.time.LocalDate homNay);
+    void remindExpiringPlans(java.time.LocalDate today);
 
 }

@@ -19,12 +19,12 @@ import java.util.UUID;
 public class AdminServiceImpl implements AdminService {
 
     @Override
-    public void phatVai(UUID actorId, GrantRoleRequest req) {
+    public void grantRole(UUID actorId, GrantRoleRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void thuVai(UUID actorId, GrantRoleRequest req) {
+    public void revokeRole(UUID actorId, GrantRoleRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

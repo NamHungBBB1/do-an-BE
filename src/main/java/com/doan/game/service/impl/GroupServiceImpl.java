@@ -19,22 +19,22 @@ import java.util.UUID;
 public class GroupServiceImpl implements GroupService {
 
     @Override
-    public LearnerGroupResponse moNhom(UUID ownerId, CreateGroupRequest req) {
+    public LearnerGroupResponse openGroup(UUID ownerId, CreateGroupRequest req) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void xacNhanDongY(UUID groupId) {
+    public void confirmConsent(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public void dongNhom(UUID groupId) {
+    public void closeGroup(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @Override
-    public int demChoTrong(UUID groupId) {
+    public int countFreeSlots(UUID groupId) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

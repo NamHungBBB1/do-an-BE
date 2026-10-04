@@ -45,25 +45,25 @@ public class TokenService {
 
     /**
      * Token người lớn: subject là id tài khoản — mọi controller đọc "tôi là ai" theo cách này.
-     * tokenVersion đi kèm để TokenThuHoiDecoder biết token này phát trước hay sau lần đổi
+     * tokenVersion đi kèm để RevocationAwareJwtDecoder biết token này phát trước hay sau lần đổi
      * mật khẩu gần nhất.
      */
-    public TokenResponse choNguoiLon(UUID accountId, Set<String> scopes, int tokenVersion) {
-        return phat(accountId.toString(), "ACCOUNT", scopes, adultTtlHours, tokenVersion);
+    public TokenResponse issueForAccount(UUID accountId, Set<String> scopes, int tokenVersion) {
+        return issue(accountId.toString(), "ACCOUNT", scopes, adultTtlHours, tokenVersion);
     }
 
     /** Token trẻ: subject là id slot, KHÔNG phải id tài khoản — trẻ không có tài khoản. */
-    public TokenResponse choTre(UUID slotId) {
-        return phat(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1);
+    public TokenResponse issueForSlot(UUID slotId) {
+        return issue(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1);
     }
 
-    private TokenResponse phat(String sub, String typ, Set<String> scopes, long soGio, int tokenVersion) {
+    private TokenResponse issue(String sub, String typ, Set<String> scopes, long hours, int tokenVersion) {
         Instant now = Instant.now(clock);
         JwtClaimsSet.Builder b = JwtClaimsSet.builder()
                 .issuer("finteen")
                 .subject(sub)
                 .issuedAt(now)
-                .expiresAt(now.plus(soGio, ChronoUnit.HOURS))
+                .expiresAt(now.plus(hours, ChronoUnit.HOURS))
                 .claim("typ", typ)
                 // Spring Security mặc định đọc đúng claim tên "scope" và thêm tiền tố "SCOPE_",
                 // nên hasAuthority("SCOPE_ADMIN") trong SecurityConfig chạy luôn, không phải sửa.
@@ -78,6 +78,6 @@ public class TokenService {
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
         // refreshToken = null: chưa có bảng lưu nó, giai đoạn này chỉ dùng access token.
-        return new TokenResponse(token, null, soGio * 3600);
+        return new TokenResponse(token, null, hours * 3600);
     }
 }

@@ -14,7 +14,7 @@ public final class LearnerGroupMapper {
     private LearnerGroupMapper() {
     }
 
-    public static LearnerGroupResponse sang(LearnerGroup nguon) {
+    public static LearnerGroupResponse toResponse(LearnerGroup source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

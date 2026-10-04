@@ -15,12 +15,12 @@ public class EntitlementController {
     private final EntitlementService entitlementService;
 
     @GetMapping
-    public void xemGoi() {
+    public void listPlans() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/grant")
-    public void capGoi() {
+    public void grantPlan() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

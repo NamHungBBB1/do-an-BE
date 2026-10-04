@@ -55,7 +55,7 @@ public class FirebaseNimbusIdTokenDecoder implements FirebaseIdTokenDecoder {
     }
 
     @Override
-    public NguoiFirebase decode(String idToken) {
+    public FirebaseUser decode(String idToken) {
         if (delegate == null) {
             throw new AppException(ErrorCode.NOT_IMPLEMENTED, "chưa đặt FIREBASE_PROJECT_ID");
         }
@@ -73,18 +73,18 @@ public class FirebaseNimbusIdTokenDecoder implements FirebaseIdTokenDecoder {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token của Firebase không hợp lệ");
         }
 
-        if (!"google.com".equals(nhaCungCap(jwt))) {
+        if (!"google.com".equals(signInProvider(jwt))) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "phiên đăng nhập không phải Google");
         }
         String sub = jwt.getSubject();
         if (sub == null || sub.isBlank()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token thiếu subject");
         }
-        return new NguoiFirebase(sub, chuoi(jwt.getClaim("email")), chuoi(jwt.getClaim("name")),
-                coXacMinhEmail(jwt));
+        return new FirebaseUser(sub, asString(jwt.getClaim("email")), asString(jwt.getClaim("name")),
+                isEmailVerified(jwt));
     }
 
-    private static String nhaCungCap(Jwt jwt) {
+    private static String signInProvider(Jwt jwt) {
         Object fb = jwt.getClaim("firebase");
         if (fb instanceof Map<?, ?> m) {
             Object p = m.get("sign_in_provider");
@@ -93,13 +93,13 @@ public class FirebaseNimbusIdTokenDecoder implements FirebaseIdTokenDecoder {
         return null;
     }
 
-    private static boolean coXacMinhEmail(Jwt jwt) {
+    private static boolean isEmailVerified(Jwt jwt) {
         Object v = jwt.getClaim("email_verified");
         return Boolean.TRUE.equals(v) || "true".equalsIgnoreCase(String.valueOf(v));
     }
 
     /** Claim có thể là chuỗi hoặc kiểu khác — ép về String ở đây để service không hứng CCE (500). */
-    private static String chuoi(Object giaTri) {
-        return giaTri == null ? null : giaTri.toString();
+    private static String asString(Object value) {
+        return value == null ? null : value.toString();
     }
 }

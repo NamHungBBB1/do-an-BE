@@ -16,7 +16,7 @@ import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
-import com.doan.game.service.MailCanGui;
+import com.doan.game.service.OutgoingMail;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,8 +71,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AuthFlowTest {
 
-    private static final Clock LUC = Clock.fixed(Instant.parse("2026-10-02T03:00:00Z"), ClockConfig.VN);
-    private static final Pattern TRONG_LINK = Pattern.compile("token=([A-Za-z0-9_-]+)");
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-10-02T03:00:00Z"), ClockConfig.VN);
+    private static final Pattern TOKEN_IN_LINK = Pattern.compile("token=([A-Za-z0-9_-]+)");
 
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
@@ -80,41 +80,41 @@ class AuthFlowTest {
     @Autowired LearnerGroupRepository groupRepo;
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired PasswordEncoder encoder;
-    @Autowired ThuThung thung;
-    @Autowired GoogleGia gia;
+    @Autowired MailCatcher mailCatcher;
+    @Autowired FakeGoogleDecoder price;
 
     @BeforeEach
-    void xoaThu() {
-        thung.daGui.clear();
-        gia.nguoi = null;
+    void resetMailbox() {
+        mailCatcher.sent.clear();
+        price.user = null;
     }
 
     // ------------------------------------------------------------------ 1
     @Test
-    void dangKyXongChuaXacMinhThiKhongDangNhapDuoc() throws Exception {
+    void cannotLoginBeforeEmailVerified() throws Exception {
         String email = "khaxacminh-" + System.nanoTime() + "@test.local";
-        dangKy(email);
+        register(email);
 
-        mvc.perform(dangNhap(email, "matkhau123"))
+        mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3011));
     }
 
     // ------------------------------------------------------------------ 2
     @Test
-    void xacMinhRoiDangNhapDuocTokenThatDungDuocVoiEndpointKhac() throws Exception {
+    void verifiedUserLogsInAndTokenWorksElsewhere() throws Exception {
         String email = "hanhtinh-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
-        var res = mvc.perform(dangNhap(email, "matkhau123"))
+        var res = mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.result.refreshToken").doesNotExist())
                 .andExpect(jsonPath("$.result.expiresIn").value(168 * 3600))
                 .andReturn();
 
-        String jwt = jwtRa(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        String jwt = extractJwt(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
         // 4005 = giao dịch không có trong bảng. Quan trọng là KHÔNG phải 3003: token thật đã qua
         // được chặn cửa, và subject của nó đọc ra đúng id tài khoản.
         mvc.perform(get("/api/payments/123").header("Authorization", "Bearer " + jwt))
@@ -123,9 +123,9 @@ class AuthFlowTest {
 
     // ------------------------------------------------------------------ 3
     @Test
-    void dangKyTrungEmailKhacHoaThuongVanBiTuChoi() throws Exception {
+    void duplicateEmailWithDifferentCaseIsRejected() throws Exception {
         String email = "trung-" + System.nanoTime() + "@test.local";
-        dangKy(email);
+        register(email);
 
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -136,35 +136,35 @@ class AuthFlowTest {
 
     // ------------------------------------------------------------------ 4
     @Test
-    void saiMatKhauNamLanThiLanSauDungMatKhauDungVanBiKhoa() throws Exception {
+    void fiveWrongPasswordsLockTheAccount() throws Exception {
         String email = "sailan-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
-        thung.daGui.clear();
+        register(email);
+        verify(tokenFromMail());
+        mailCatcher.sent.clear();
 
         for (int i = 1; i <= 5; i++) {
-            mvc.perform(dangNhap(email, "saisaitinh-" + i))
+            mvc.perform(login(email, "saisaitinh-" + i))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.code").value(3002));
         }
-        // Mật khẩu ĐÚNG ở lần 6 vẫn bị chặn. Đây là ca canh bẫy transaction: nếu dangNhap có
+        // Mật khẩu ĐÚNG ở lần 6 vẫn bị chặn. Đây là ca canh bẫy transaction: nếu login có
         // @Transactional thì 5 lần sai vừa rồi bị rollback, bộ đếm về 0 và lần này lọt.
-        mvc.perform(dangNhap(email, "matkhau123"))
+        mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isLocked())
                 .andExpect(jsonPath("$.code").value(3016));
 
         // Đăng nhập không bao giờ gửi mail — kể cả lần bị khoá.
-        assertThat(thung.daGui).isEmpty();
+        assertThat(mailCatcher.sent).isEmpty();
     }
 
     // ------------------------------------------------------------------ 5
     @Test
-    void tokenXacMinhDungHaiLanThiBiTuChoi() throws Exception {
+    void verificationTokenReuseIsRejected() throws Exception {
         String email = "haiLan-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        String token = tokenTrongMail();
+        register(email);
+        String token = tokenFromMail();
 
-        xacMinh(token);
+        verify(token);
         // Vẫn 400 (mã lỗi nghiệp vụ giữ nguyên), nhưng THÂN TRANG là HTML cho người bấm link
         // bằng trình duyệt — không tung {"code":3012,...} lên màn hình trắng.
         mvc.perform(get("/api/auth/verify").param("token", token))
@@ -175,22 +175,22 @@ class AuthFlowTest {
 
     // ------------------------------------------------------------------ 6
     @Test
-    void quenMatKhauEmailKhongTonTaiVanTra200VaKhongGuiMail() throws Exception {
+    void forgotPasswordForUnknownEmailReturns200WithoutMail() throws Exception {
         mvc.perform(post("/api/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"khongco-that-" + System.nanoTime() + "@test.local\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(thung.daGui).isEmpty();
+        assertThat(mailCatcher.sent).isEmpty();
     }
 
     // ------------------------------------------------------------------ 7
     @Test
-    void datLaiMatKhauRoiMatKhauCuHong() throws Exception {
+    void resetPasswordInvalidatesOldPassword() throws Exception {
         String email = "datlai-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
         mvc.perform(post("/api/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -199,48 +199,48 @@ class AuthFlowTest {
 
         mvc.perform(post("/api/auth/password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"token\":\"" + tokenTrongMail() + "\",\"newPassword\":\"matkhaumoi123\"}"))
+                        .content("{\"token\":\"" + tokenFromMail() + "\",\"newPassword\":\"matkhaumoi123\"}"))
                 .andExpect(status().isOk());
 
-        mvc.perform(dangNhap(email, "matkhau123"))
+        mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(3002));
-        mvc.perform(dangNhap(email, "matkhaumoi123"))
+        mvc.perform(login(email, "matkhaumoi123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
     }
 
     // ------------------------------------------------------------------ 8
     @Test
-    void coGoiParenConHanThiTokenCoScopeParent() throws Exception {
+    void activeParentPlanGivesParentScope() throws Exception {
         String email = "cogoi-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
         Account a = accountRepo.findByEmailIgnoreCase(email).orElseThrow();
         Entitlement e = new Entitlement();
         e.setAccount(a);
         e.setKind(PlanKind.PARENT);
-        e.setStartsOn(LocalDate.now(LUC).minusDays(1));
-        e.setExpiresOn(LocalDate.now(LUC).plusMonths(3));
+        e.setStartsOn(LocalDate.now(FIXED_CLOCK).minusDays(1));
+        e.setExpiresOn(LocalDate.now(FIXED_CLOCK).plusMonths(3));
         e.setSource(EntitlementSource.ADMIN);
         e.setGrantedBy(a);
-        e.setCreatedAt(Instant.now(LUC));
+        e.setCreatedAt(Instant.now(FIXED_CLOCK));
         entitlementRepo.save(e);
 
-        var res = mvc.perform(dangNhap(email, "matkhau123"))
+        var res = mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn();
-        String jwt = jwtRa(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        String jwt = extractJwt(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
 
         // /api/slots/** chặn bằng SCOPE_PARENT | SCOPE_TEACHER. Không 403 tức là token đã mang scope.
-        var tren = mvc.perform(post("/api/slots")
+        var response = mvc.perform(post("/api/slots")
                         .header("Authorization", "Bearer " + jwt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"displayName\":\"Be\",\"context\":\"FAMILY\"}"))
                 .andReturn();
-        assertThat(tren.getResponse().getStatus()).isNotEqualTo(403);
-        assertThat(tren.getResponse().getContentAsString(StandardCharsets.UTF_8)).doesNotContain("\"code\":3004");
+        assertThat(response.getResponse().getStatus()).isNotEqualTo(403);
+        assertThat(response.getResponse().getContentAsString(StandardCharsets.UTF_8)).doesNotContain("\"code\":3004");
     }
 
     // ------------------------------------------------------------------ 9
@@ -249,18 +249,18 @@ class AuthFlowTest {
         String code = "MA" + (System.nanoTime() % 100000);
         slot(code, "123456", SlotStatus.ACTIVE);
 
-        mvc.perform(dangNhapTre(code, "123456"))
+        mvc.perform(loginSlot(code, "123456"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.result.expiresIn").value(8 * 3600));
 
         for (int i = 1; i <= 5; i++) {
-            mvc.perform(dangNhapTre(code, "99999" + i))
+            mvc.perform(loginSlot(code, "99999" + i))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.code").value(3002));
         }
         // PIN đúng vẫn vào không được. Khoá 15 phút tính từ lockedUntil, không có job mở khoá.
-        mvc.perform(dangNhapTre(code, "123456"))
+        mvc.perform(loginSlot(code, "123456"))
                 .andExpect(status().isLocked())
                 .andExpect(jsonPath("$.code").value(3008));
     }
@@ -274,25 +274,25 @@ class AuthFlowTest {
      * Email cố ý viết cứng, không có nanoTime: cần chính xác từng ký tự để bẫy mới trúng.
      */
     @Test
-    void emailChuoiConCuaEmailAdminKhongDuocLenQuyenAdmin() throws Exception {
-        String chuoiCon = "min@fifteen.com";
-        dangKy(chuoiCon);
-        xacMinh(tokenTrongMail());
+    void substringOfAdminEmailDoesNotGetAdmin() throws Exception {
+        String substringEmail = "min@fifteen.com";
+        register(substringEmail);
+        verify(tokenFromMail());
 
-        var res = mvc.perform(dangNhap(chuoiCon, "matkhau123"))
+        var res = mvc.perform(login(substringEmail, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn();
-        assertThat(scopeRa(jwtRa(res.getResponse().getContentAsString(StandardCharsets.UTF_8))))
+        assertThat(extractScope(extractJwt(res.getResponse().getContentAsString(StandardCharsets.UTF_8))))
                 .doesNotContain("ADMIN");
 
         // Đối chứng: chính email trong danh sách thì vẫn phải được cấp, không phải hỏng vì tôi sửa lỗi.
-        dangKy("admin@fifteen.com");
-        xacMinh(tokenTrongMail());
+        register("admin@fifteen.com");
+        verify(tokenFromMail());
 
-        var res2 = mvc.perform(dangNhap("admin@fifteen.com", "matkhau123"))
+        var res2 = mvc.perform(login("admin@fifteen.com", "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn();
-        assertThat(scopeRa(jwtRa(res2.getResponse().getContentAsString(StandardCharsets.UTF_8))))
+        assertThat(extractScope(extractJwt(res2.getResponse().getContentAsString(StandardCharsets.UTF_8))))
                 .contains("ADMIN");
     }
 
@@ -305,16 +305,16 @@ class AuthFlowTest {
      * người dùng bấm link thật của mình thì gặp "link không đúng".
      */
     @Test
-    void linkDatLaiMatKhauTrongMailMoRaDuocTrangVaKhongTieuToken() throws Exception {
+    void resetLinkOpensFormWithoutConsumingToken() throws Exception {
         String email = "formreset-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
         mvc.perform(post("/api/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\"}"))
                 .andExpect(status().isOk());
-        String token = tokenTrongMail();
+        String token = tokenFromMail();
 
         mvc.perform(get("/api/auth/password/reset").param("token", token))
                 .andExpect(status().isOk())
@@ -340,9 +340,9 @@ class AuthFlowTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
                 .andExpect(content().string(containsString("Bấm lại link trong mail")));
 
-        mvc.perform(dangNhap(email, "matkhau123"))
+        mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(dangNhap(email, "matkhaumoi123"))
+        mvc.perform(login(email, "matkhaumoi123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
     }
@@ -350,12 +350,12 @@ class AuthFlowTest {
     // ------------------------------------------------------------------ 12  (C1)
     /** FE cần "tôi là ai" sau khi đăng nhập: email, tên, gói và vai lấy từ database. */
     @Test
-    void cuaToiTraVeEmailVaGoiVaVai() throws Exception {
+    void meReturnsEmailPlansAndRoles() throws Exception {
         String email = "toilaai-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
-        String jwt = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+        String jwt = extractJwt(mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
 
@@ -373,18 +373,18 @@ class AuthFlowTest {
      * giữ token bị đánh cắp vẫn đi lại được cả tuần dù chủ đã đổi mật khẩu.
      */
     @Test
-    void doiMatKhauTraTokenMoiVaThuHoiTokenCu() throws Exception {
+    void changePasswordIssuesNewTokenAndRevokesOld() throws Exception {
         String email = "doimk-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
-        String cu = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+        String old = extractJwt(mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
 
         // Không có mật khẩu cũ thì token đánh cắp cũng đổi được mật khẩu -> bị từ chối.
         mvc.perform(post("/api/auth/password/change")
-                        .header("Authorization", "Bearer " + cu)
+                        .header("Authorization", "Bearer " + old)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"oldPassword\":\"sai-het\",\"newPassword\":\"matkhaumoi123\"}"))
                 .andExpect(status().isUnauthorized())
@@ -392,22 +392,22 @@ class AuthFlowTest {
 
         // Mật khẩu cũ đúng -> 200 và trả token MỚI, vì token cũ vừa bị chính cú này thu hồi.
         var res = mvc.perform(post("/api/auth/password/change")
-                        .header("Authorization", "Bearer " + cu)
+                        .header("Authorization", "Bearer " + old)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"oldPassword\":\"matkhau123\",\"newPassword\":\"matkhaumoi123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
                 .andReturn();
-        String moi = jwtRa(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        String newToken = extractJwt(res.getResponse().getContentAsString(StandardCharsets.UTF_8));
 
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + cu))
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + old))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + moi))
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + newToken))
                 .andExpect(status().isOk());
 
         // Vào được bằng mật khẩu mới, còn mật khẩu cũ thì không.
-        mvc.perform(dangNhap(email, "matkhau123")).andExpect(status().isUnauthorized());
-        mvc.perform(dangNhap(email, "matkhaumoi123")).andExpect(status().isOk());
+        mvc.perform(login(email, "matkhau123")).andExpect(status().isUnauthorized());
+        mvc.perform(login(email, "matkhaumoi123")).andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------ 14  (C4)
@@ -416,19 +416,19 @@ class AuthFlowTest {
      * jwt.getSubject() như id tài khoản thì sẽ tra ra slotId và không ra tài khoản nào.
      */
     @Test
-    void tokenTreKhongVaoDuocApiNguoiLon() throws Exception {
+    void childTokenCannotCallAdultApi() throws Exception {
         String code = "MA" + (System.nanoTime() % 100000);
         slot(code, "123456", SlotStatus.ACTIVE);
 
-        String tre = jwtRa(mvc.perform(dangNhapTre(code, "123456"))
+        String childToken = extractJwt(mvc.perform(loginSlot(code, "123456"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
-        assertThat(scopeRa(tre)).isEqualTo("CHILD");
+        assertThat(extractScope(childToken)).isEqualTo("CHILD");
 
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tre))
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + childToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
-        mvc.perform(get("/api/payments/1").header("Authorization", "Bearer " + tre))
+        mvc.perform(get("/api/payments/1").header("Authorization", "Bearer " + childToken))
                 .andExpect(status().isForbidden());
     }
 
@@ -438,7 +438,7 @@ class AuthFlowTest {
      * authenticationEntryPoint riêng thì Spring trả 401 với thân rỗng, FE không có code để bắt.
      */
     @Test
-    void tokenSaiVanTraVeVoApiResponse() throws Exception {
+    void invalidTokenStillReturnsApiResponse() throws Exception {
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer khong-phai-jwt"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(3003));
@@ -451,12 +451,12 @@ class AuthFlowTest {
      * không gọi Google thật — chữ ký thật do FirebaseIdTokenDecoderTest kiểm riêng.
      */
     @Test
-    void dangNhapGoogleTaoTaiKhoanMoiVaLanSauVaoDungTaiKhoan() throws Exception {
+    void googleLoginCreatesAccountThenReusesIt() throws Exception {
         String email = "gg-" + System.nanoTime() + "@gmail.com";
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(
                 "uid-" + System.nanoTime(), email, "Nguyen Test", true);
 
-        String jwt = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+        String jwt = extractJwt(mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
 
@@ -465,22 +465,22 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.result.email").value(email));
 
         // Đăng nhập lần hai bằng CÙNG uid: vào đúng tài khoản cũ, không sinh bản sao.
-        long truoc = accountRepo.count();
-        mvc.perform(dangNhapGoogle("GOOGLE", "token-that")).andExpect(status().isOk());
-        assertThat(accountRepo.count()).isEqualTo(truoc);
+        long before = accountRepo.count();
+        mvc.perform(loginWithGoogle("GOOGLE", "token-that")).andExpect(status().isOk());
+        assertThat(accountRepo.count()).isEqualTo(before);
     }
 
     // ------------------------------------------------------------------ 17 (Google)
     /** Email đã có tài khoản mật khẩu → 3020, KHÔNG gộp (gộp là nuốt mất mật khẩu người ta). */
     @Test
-    void dangNhapGoogleVoiEmailDaCoMatKhauThi3020() throws Exception {
+    void googleLoginWithPasswordAccountEmailReturns3020() throws Exception {
         String email = "co-mk-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
 
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(
                 "uid-" + System.nanoTime(), email, "Nguyen Test", true);
-        mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+        mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(3020));
     }
@@ -488,14 +488,14 @@ class AuthFlowTest {
     // ------------------------------------------------------------------ 18 (Google)
     /** Token không kiểm được và email Google chưa xác minh: cả hai 3002, không lộ khác biệt. */
     @Test
-    void dangNhapGoogleTokenSaiHayEmailChuaXacMinhThi3002() throws Exception {
-        mvc.perform(dangNhapGoogle("GOOGLE", "token-sai"))
+    void googleLoginWithBadTokenOrUnverifiedEmailReturns3002() throws Exception {
+        mvc.perform(loginWithGoogle("GOOGLE", "token-sai"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(3002));
 
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(
                 "uid-" + System.nanoTime(), "chua-xac-minh@gmail.com", "Ten", false);
-        mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+        mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(3002));
     }
@@ -506,35 +506,35 @@ class AuthFlowTest {
      * nhập bằng Google ra CÙNG tài khoản. Khóa là uid Firebase nên email Google khác vẫn vào đúng.
      */
     @Test
-    void lienKetGoogleRoiDangNhapBangGoogleVaoDungTaiKhoan() throws Exception {
+    void linkGoogleThenGoogleLoginReachesSameAccount() throws Exception {
         String email = "gop-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
+        register(email);
+        verify(tokenFromMail());
         String uid = "uid-gop-" + System.nanoTime();
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(uid, email, "Nguyen Test", true);
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(uid, email, "Nguyen Test", true);
 
-        String mk = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+        String passwordJwt = extractJwt(mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
         mvc.perform(post("/api/auth/link/google")
-                        .header("Authorization", "Bearer " + mk)
+                        .header("Authorization", "Bearer " + passwordJwt)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(dangNhapGoogleJson("GOOGLE", "token-that")))
+                        .content(googleLoginJson("GOOGLE", "token-that")))
                 .andExpect(status().isOk());
 
         // Gắn lại lần nữa: lặp vô hại, không tạo Credential thứ hai.
         mvc.perform(post("/api/auth/link/google")
-                        .header("Authorization", "Bearer " + mk)
+                        .header("Authorization", "Bearer " + passwordJwt)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(dangNhapGoogleJson("GOOGLE", "token-that")))
+                        .content(googleLoginJson("GOOGLE", "token-that")))
                 .andExpect(status().isOk());
 
         // Cùng uid, email KHÁC: vẫn vào tài khoản cũ vì khóa là uid chứ không phải email.
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase(uid, "google-khac@gmail.com", "Ten khac", true);
-        String gg = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(uid, "google-khac@gmail.com", "Ten khac", true);
+        String googleJwt = extractJwt(mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + gg))
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + googleJwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.email").value(email));
     }
@@ -546,46 +546,46 @@ class AuthFlowTest {
      * 500 (khoá bảng H2 hết giờ) hoặc 3020 (UNIQUE trên PostgreSQL).
      */
     @Test
-    void dangNhapGoogleLanDauGuiDongThoiVanRaMotTaiKhoan() throws Exception {
+    void concurrentFirstGoogleLoginsYieldOneAccount() throws Exception {
         String email = "gg-dup-" + System.nanoTime() + "@gmail.com";
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase("uid-dup-" + System.nanoTime(), email, "Bam Dup", true);
-        long truoc = accountRepo.count();
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser("uid-dup-" + System.nanoTime(), email, "Bam Dup", true);
+        long before = accountRepo.count();
 
-        int soLuong = 4;
-        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(soLuong);
-        java.util.concurrent.CountDownLatch xuatPhat = new java.util.concurrent.CountDownLatch(1);
-        List<java.util.concurrent.Future<String>> kq = new java.util.ArrayList<>();
-        for (int i = 0; i < soLuong; i++) {
-            kq.add(pool.submit(() -> {
-                xuatPhat.await();
-                var r = mvc.perform(dangNhapGoogle("GOOGLE", "token-that")).andReturn().getResponse();
+        int threads = 4;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        java.util.concurrent.CountDownLatch startSignal = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<String>> futures = new java.util.ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            futures.add(pool.submit(() -> {
+                startSignal.await();
+                var r = mvc.perform(loginWithGoogle("GOOGLE", "token-that")).andReturn().getResponse();
                 return r.getStatus() + " " + r.getContentAsString(StandardCharsets.UTF_8);
             }));
         }
-        xuatPhat.countDown();
-        java.util.Set<String> taiKhoan = new java.util.HashSet<>();
-        for (var f : kq) {
+        startSignal.countDown();
+        java.util.Set<String> currentAccountId = new java.util.HashSet<>();
+        for (var f : futures) {
             String r = f.get(60, java.util.concurrent.TimeUnit.SECONDS);
             assertThat(r).as("moi request phai 200: " + r).startsWith("200 ");
-            String jwt = jwtRa(r);
-            taiKhoan.add(new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[1]), StandardCharsets.UTF_8)
+            String jwt = extractJwt(r);
+            currentAccountId.add(new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[1]), StandardCharsets.UTF_8)
                     .replaceAll(".*\"sub\":\"([^\"]+)\".*", "$1"));
         }
         pool.shutdown();
-        assertThat(taiKhoan).as("cung mot tai khoan").hasSize(1);
-        assertThat(accountRepo.count()).isEqualTo(truoc + 1);
+        assertThat(currentAccountId).as("cung mot tai khoan").hasSize(1);
+        assertThat(accountRepo.count()).isEqualTo(before + 1);
     }
 
     // ------------------------------------------------------------------ 21 (L-16)
     /** Người trong ADMIN_EMAILS đăng ký bằng Google cũng được ADMIN (email đã do Google xác minh). */
     @Test
-    void emailAdminDangKyBangGoogleCungDuocAdmin() throws Exception {
-        gia.nguoi = new FirebaseIdTokenDecoder.NguoiFirebase("uid-adm-" + System.nanoTime(),
+    void adminEmailSigningUpWithGoogleGetsAdmin() throws Exception {
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser("uid-adm-" + System.nanoTime(),
                 "gg-admin@gmail.com", "Admin Google", true);
-        String jwt = jwtRa(mvc.perform(dangNhapGoogle("GOOGLE", "token-that"))
+        String jwt = extractJwt(mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
-        assertThat(scopeRa(jwt)).isEqualTo("ADMIN");
+        assertThat(extractScope(jwt)).isEqualTo("ADMIN");
     }
 
     // ------------------------------------------------------------------ 22 (L-13)
@@ -594,14 +594,14 @@ class AuthFlowTest {
      * ngay ở request kế tiếp — decoder thay scope bằng vai + gói hiện có trong DB.
      */
     @Test
-    void muaGoiSauKhiDangNhapThiTokenCuCoQuyenNgayKhongBiDaRa() throws Exception {
+    void buyingPlanAfterLoginUpdatesScopeWithoutLogout() throws Exception {
         String email = "muasau-" + System.nanoTime() + "@test.local";
-        dangKy(email);
-        xacMinh(tokenTrongMail());
-        String jwt = jwtRa(mvc.perform(dangNhap(email, "matkhau123"))
+        register(email);
+        verify(tokenFromMail());
+        String jwt = extractJwt(mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
-        assertThat(scopeRa(jwt)).isEmpty();
+        assertThat(extractScope(jwt)).isEmpty();
 
         mvc.perform(post("/api/slots").header("Authorization", "Bearer " + jwt)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -611,25 +611,25 @@ class AuthFlowTest {
         Entitlement e = new Entitlement();
         e.setAccount(a);
         e.setKind(PlanKind.PARENT);
-        e.setStartsOn(LocalDate.now(LUC));
-        e.setExpiresOn(LocalDate.now(LUC).plusMonths(3).minusDays(1));
+        e.setStartsOn(LocalDate.now(FIXED_CLOCK));
+        e.setExpiresOn(LocalDate.now(FIXED_CLOCK).plusMonths(3).minusDays(1));
         e.setSource(EntitlementSource.ADMIN);
         e.setGrantedBy(a);
-        e.setCreatedAt(Instant.now(LUC));
+        e.setCreatedAt(Instant.now(FIXED_CLOCK));
         entitlementRepo.save(e);
 
         // Cùng token cũ: vẫn đăng nhập (không 401), và giờ qua được cửa PARENT (không 403).
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.plans[0]").value("PARENT"));
-        var tren = mvc.perform(post("/api/slots").header("Authorization", "Bearer " + jwt)
+        var response = mvc.perform(post("/api/slots").header("Authorization", "Bearer " + jwt)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andReturn();
-        assertThat(tren.getResponse().getStatus()).isNotIn(401, 403);
+        assertThat(response.getResponse().getStatus()).isNotIn(401, 403);
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu
-    private void dangKy(String email) throws Exception {
+    private void register(String email) throws Exception {
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerJson(email)))
@@ -637,7 +637,7 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.code").value(0));
     }
 
-    private void xacMinh(String token) throws Exception {
+    private void verify(String token) throws Exception {
         mvc.perform(get("/api/auth/verify").param("token", token)).andExpect(status().isOk());
     }
 
@@ -645,7 +645,7 @@ class AuthFlowTest {
         Account owner = new Account();
         owner.setEmail("slot-chu-" + System.nanoTime() + "@test.local");
         owner.setDisplayName("Chu slot");
-        owner.setCreatedAt(Instant.now(LUC));
+        owner.setCreatedAt(Instant.now(FIXED_CLOCK));
         owner = accountRepo.save(owner);
 
         LearnerGroup g = new LearnerGroup();
@@ -654,7 +654,7 @@ class AuthFlowTest {
         g.setOpenContext(LearningContext.FAMILY);
         g.setName("Nha test");
         g.setSlotLimit(4);
-        g.setOpenedAt(Instant.now(LUC));
+        g.setOpenedAt(Instant.now(FIXED_CLOCK));
         g = groupRepo.save(g);
 
         LearnerSlot s = new LearnerSlot();
@@ -664,7 +664,7 @@ class AuthFlowTest {
         s.setDisplayName("Be");
         s.setStatus(status);
         s.setFailedAttempts(0);
-        s.setCreatedAt(Instant.now(LUC));
+        s.setCreatedAt(Instant.now(FIXED_CLOCK));
         return slotRepo.save(s);
     }
 
@@ -673,38 +673,38 @@ class AuthFlowTest {
                 + "\"password\":\"matkhau123\",\"displayName\":\"Nguyen Test\"}";
     }
 
-    private static MockHttpServletRequestBuilder dangNhap(String email, String matKhau) {
+    private static MockHttpServletRequestBuilder login(String email, String password) {
         return post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"password\":\"" + matKhau + "\"}");
+                .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}");
     }
 
-    private static MockHttpServletRequestBuilder dangNhapTre(String code, String pin) {
+    private static MockHttpServletRequestBuilder loginSlot(String code, String pin) {
         return post("/api/slots/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"code\":\"" + code + "\",\"pin\":\"" + pin + "\"}");
     }
 
     /** Body mà FE gửi cho nút Google (xem context Firebase 04/10, mục 5). */
-    private static String dangNhapGoogleJson(String provider, String idToken) {
+    private static String googleLoginJson(String provider, String idToken) {
         return "{\"provider\":\"" + provider + "\",\"idToken\":\"" + idToken + "\"}";
     }
 
-    private static MockHttpServletRequestBuilder dangNhapGoogle(String provider, String idToken) {
+    private static MockHttpServletRequestBuilder loginWithGoogle(String provider, String idToken) {
         return post("/api/auth/login/google")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(dangNhapGoogleJson(provider, idToken));
+                .content(googleLoginJson(provider, idToken));
     }
 
-    private static String jwtRa(String body) {
+    private static String extractJwt(String body) {
         Matcher m = Pattern.compile("\"accessToken\":\"([^\"]+)\"").matcher(body);
         assertThat(m.find()).as("phai co accessToken").isTrue();
         return m.group(1);
     }
 
     /** Đọc thẳng claim scope ra chuỗi, không gọi endpoint nào — scope sai chứ không phải 403 sai. */
-    private static String scopeRa(String jwt) {
+    private static String extractScope(String jwt) {
         try {
-            String[] phan = jwt.split("\\.");
-            String payload = new String(Base64.getUrlDecoder().decode(phan[1]), StandardCharsets.UTF_8);
+            String[] parts = jwt.split("\\.");
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             Matcher m = Pattern.compile("\"scope\":\"([^\"]*)\"").matcher(payload);
             assertThat(m.find()).as("token phai co claim scope: " + payload).isTrue();
             return m.group(1);
@@ -714,24 +714,24 @@ class AuthFlowTest {
     }
 
     /** Bắt token GỐC trong nội dung mail — nơi duy nhất nó còn tồn tại sau khi băm SHA-256. */
-    private String tokenTrongMail() {
-        assertThat(thung.daGui).isNotEmpty();
-        Matcher m = TRONG_LINK.matcher(thung.daGui.get(thung.daGui.size() - 1).body());
+    private String tokenFromMail() {
+        assertThat(mailCatcher.sent).isNotEmpty();
+        Matcher m = TOKEN_IN_LINK.matcher(mailCatcher.sent.get(mailCatcher.sent.size() - 1).body());
         assertThat(m.find()).as("mail phai co link chua token").isTrue();
         return m.group(1);
     }
 
     /**
-     * Bắt mọi lá MailCanGui mà service phát ra. Dùng listener thật, không mock MailService:
+     * Bắt mọi lá OutgoingMail mà service phát ra. Dùng listener thật, không mock MailService:
      * thay bean bằng mock sẽ làm mất việc đăng ký @TransactionalEventListener, không bắt được
      * sự kiện nào.
      */
-    static class ThuThung {
-        final List<MailCanGui> daGui = new CopyOnWriteArrayList<>();
+    static class MailCatcher {
+        final List<OutgoingMail> sent = new CopyOnWriteArrayList<>();
 
         @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-        public void nhan(MailCanGui m) {
-            daGui.add(m);
+        public void receive(OutgoingMail m) {
+            sent.add(m);
         }
     }
 
@@ -739,39 +739,39 @@ class AuthFlowTest {
      * Thay bean kiểm ID token Firebase bằng stub: test đăng nhập Google không được gọi Google
      * thật (chữ ký thật do FirebaseIdTokenDecoderTest kiểm riêng, cũng không gọi mạng).
      */
-    static class GoogleGia implements FirebaseIdTokenDecoder {
+    static class FakeGoogleDecoder implements FirebaseIdTokenDecoder {
         /** null = token không kiểm được. */
-        NguoiFirebase nguoi;
+        FirebaseUser user;
 
         @Override
-        public NguoiFirebase decode(String idToken) {
-            if (nguoi == null) {
+        public FirebaseUser decode(String idToken) {
+            if (user == null) {
                 throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token của Firebase không hợp lệ");
             }
-            return nguoi;
+            return user;
         }
     }
 
     @TestConfiguration
-    static class CauHinhTest {
+    static class TestConfig {
 
         /** Đồng hồ đóng băng để kiểm hết hạn và khoá 15 phút mà không phải chờ. */
         @Bean
         @Primary
-        Clock dongHo() {
-            return LUC;
+        Clock testClock() {
+            return FIXED_CLOCK;
         }
 
         @Bean
-        ThuThung thu() {
-            return new ThuThung();
+        MailCatcher thu() {
+            return new MailCatcher();
         }
 
-        /** @Primary vì ngoài đây còn bean thật; khai kiểu GoogleGia để test ghi thẳng dữ liệu vào. */
+        /** @Primary vì ngoài đây còn bean thật; khai kiểu FakeGoogleDecoder để test ghi thẳng dữ liệu vào. */
         @Bean
         @Primary
-        GoogleGia googleGia() {
-            return new GoogleGia();
+        FakeGoogleDecoder fakeGoogle() {
+            return new FakeGoogleDecoder();
         }
     }
 }

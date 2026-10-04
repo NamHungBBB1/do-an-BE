@@ -14,7 +14,7 @@ public final class SlotMapper {
     private SlotMapper() {
     }
 
-    public static SlotResponse sang(LearnerSlot nguon) {
+    public static SlotResponse toResponse(LearnerSlot source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

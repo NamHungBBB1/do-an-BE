@@ -23,33 +23,33 @@ public class SlotController {
     private final SlotService slotService;
 
     @PostMapping
-    public void moSlot() {
+    public void openSlot() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/bulk")
-    public void moNhieuSlot() {
+    public void openSlots() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/return")
-    public void traSlot() {
+    public void returnSlot() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @DeleteMapping("/{id}")
-    public void xoaSach() {
+    public void wipeSlot() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/pin")
-    public void doiPin() {
+    public void changePin() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> dangNhapTre(@Valid @RequestBody SlotLoginRequest req) {
-        return ApiResponse.ok(slotService.dangNhapTre(req.code(), req.pin()));
+    public ApiResponse<TokenResponse> loginSlot(@Valid @RequestBody SlotLoginRequest req) {
+        return ApiResponse.ok(slotService.loginSlot(req.code(), req.pin()));
     }
 
 }

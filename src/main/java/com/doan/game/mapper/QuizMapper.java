@@ -14,7 +14,7 @@ public final class QuizMapper {
     private QuizMapper() {
     }
 
-    public static QuizResponse sang(Quiz nguon) {
+    public static QuizResponse toResponse(Quiz source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

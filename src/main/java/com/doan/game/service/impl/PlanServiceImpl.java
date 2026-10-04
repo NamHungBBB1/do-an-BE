@@ -24,7 +24,7 @@ import java.util.UUID;
 public class PlanServiceImpl implements PlanService {
 
     /** Thời hạn mặc định khi admin đặt giá lần đầu mà không nói số tháng (quyết định 01/10: gói 3 tháng). */
-    static final int THANG_MAC_DINH = 3;
+    static final int DEFAULT_MONTHS = 3;
 
     private final PlanRepository planRepo;
     private final AccountRepository accountRepo;
@@ -32,7 +32,7 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PlanResponse> xemGia() {
+    public List<PlanResponse> listPrices() {
         return planRepo.findAll().stream()
                 .sorted(Comparator.comparing(Plan::getKind))
                 .map(PlanServiceImpl::toResponse)
@@ -41,8 +41,8 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     @Transactional
-    public PlanResponse datGia(UUID adminId, String kind, SetPlanPriceRequest req) {
-        PlanKind k = docKind(kind);
+    public PlanResponse setPrice(UUID adminId, String kind, SetPlanPriceRequest req) {
+        PlanKind k = parseKind(kind);
         if (req == null || req.price() <= 0) {
             throw new AppException(ErrorCode.PLAN_PRICE_INVALID);
         }
@@ -52,7 +52,7 @@ public class PlanServiceImpl implements PlanService {
         Plan plan = planRepo.findByKind(k).orElseGet(() -> {
             Plan p = new Plan();
             p.setKind(k);
-            p.setMonths(THANG_MAC_DINH);
+            p.setMonths(DEFAULT_MONTHS);
             return p;
         });
         plan.setPrice(req.price());
@@ -64,7 +64,7 @@ public class PlanServiceImpl implements PlanService {
         return toResponse(planRepo.save(plan));
     }
 
-    static PlanKind docKind(String kind) {
+    static PlanKind parseKind(String kind) {
         try {
             return PlanKind.valueOf(kind == null ? "" : kind.trim().toUpperCase());
         } catch (IllegalArgumentException e) {

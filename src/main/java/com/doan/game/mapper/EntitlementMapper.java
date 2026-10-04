@@ -14,7 +14,7 @@ public final class EntitlementMapper {
     private EntitlementMapper() {
     }
 
-    public static EntitlementResponse sang(Entitlement nguon) {
+    public static EntitlementResponse toResponse(Entitlement source) {
         throw new UnsupportedOperationException("chua cai dat");
     }
 }

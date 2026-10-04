@@ -16,7 +16,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Gửi mail. Nghe sự kiện MailCanGui và gửi SAU KHI COMMIT, bất đồng bộ.
+ * Gửi mail. Nghe sự kiện OutgoingMail và gửi SAU KHI COMMIT, bất đồng bộ.
  *
  * Không bắt lỗi kiểu "cứ thử": nếu gửi hỏng mà không ai biết, người dùng bấm "gửi lại" là
  * xong. Ở đây lỗi chỉ ghi log, không ném — ném ở đây sẽ làm hỏng luôn luồng đăng ký vốn
@@ -48,8 +48,8 @@ public class MailService {
      */
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void gui(MailCanGui m) {
-        if (!coCauHinhSmtp()) {
+    public void send(OutgoingMail m) {
+        if (!isSmtpConfigured()) {
             log.info("""
 
                     === MAIL (không có SMTP, chỉ in ra log) ===
@@ -80,7 +80,7 @@ public class MailService {
      * application.properties, chuỗi rỗng vẫn "có" nên bean vẫn được tạo, và gửi sẽ chết vì
      * không có địa chỉ máy chủ.
      */
-    private boolean coCauHinhSmtp() {
+    private boolean isSmtpConfigured() {
         return sender.getIfAvailable() != null
                 && springMail.getHost() != null && !springMail.getHost().isBlank()
                 && appMail.from() != null && !appMail.from().isBlank();

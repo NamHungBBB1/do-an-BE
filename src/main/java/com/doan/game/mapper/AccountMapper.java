@@ -20,8 +20,8 @@ public final class AccountMapper {
     /**
      * Không kèm gói, không kèm vai — dùng khi người gọi không cần hai thứ đó (chỉ cần họ tên).
      */
-    public static AccountResponse sang(Account nguon) {
-        return new AccountResponse(nguon.getId(), nguon.getEmail(), nguon.getDisplayName(), List.of(), List.of());
+    public static AccountResponse toResponse(Account source) {
+        return new AccountResponse(source.getId(), source.getEmail(), source.getDisplayName(), List.of(), List.of());
     }
 
     /**
@@ -29,8 +29,8 @@ public final class AccountMapper {
      * Entitlement còn hạn, ADMIN nằm ở AccountRole — nên caller phải tra rồi đưa vào đây.
      * Đặt chúng vào bản ghi này thay vì để entity tự mang là đúng tinh thần tầng mapper.
      */
-    public static AccountResponse sang(Account nguon, Set<String> plans, List<String> roles) {
-        return new AccountResponse(nguon.getId(), nguon.getEmail(), nguon.getDisplayName(),
+    public static AccountResponse toResponse(Account source, Set<String> plans, List<String> roles) {
+        return new AccountResponse(source.getId(), source.getEmail(), source.getDisplayName(),
                 List.copyOf(plans), List.copyOf(roles));
     }
 }

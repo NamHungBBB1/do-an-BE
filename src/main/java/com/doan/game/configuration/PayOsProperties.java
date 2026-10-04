@@ -11,11 +11,11 @@ public record PayOsProperties(String clientId, String apiKey, String checksumKey
                               String webhookUrl, String returnUrl, String cancelUrl) {
 
     /** Chưa đặt khoá (chạy ở máy dev) thì PaymentService không được gọi PayOS thật. */
-    public boolean daCauHinh() {
-        return !trong(clientId) && !trong(apiKey) && !trong(checksumKey);
+    public boolean isConfigured() {
+        return !isBlank(clientId) && !isBlank(apiKey) && !isBlank(checksumKey);
     }
 
-    private static boolean trong(String s) {
+    private static boolean isBlank(String s) {
         return s == null || s.isBlank();
     }
 }

@@ -16,8 +16,8 @@ import java.util.UUID;
 public interface PlanService {
 
     /** Bảng giá công khai, không cần đăng nhập. */
-    List<PlanResponse> xemGia();
+    List<PlanResponse> listPrices();
 
     /** Admin đặt giá (và tuỳ chọn số tháng) cho một gói; chưa có thì tạo, có rồi thì sửa. */
-    PlanResponse datGia(UUID adminId, String kind, SetPlanPriceRequest req);
+    PlanResponse setPrice(UUID adminId, String kind, SetPlanPriceRequest req);
 }

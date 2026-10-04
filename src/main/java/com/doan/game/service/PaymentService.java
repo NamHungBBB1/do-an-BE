@@ -21,24 +21,24 @@ import java.util.UUID;
  */
 public interface PaymentService {
 
-    PaymentResponse taoGiaoDich(UUID accountId, BuyPlanRequest req);
+    PaymentResponse createPayment(UUID accountId, BuyPlanRequest req);
 
     /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (đường returnUrl). */
-    PaymentStatusResponse xemGiaoDich(UUID accountId, long orderCode);
+    PaymentStatusResponse getPayment(UUID accountId, long orderCode);
 
-    void huyGiaoDich(UUID accountId, long orderCode, String lyDo);
+    void cancelPayment(UUID accountId, long orderCode, String reason);
 
     /** Nhận body thô của webhook PayOS. Không bao giờ ném ra ngoài: PayOS cần 200. */
-    void nhanWebhook(String body);
+    void handleWebhook(String body);
 
     /** Đăng ký URL webhook với PayOS; để trống thì dùng app.payos.webhook-url. Trả về URL đã đăng ký. */
-    String xacNhanWebhook(String url);
+    String confirmWebhook(String url);
 
-    void quetGiaoDichTreo();
+    void sweepPendingTransactions();
 
     /** Admin: bảng giao dịch, mới nhất trước; status null = tất cả. */
-    List<TransactionAdminResponse> danhSachGiaoDich(TransactionStatus status, int page, int size);
+    List<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size);
 
     /** Admin: hỏi lại PayOS cho một giao dịch (chỉ có tác dụng khi còn PENDING). */
-    PaymentStatusResponse doiSoat(long orderCode);
+    PaymentStatusResponse reconcile(long orderCode);
 }

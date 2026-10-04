@@ -14,24 +14,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FirebaseIdTokenDecoderTest {
 
     @Test
-    void thieuProjectIdThi501chuKhongPhai500() {
+    void missingProjectIdReturns501Not500() {
         FirebaseNimbusIdTokenDecoder decoder = new FirebaseNimbusIdTokenDecoder("");
-        assertThat(maLoi(decoder, "x")).isEqualTo(ErrorCode.NOT_IMPLEMENTED);
+        assertThat(errorCodeOf(decoder, "x")).isEqualTo(ErrorCode.NOT_IMPLEMENTED);
     }
 
     @Test
-    void tokenKhongPhaiJwtThi3002() {
+    void nonJwtTokenReturns3002() {
         FirebaseNimbusIdTokenDecoder decoder = new FirebaseNimbusIdTokenDecoder("finteen-fa26");
-        assertThat(maLoi(decoder, "khong-phai-jwt")).isEqualTo(ErrorCode.BAD_CREDENTIALS);
+        assertThat(errorCodeOf(decoder, "khong-phai-jwt")).isEqualTo(ErrorCode.BAD_CREDENTIALS);
     }
 
     @Test
-    void thieuIdTokenThi1001() {
+    void missingIdTokenReturns1001() {
         FirebaseNimbusIdTokenDecoder decoder = new FirebaseNimbusIdTokenDecoder("finteen-fa26");
-        assertThat(maLoi(decoder, "   ")).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(errorCodeOf(decoder, "   ")).isEqualTo(ErrorCode.VALIDATION_FAILED);
     }
 
-    private static ErrorCode maLoi(FirebaseNimbusIdTokenDecoder decoder, String idToken) {
+    private static ErrorCode errorCodeOf(FirebaseNimbusIdTokenDecoder decoder, String idToken) {
         try {
             decoder.decode(idToken);
             return null;

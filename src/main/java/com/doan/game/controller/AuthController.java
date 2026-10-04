@@ -1,6 +1,6 @@
 package com.doan.game.controller;
 
-import com.doan.game.DTO.request.DoiMatKhauRequest;
+import com.doan.game.DTO.request.ChangePasswordRequest;
 import com.doan.game.DTO.request.ForgotPasswordRequest;
 import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
@@ -41,8 +41,8 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ApiResponse<AccountResponse> dangKy(@RequestBody RegisterRequest req) {
-        return ApiResponse.ok(authService.dangKy(req));
+    public ApiResponse<AccountResponse> register(@RequestBody RegisterRequest req) {
+        return ApiResponse.ok(authService.register(req));
     }
 
     /**
@@ -52,31 +52,31 @@ public class AuthController {
      * người dùng mở link hỏng và thấy nguyên khối {"code":3012,...} trên trang trắng.
      */
     @GetMapping(value = "/verify", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public ResponseEntity<String> xacMinhEmail(@RequestParam String token) {
+    public ResponseEntity<String> verifyEmail(@RequestParam String token) {
         try {
-            authService.xacMinhEmail(token);
+            authService.verifyEmail(token);
         } catch (AppException ex) {
             // GIỮ NGUYÊN mã lỗi nghiệp vụ (400 cho link sai, 410 cho hết hạn...): chỉ đổi phần
             // thân trang từ JSON sang HTML. Đổi luôn mã thành 200 thì người dùng và giám sát
             // đều tưởng link hỏng là thành công.
             return ResponseEntity.status(ex.getErrorCode().getStatus())
-                    .body(loiTrang(ex, "Nếu bạn vừa đăng ký mà chưa nhận được mail, "
+                    .body(errorPage(ex, "Nếu bạn vừa đăng ký mà chưa nhận được mail, "
                             + "bấm nút gửi lại xác minh ở trang đăng nhập."));
         }
         return ResponseEntity.ok(
-                trang("Đã xác minh email", "Xong rồi. Quay lại ứng dụng và đăng nhập bằng mật khẩu của bạn."));
+                htmlPage("Đã xác minh email", "Xong rồi. Quay lại ứng dụng và đăng nhập bằng mật khẩu của bạn."));
     }
 
     /** Gửi lại mail xác minh. Email không có tài khoản cũng trả 200 — không lộ email nào đã đăng ký. */
     @PostMapping("/verify/resend")
-    public ApiResponse<Void> guiLaiXacMinh(@RequestParam String email) {
-        authService.guiLaiXacMinh(email);
+    public ApiResponse<Void> resendVerification(@RequestParam String email) {
+        authService.resendVerification(email);
         return ApiResponse.ok();
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> dangNhap(@RequestBody LoginRequest req) {
-        return ApiResponse.ok(authService.dangNhap(req));
+    public ApiResponse<TokenResponse> login(@RequestBody LoginRequest req) {
+        return ApiResponse.ok(authService.login(req));
     }
 
     /**
@@ -84,8 +84,8 @@ public class AuthController {
      * không giải mã JWT — token cũ có thể đã bị thu hồi hoặc vai đã đổi từ lúc phát.
      */
     @GetMapping("/me")
-    public ApiResponse<AccountResponse> cuaToi(@AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.ok(authService.cuaToi(taiKhoan(jwt)));
+    public ApiResponse<AccountResponse> getMe(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(authService.getMe(currentAccountId(jwt)));
     }
 
     /**
@@ -93,12 +93,12 @@ public class AuthController {
      * (Account.tokenVersion) — không trả thì người dùng tự đá mình ra ngoài ngay khi bấm Lưu.
      */
     @PostMapping("/password/change")
-    public ApiResponse<TokenResponse> doiMatKhau(@AuthenticationPrincipal Jwt jwt,
-                                                 @RequestBody DoiMatKhauRequest req) {
-        return ApiResponse.ok(authService.doiMatKhau(taiKhoan(jwt), req));
+    public ApiResponse<TokenResponse> changePassword(@AuthenticationPrincipal Jwt jwt,
+                                                 @RequestBody ChangePasswordRequest req) {
+        return ApiResponse.ok(authService.changePassword(currentAccountId(jwt), req));
     }
 
-    private static UUID taiKhoan(Jwt jwt) {
+    private static UUID currentAccountId(Jwt jwt) {
         return UUID.fromString(jwt.getSubject());
     }
 
@@ -107,8 +107,8 @@ public class AuthController {
      * permitAll — không có JWT của FinTeen trong tay người dùng mới (đang định đăng nhập).
      */
     @PostMapping("/login/google")
-    public ApiResponse<TokenResponse> dangNhapGoogle(@RequestBody LinkCredentialRequest req) {
-        return ApiResponse.ok(authService.dangNhapGoogle(req));
+    public ApiResponse<TokenResponse> loginWithGoogle(@RequestBody LinkCredentialRequest req) {
+        return ApiResponse.ok(authService.loginWithGoogle(req));
     }
 
     /**
@@ -117,16 +117,16 @@ public class AuthController {
      * người khác cũng gắn vào tài khoản mình.
      */
     @PostMapping("/link/google")
-    public ApiResponse<Void> lienKetGoogle(@AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<Void> linkGoogle(@AuthenticationPrincipal Jwt jwt,
                                            @RequestBody LinkCredentialRequest req) {
-        authService.lienKetCachDangNhap(taiKhoan(jwt), req);
+        authService.linkCredential(currentAccountId(jwt), req);
         return ApiResponse.ok();
     }
 
-    /** Luôn 200, kể cả khi email không tồn tại — xem chú thích ở AuthServiceImpl.quenMatKhau. */
+    /** Luôn 200, kể cả khi email không tồn tại — xem chú thích ở AuthServiceImpl.forgotPassword. */
     @PostMapping("/password/forgot")
-    public ApiResponse<Void> quenMatKhau(@RequestBody ForgotPasswordRequest req) {
-        authService.quenMatKhau(req);
+    public ApiResponse<Void> forgotPassword(@RequestBody ForgotPasswordRequest req) {
+        authService.forgotPassword(req);
         return ApiResponse.ok();
     }
 
@@ -144,7 +144,7 @@ public class AuthController {
      * /finteen và nhận 404 — người dùng không đổi được mật khẩu trên máy chủ.
      */
     @GetMapping(value = "/password/reset", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String trangDatLaiMatKhau(@RequestParam String token) {
+    public String resetPasswordPage(@RequestParam String token) {
         return """
                 <!doctype html>
                 <html lang="vi"><head><meta charset="utf-8">
@@ -165,8 +165,8 @@ public class AuthController {
     }
 
     @PostMapping(value = "/password/reset", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ApiResponse<Void> datLaiMatKhau(@RequestBody ResetPasswordRequest req) {
-        authService.datLaiMatKhau(req);
+    public ApiResponse<Void> resetPassword(@RequestBody ResetPasswordRequest req) {
+        authService.resetPassword(req);
         return ApiResponse.ok();
     }
 
@@ -181,18 +181,18 @@ public class AuthController {
     @PostMapping(value = "/password/reset",
             consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
             produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public ResponseEntity<String> datLaiMatKhauQuaForm(@RequestParam String token, @RequestParam String newPassword) {
+    public ResponseEntity<String> resetPasswordForm(@RequestParam String token, @RequestParam String newPassword) {
         try {
-            authService.datLaiMatKhau(new ResetPasswordRequest(token, newPassword));
+            authService.resetPassword(new ResetPasswordRequest(token, newPassword));
         } catch (AppException ex) {
             // Mật khẩu ngắn, link hết hạn, link đã dùng: tất cả đều là người dùng đang đứng
             // trên trang HTML này. Ném ra GlobalExceptionHandler là y chang lỗi A5 — JSON 400
             // hiện trên màn hình trắng.
             return ResponseEntity.status(ex.getErrorCode().getStatus())
-                    .body(loiTrang(ex, "Bấm lại link trong mail để lấy link mới, "
+                    .body(errorPage(ex, "Bấm lại link trong mail để lấy link mới, "
                             + "hoặc dùng nút 'quên mật khẩu' để xin lại."));
         }
-        return ResponseEntity.ok(trang("Đã đổi mật khẩu", "Đăng nhập bằng mật khẩu vừa đặt."));
+        return ResponseEntity.ok(htmlPage("Đã đổi mật khẩu", "Đăng nhập bằng mật khẩu vừa đặt."));
     }
 
     /**
@@ -200,9 +200,9 @@ public class AuthController {
      * chỗ đó dựng ApiResponse JSON cho FE, còn đây người dùng đang nhìn trình duyệt.
      * Chạy qua escapeHtml vì message có thể mang nội dung người dùng nhập.
      */
-    private static String loiTrang(AppException ex, String huongDan) {
-        return trang("Không hoàn tất được",
-                escapeHtml(ex.getMessage()) + " " + huongDan);
+    private static String errorPage(AppException ex, String hint) {
+        return htmlPage("Không hoàn tất được",
+                escapeHtml(ex.getMessage()) + " " + hint);
     }
 
     /** Nhét giá trị từ người dùng vào HTML thì phải thoát — token nằm trong thuộc tính value. */
@@ -215,7 +215,7 @@ public class AuthController {
      * Trang tĩnh sau khi bấm link. Cố ý trả 200 với lời nhắc chứ không tự redirect: BE chưa biết
      * địa chỉ trang đăng nhập của FE, mà đoán bừa thì hỏng ngay khi FE đổi tên trang.
      */
-    private static String trang(String tieuDe, String noiDung) {
+    private static String htmlPage(String title, String message) {
         return """
                 <!doctype html>
                 <html lang="vi"><head><meta charset="utf-8">
@@ -225,6 +225,6 @@ public class AuthController {
                 <h1 style="font-size:1.4rem">%s</h1>
                 <p>%s</p>
                 </body></html>
-                """.formatted(tieuDe, tieuDe, noiDung);
+                """.formatted(title, title, message);
     }
 }

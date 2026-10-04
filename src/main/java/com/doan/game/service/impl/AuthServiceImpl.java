@@ -1,6 +1,6 @@
 package com.doan.game.service.impl;
 
-import com.doan.game.DTO.request.DoiMatKhauRequest;
+import com.doan.game.DTO.request.ChangePasswordRequest;
 import com.doan.game.DTO.request.ForgotPasswordRequest;
 import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
@@ -27,7 +27,7 @@ import com.doan.game.repository.RoleGrantLogRepository;
 import com.doan.game.repository.VerificationTokenRepository;
 import com.doan.game.service.AuthService;
 import com.doan.game.service.EntitlementService;
-import com.doan.game.service.MailCanGui;
+import com.doan.game.service.OutgoingMail;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -69,7 +69,7 @@ import java.util.regex.Pattern;
  *  3. Sai email và sai mật khẩu cùng trả BAD_CREDENTIALS — khác nhau là tặng kẻ dò một cách
  *     kiểm tra xem email nào đã có tài khoản.
  *  4. Quên mật khẩu luôn trả 200, kể cả khi email không tồn tại.
- *  5. dangNhap CỐ Ý KHÔNG @Transactional — xem chú thích ngay tại hàm.
+ *  5. login CỐ Ý KHÔNG @Transactional — xem chú thích ngay tại hàm.
  */
 @Service
 @RequiredArgsConstructor
@@ -78,15 +78,15 @@ public class AuthServiceImpl implements AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
 
     /** Link xác minh email dùng lâu, đặt lại mật khẩu thì ngắn — token đó mở được tài khoản. */
-    private static final Duration HAN_XAC_MINH = Duration.ofHours(24);
-    private static final Duration HAN_DAT_LAI_MAT_KHAU = Duration.ofMinutes(30);
+    private static final Duration VERIFY_EMAIL_TTL = Duration.ofHours(24);
+    private static final Duration RESET_PASSWORD_TTL = Duration.ofMinutes(30);
     /** Gửi lại mail cách nhau tối thiểu một phút, chặn spam tới hộp thư người khác. */
-    private static final Duration GOI_HAN_GUI_LAI = Duration.ofMinutes(1);
-    private static final int LAN_SAI_TOI_DA = 5;
-    private static final Duration KHOA_SAI_MAT_KHAU = Duration.ofMinutes(15);
+    private static final Duration RESEND_COOLDOWN = Duration.ofMinutes(1);
+    private static final int MAX_PASSWORD_ATTEMPTS = 5;
+    private static final Duration PASSWORD_LOCK_DURATION = Duration.ofMinutes(15);
 
-    private static final Pattern DANG_EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
-    private static final int MIN_MAT_KHAU = 8;
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final int MIN_PASSWORD_LENGTH = 8;
 
     private final AccountRepository accountRepo;
     private final CredentialRepository credentialRepo;
@@ -100,7 +100,7 @@ public class AuthServiceImpl implements AuthService {
     private final ApplicationEventPublisher events;
     private final FirebaseIdTokenDecoder firebaseDecoder;
     /** Giao dịch tự quản cho đăng nhập Google: va chạm thì phải tra lại trong giao dịch MỚI (L-18). */
-    private final TransactionTemplate giaoDich;
+    private final TransactionTemplate txTemplate;
 
     private final SecureRandom rng = new SecureRandom();
 
@@ -115,13 +115,13 @@ public class AuthServiceImpl implements AuthService {
     // ================================================================ đăng ký
     @Override
     @Transactional
-    public AccountResponse dangKy(RegisterRequest req) {
-        String email = chuanHoa(req == null ? null : req.email());
-        if (email == null || !DANG_EMAIL.matcher(email).matches()) {
+    public AccountResponse register(RegisterRequest req) {
+        String email = normalizeEmail(req == null ? null : req.email());
+        if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "email không đúng dạng");
         }
-        if (req.password() == null || req.password().length() < MIN_MAT_KHAU) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu tối thiểu " + MIN_MAT_KHAU + " ký tự");
+        if (req.password() == null || req.password().length() < MIN_PASSWORD_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
         }
         if (req.displayName() == null || req.displayName().isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu tên hiển thị");
@@ -159,17 +159,17 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.EMAIL_TAKEN);
         }
 
-        guiMailXacMinh(a, taoToken(a, TokenPurpose.VERIFY_EMAIL, HAN_XAC_MINH));
+        sendVerificationMail(a, createToken(a, TokenPurpose.VERIFY_EMAIL, VERIFY_EMAIL_TTL));
 
         // KHÔNG trả token: chưa xác minh thì chưa đăng nhập được, trả token chỉ là hứa hão.
-        return AccountMapper.sang(a);
+        return AccountMapper.toResponse(a);
     }
 
     // ================================================================ xác minh email
     @Override
     @Transactional
-    public void xacMinhEmail(String tokenGoc) {
-        VerificationToken t = layToken(tokenGoc, TokenPurpose.VERIFY_EMAIL);
+    public void verifyEmail(String rawToken) {
+        VerificationToken t = findToken(rawToken, TokenPurpose.VERIFY_EMAIL);
 
         Account a = t.getAccount();
         Instant now = Instant.now(clock);
@@ -182,7 +182,7 @@ public class AuthServiceImpl implements AuthService {
         credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD)
                 .ifPresent(c -> c.setEmailVerifiedAt(now));
 
-        capAdminDauTien(a);
+        grantBootstrapAdmin(a);
         log.info("Xác minh email tài khoản {} xong", a.getId());
     }
 
@@ -196,8 +196,8 @@ public class AuthServiceImpl implements AuthService {
      * nguyên tử. Đây đúng là bẫy đã ghi ở commit a982abc, chỉ khác tên biến.
      */
     @Override
-    public TokenResponse dangNhap(LoginRequest req) {
-        String email = chuanHoa(req == null ? null : req.email());
+    public TokenResponse login(LoginRequest req) {
+        String email = normalizeEmail(req == null ? null : req.email());
         Account a = email == null ? null : accountRepo.findByEmailIgnoreCase(email).orElse(null);
         if (a == null || req.password() == null) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
@@ -210,12 +210,12 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_CREDENTIALS));
 
         if (!passwordEncoder.matches(req.password(), c.getPasswordHash())) {
-            int lan = (a.getFailedAttempts() == null ? 0 : a.getFailedAttempts()) + 1;
-            if (lan >= LAN_SAI_TOI_DA) {
+            int attempts = (a.getFailedAttempts() == null ? 0 : a.getFailedAttempts()) + 1;
+            if (attempts >= MAX_PASSWORD_ATTEMPTS) {
                 a.setFailedAttempts(0);
-                a.setLockedUntil(now.plus(KHOA_SAI_MAT_KHAU));
+                a.setLockedUntil(now.plus(PASSWORD_LOCK_DURATION));
             } else {
-                a.setFailedAttempts(lan);
+                a.setFailedAttempts(attempts);
             }
             accountRepo.save(a);
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
@@ -231,14 +231,14 @@ public class AuthServiceImpl implements AuthService {
         c.setLastUsedAt(now);
         credentialRepo.save(c);
 
-        return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
+        return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
 
     // ================================================================ quên mật khẩu
     @Override
     @Transactional
-    public void quenMatKhau(ForgotPasswordRequest req) {
-        String email = chuanHoa(req == null ? null : req.email());
+    public void forgotPassword(ForgotPasswordRequest req) {
+        String email = normalizeEmail(req == null ? null : req.email());
         if (email == null) {
             return;
         }
@@ -250,11 +250,11 @@ public class AuthServiceImpl implements AuthService {
         }
         // Gửi quá dày cũng IM LẶNG. Ném 3019 thì kẻ biết email người khác gửi 2 lần là kết luận
         // được email đó đã đăng ký — đúng cái mà nhánh trên cố không lộ.
-        if (chanGuiLai(a, TokenPurpose.RESET_PASSWORD)) {
+        if (isResendTooSoon(a, TokenPurpose.RESET_PASSWORD)) {
             return;
         }
-        TokenCap tc = taoToken(a, TokenPurpose.RESET_PASSWORD, HAN_DAT_LAI_MAT_KHAU);
-        guiMailDatLaiMatKhau(a, tc);
+        IssuedToken tc = createToken(a, TokenPurpose.RESET_PASSWORD, RESET_PASSWORD_TTL);
+        sendResetPasswordMail(a, tc);
     }
 
     /**
@@ -263,26 +263,26 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     @Transactional
-    public void guiLaiXacMinh(String email) {
-        String e = chuanHoa(email);
+    public void resendVerification(String email) {
+        String e = normalizeEmail(email);
         Account a = e == null ? null : accountRepo.findByEmailIgnoreCase(e).orElse(null);
         // Không có, hoặc đã xác minh: im lặng — y hệt quên mật khẩu, không được lộ email nào đã đăng ký.
         if (a == null || a.getEmailVerifiedAt() != null) {
             return;
         }
-        if (chanGuiLai(a, TokenPurpose.VERIFY_EMAIL)) {
+        if (isResendTooSoon(a, TokenPurpose.VERIFY_EMAIL)) {
             return;
         }
-        guiMailXacMinh(a, taoToken(a, TokenPurpose.VERIFY_EMAIL, HAN_XAC_MINH));
+        sendVerificationMail(a, createToken(a, TokenPurpose.VERIFY_EMAIL, VERIFY_EMAIL_TTL));
     }
 
     @Override
     @Transactional
-    public void datLaiMatKhau(ResetPasswordRequest req) {
-        if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_MAT_KHAU) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu mới tối thiểu " + MIN_MAT_KHAU + " ký tự");
+    public void resetPassword(ResetPasswordRequest req) {
+        if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_PASSWORD_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu mới tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
         }
-        VerificationToken t = layToken(req.token(), TokenPurpose.RESET_PASSWORD);
+        VerificationToken t = findToken(req.token(), TokenPurpose.RESET_PASSWORD);
         Account a = t.getAccount();
         Instant now = Instant.now(clock);
 
@@ -297,7 +297,7 @@ public class AuthServiceImpl implements AuthService {
         a.setLockedUntil(null);
         a.setMustChangePassword(false);
         // Tăng phiên bản token TRƯỚC khi đổi: mọi token phát trước đó (kể cả của kẻ đang cầm)
-        // mang phiên bản cũ nên TokenThuHoiDecoder từ chối ngay lần gọi kế tiếp.
+        // mang phiên bản cũ nên RevocationAwareJwtDecoder từ chối ngay lần gọi kế tiếp.
         a.setTokenVersion(a.getTokenVersion() + 1);
         accountRepo.save(a);
 
@@ -316,23 +316,23 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     @Transactional(readOnly = true)
-    public AccountResponse cuaToi(UUID accountId) {
+    public AccountResponse getMe(UUID accountId) {
         Account a = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
-        Set<String> goi = new HashSet<>();
-        entitlementService.activePlans(accountId).forEach(k -> goi.add(k.name()));
-        List<String> vai = accountRoleRepo.findByAccount_Id(accountId).stream()
+        Set<String> plans = new HashSet<>();
+        entitlementService.activePlans(accountId).forEach(k -> plans.add(k.name()));
+        List<String> roles = accountRoleRepo.findByAccount_Id(accountId).stream()
                 .map(r -> r.getRole().name())
                 .toList();
-        return AccountMapper.sang(a, goi, vai);
+        return AccountMapper.toResponse(a, plans, roles);
     }
 
     @Override
     @Transactional
-    public TokenResponse doiMatKhau(UUID accountId, DoiMatKhauRequest req) {
-        if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_MAT_KHAU) {
+    public TokenResponse changePassword(UUID accountId, ChangePasswordRequest req) {
+        if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_PASSWORD_LENGTH) {
             throw new AppException(ErrorCode.VALIDATION_FAILED,
-                    "mật khẩu mới tối thiểu " + MIN_MAT_KHAU + " ký tự");
+                    "mật khẩu mới tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
         }
         Account a = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
@@ -356,7 +356,7 @@ public class AuthServiceImpl implements AuthService {
         credentialRepo.save(c);
 
         log.info("Tài khoản {} đổi mật khẩu khi đang đăng nhập — token cũ đã thu hồi", a.getId());
-        return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
+        return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
 
     // ================================================================ Google (Firebase)
@@ -379,18 +379,18 @@ public class AuthServiceImpl implements AuthService {
      * một tài khoản KHÁC (đăng ký mật khẩu) mới trả 3020.
      */
     @Override
-    public TokenResponse dangNhapGoogle(LinkCredentialRequest req) {
-        FirebaseIdTokenDecoder.NguoiFirebase nguoi = kiemTraReqGoogle(req);
+    public TokenResponse loginWithGoogle(LinkCredentialRequest req) {
+        FirebaseIdTokenDecoder.FirebaseUser user = validateGoogleRequest(req);
 
         // Phát token NGAY TRONG giao dịch: Account lấy qua Credential là proxy lười, ra ngoài giao
         // dịch mới đọc tokenVersion là LazyInitializationException.
         try {
-            return giaoDich.execute(trangThai -> phatToken(timHoacTaoGoogle(nguoi)));
-        } catch (DataIntegrityViolationException | PessimisticLockingFailureException vaCham) {
-            log.info("Đăng nhập Google {} va chạm với request song song — tra lại", nguoi.sub());
-            TokenResponse t = giaoDich.execute(trangThai -> credentialRepo
-                    .findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
-                    .map(c -> phatToken(c.getAccount()))
+            return txTemplate.execute(status -> issueToken(findOrCreateGoogleAccount(user)));
+        } catch (DataIntegrityViolationException | PessimisticLockingFailureException conflict) {
+            log.info("Đăng nhập Google {} va chạm với request song song — tra lại", user.sub());
+            TokenResponse t = txTemplate.execute(status -> credentialRepo
+                    .findByProviderAndSubject(AuthProvider.GOOGLE, user.sub())
+                    .map(c -> issueToken(c.getAccount()))
                     .orElse(null));
             if (t == null) {
                 // Không phải chính người này tạo song song: email vừa bị một đăng ký mật khẩu chiếm.
@@ -400,23 +400,23 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private TokenResponse phatToken(Account a) {
-        return tokenService.choNguoiLon(a.getId(), scopes(a.getId()), a.getTokenVersion());
+    private TokenResponse issueToken(Account a) {
+        return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
 
     /** Một giao dịch: có Credential thì cập nhật lần dùng; chưa có thì tạo tài khoản mới. */
-    private Account timHoacTaoGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi) {
-        Credential co = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+    private Account findOrCreateGoogleAccount(FirebaseIdTokenDecoder.FirebaseUser user) {
+        Credential existing = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, user.sub())
                 .orElse(null);
-        if (co != null) {
-            co.setLastUsedAt(Instant.now(clock));
-            credentialRepo.save(co);
-            return co.getAccount();
+        if (existing != null) {
+            existing.setLastUsedAt(Instant.now(clock));
+            credentialRepo.save(existing);
+            return existing.getAccount();
         }
-        if (accountRepo.findByEmailIgnoreCase(chuanHoa(nguoi.email())).isPresent()) {
+        if (accountRepo.findByEmailIgnoreCase(normalizeEmail(user.email())).isPresent()) {
             throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
         }
-        return taoTaiKhoanGoogle(nguoi);
+        return createGoogleAccount(user);
     }
 
     /**
@@ -428,15 +428,15 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     @Transactional
-    public void lienKetCachDangNhap(UUID accountId, LinkCredentialRequest req) {
-        FirebaseIdTokenDecoder.NguoiFirebase nguoi = kiemTraReqGoogle(req);
+    public void linkCredential(UUID accountId, LinkCredentialRequest req) {
+        FirebaseIdTokenDecoder.FirebaseUser user = validateGoogleRequest(req);
         Account a = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
 
-        Credential daCo = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, nguoi.sub())
+        Credential linked = credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, user.sub())
                 .orElse(null);
-        if (daCo != null) {
-            if (!accountId.equals(daCo.getAccount().getId())) {
+        if (linked != null) {
+            if (!accountId.equals(linked.getAccount().getId())) {
                 throw new AppException(ErrorCode.GOOGLE_ALREADY_LINKED);
             }
             return; // đã gắn rồi — gọi lại là lặp vô hại, không tạo Credential thứ hai
@@ -446,26 +446,26 @@ public class AuthServiceImpl implements AuthService {
         Credential c = new Credential();
         c.setAccount(a);
         c.setProvider(AuthProvider.GOOGLE);
-        c.setSubject(nguoi.sub());
-        c.setEmailAtProvider(chuanHoa(nguoi.email()));
+        c.setSubject(user.sub());
+        c.setEmailAtProvider(normalizeEmail(user.email()));
         c.setCreatedAt(now);
         c.setLastUsedAt(now);
         credentialRepo.save(c);
 
         // Chỉ công nhận "email đã xác minh" khi hai email TRÙNG: Google xác minh email của nó,
         // không phải email đang đứng trong tài khoản này.
-        if (a.getEmailVerifiedAt() == null && chuanHoa(nguoi.email()).equals(chuanHoa(a.getEmail()))) {
+        if (a.getEmailVerifiedAt() == null && normalizeEmail(user.email()).equals(normalizeEmail(a.getEmail()))) {
             a.setEmailVerifiedAt(now);
             accountRepo.save(a);
         }
-        log.info("Tài khoản {} liên kết Google {}", accountId, nguoi.sub());
+        log.info("Tài khoản {} liên kết Google {}", accountId, user.sub());
     }
 
     /**
      * Bean chỉ xác minh được chữ ký / hạn / project. Còn email và việc đã xác minh hay chưa là
      * điều kiện MỞ tài khoản nên phải kiểm lại ở đây — không tin một claim chỉ vì chữ ký đúng.
      */
-    private FirebaseIdTokenDecoder.NguoiFirebase kiemTraReqGoogle(LinkCredentialRequest req) {
+    private FirebaseIdTokenDecoder.FirebaseUser validateGoogleRequest(LinkCredentialRequest req) {
         if (req == null || req.idToken() == null || req.idToken().isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu idToken");
         }
@@ -473,48 +473,48 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "provider phải là GOOGLE");
         }
 
-        FirebaseIdTokenDecoder.NguoiFirebase nguoi = firebaseDecoder.decode(req.idToken());
-        if (nguoi.sub() == null || nguoi.sub().isBlank()) {
+        FirebaseIdTokenDecoder.FirebaseUser user = firebaseDecoder.decode(req.idToken());
+        if (user.sub() == null || user.sub().isBlank()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token thiếu subject");
         }
-        String email = chuanHoa(nguoi.email());
-        if (email == null || !DANG_EMAIL.matcher(email).matches()) {
+        String email = normalizeEmail(user.email());
+        if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "ID token thiếu email hợp lệ");
         }
-        if (!nguoi.emailDaXacMinh()) {
+        if (!user.emailVerified()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS, "email của Google chưa xác minh");
         }
-        return nguoi;
+        return user;
     }
 
     /** Tên lấy từ Google; không có thì cắt phần trước @ của email. Cắt 80 ký tự cho vừa cột. */
-    private static String tenCuaGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi, String email) {
-        String ten = trim(nguoi.ten());
-        if (ten == null || ten.isBlank()) {
-            ten = email.substring(0, email.indexOf('@'));
+    private static String googleDisplayName(FirebaseIdTokenDecoder.FirebaseUser user, String email) {
+        String name = trim(user.name());
+        if (name == null || name.isBlank()) {
+            name = email.substring(0, email.indexOf('@'));
         }
-        return ten.length() > 80 ? ten.substring(0, 80) : ten;
+        return name.length() > 80 ? name.substring(0, 80) : name;
     }
 
-    private Account taoTaiKhoanGoogle(FirebaseIdTokenDecoder.NguoiFirebase nguoi) {
+    private Account createGoogleAccount(FirebaseIdTokenDecoder.FirebaseUser user) {
         Instant now = Instant.now(clock);
         Account a = new Account();
-        a.setEmail(chuanHoa(nguoi.email()));
-        a.setDisplayName(tenCuaGoogle(nguoi, a.getEmail()));
+        a.setEmail(normalizeEmail(user.email()));
+        a.setDisplayName(googleDisplayName(user, a.getEmail()));
         // Google đã xác minh email này nên không bắt người dùng xác minh thêm lần nữa.
         a.setEmailVerifiedAt(now);
         a.setFailedAttempts(0);
         a.setMustChangePassword(false);
         a.setCreatedAt(now);
         // Va chạm UNIQUE / khoá KHÔNG bắt ở đây: để nó thoát ra, giao dịch rollback sạch, rồi
-        // dangNhapGoogle tra lại trong giao dịch mới (L-18).
+        // loginWithGoogle tra lại trong giao dịch mới (L-18).
         a = accountRepo.saveAndFlush(a);
 
         Credential c = new Credential();
         c.setAccount(a);
         c.setProvider(AuthProvider.GOOGLE);
         // subject là uid Firebase, KHÔNG phải email: email đổi được, uid thì không.
-        c.setSubject(nguoi.sub());
+        c.setSubject(user.sub());
         c.setEmailAtProvider(a.getEmail());
         c.setCreatedAt(now);
         c.setLastUsedAt(now);
@@ -522,7 +522,7 @@ public class AuthServiceImpl implements AuthService {
 
         // L-16: email đã được Google xác minh, nên người trong ADMIN_EMAILS đăng ký bằng Google cũng
         // được cấp ADMIN như khi xác minh mail — trước đây chỉ luồng mật khẩu mới cấp.
-        capAdminDauTien(a);
+        grantBootstrapAdmin(a);
         log.info("Tài khoản {} tạo bằng Google", a.getId());
         return a;
     }
@@ -540,21 +540,21 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /** Token mới 32 byte; trả cả bản ghi để ghi usedAt, và bản GỐC để đưa vào mail. */
-    private record TokenCap(String goc, VerificationToken banGhi) {
+    private record IssuedToken(String raw, VerificationToken record) {
     }
 
-    private TokenCap taoToken(Account a, TokenPurpose purpose, Duration han) {
-        byte[] raw = new byte[32];
-        rng.nextBytes(raw);
-        String goc = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+    private IssuedToken createToken(Account a, TokenPurpose purpose, Duration ttl) {
+        byte[] randomBytes = new byte[32];
+        rng.nextBytes(randomBytes);
+        String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
         Instant now = Instant.now(clock);
         VerificationToken t = new VerificationToken();
         t.setAccount(a);
         t.setPurpose(purpose);
-        t.setTokenHash(sha256Hex(goc));
-        t.setExpiresAt(now.plus(han));
+        t.setTokenHash(sha256Hex(raw));
+        t.setExpiresAt(now.plus(ttl));
         t.setCreatedAt(now);
-        return new TokenCap(goc, tokenRepo.save(t));
+        return new IssuedToken(raw, tokenRepo.save(t));
     }
 
     /**
@@ -562,39 +562,39 @@ public class AuthServiceImpl implements AuthService {
      * Hết hạn và dùng rồi là hai lỗi khác nhau: hết hạn thì bảo "bấm gửi lại", dùng rồi thì
      * bảo "không đúng hoặc đã dùng" — gộp hai cái lại thì người dùng không biết làm gì.
      */
-    private VerificationToken layToken(String tokenGoc, TokenPurpose canDung) {
-        if (tokenGoc == null || tokenGoc.isBlank()) {
-            throw new AppException(saiPurpose(canDung));
+    private VerificationToken findToken(String rawToken, TokenPurpose expectedPurpose) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new AppException(invalidTokenError(expectedPurpose));
         }
-        VerificationToken t = tokenRepo.findByTokenHash(sha256Hex(tokenGoc))
-                .orElseThrow(() -> new AppException(saiPurpose(canDung)));
+        VerificationToken t = tokenRepo.findByTokenHash(sha256Hex(rawToken))
+                .orElseThrow(() -> new AppException(invalidTokenError(expectedPurpose)));
         if (t.getUsedAt() != null) {
-            throw new AppException(saiPurpose(canDung));
+            throw new AppException(invalidTokenError(expectedPurpose));
         }
-        if (!canDung.equals(t.getPurpose())) {
-            throw new AppException(saiPurpose(canDung));
+        if (!expectedPurpose.equals(t.getPurpose())) {
+            throw new AppException(invalidTokenError(expectedPurpose));
         }
         if (t.getExpiresAt().isBefore(Instant.now(clock))) {
-            throw new AppException(canDung == TokenPurpose.RESET_PASSWORD
+            throw new AppException(expectedPurpose == TokenPurpose.RESET_PASSWORD
                     ? ErrorCode.RESET_TOKEN_EXPIRED : ErrorCode.VERIFY_TOKEN_EXPIRED);
         }
         return t;
     }
 
-    private static ErrorCode saiPurpose(TokenPurpose canDung) {
-        return canDung == TokenPurpose.RESET_PASSWORD
+    private static ErrorCode invalidTokenError(TokenPurpose expectedPurpose) {
+        return expectedPurpose == TokenPurpose.RESET_PASSWORD
                 ? ErrorCode.RESET_TOKEN_INVALID : ErrorCode.VERIFY_TOKEN_INVALID;
     }
 
     /**
-     * true nếu mục đích này vừa gửi mail trong GOI_HAN_GUI_LAI.
+     * true nếu mục đích này vừa gửi mail trong RESEND_COOLDOWN.
      *
      * TRẢ BOOLEAN chứ không ném lỗi: cả hai nơi gọi đều phải im lặng và vẫn trả 200. Ném
      * 3015/3019 ra HTTP thì người ta gửi 2 lần, thấy lỗi, biết chắc email đó đã đăng ký.
      */
-    private boolean chanGuiLai(Account a, TokenPurpose purpose) {
+    private boolean isResendTooSoon(Account a, TokenPurpose purpose) {
         return tokenRepo.findTopByAccount_IdAndPurposeOrderByCreatedAtDesc(a.getId(), purpose)
-                .filter(t -> t.getCreatedAt().isAfter(Instant.now(clock).minus(GOI_HAN_GUI_LAI)))
+                .filter(t -> t.getCreatedAt().isAfter(Instant.now(clock).minus(RESEND_COOLDOWN)))
                 .isPresent();
     }
 
@@ -604,8 +604,8 @@ public class AuthServiceImpl implements AuthService {
      * Chỉ cấp LÚC XÁC MINH, không cấp lúc đăng ký — cấp lúc đăng ký thì ai đăng ký trước bằng
      * đúng email đó sẽ chiếm quyền admin, và đó là email của người quản trị.
      */
-    private void capAdminDauTien(Account a) {
-        if (!trongDanhSachAdmin(a.getEmail())) {
+    private void grantBootstrapAdmin(Account a) {
+        if (!isInAdminList(a.getEmail())) {
             return;
         }
         if (accountRoleRepo.existsByAccount_IdAndRole(a.getId(), Role.ADMIN)) {
@@ -618,14 +618,14 @@ public class AuthServiceImpl implements AuthService {
         r.setGrantedAt(now);
         accountRoleRepo.save(r);
 
-        RoleGrantLog ghi = new RoleGrantLog();
-        ghi.setActor(a);
-        ghi.setTarget(a);
-        ghi.setRole(Role.ADMIN.name());
-        ghi.setGranted(true);
-        ghi.setReason("ADMIN_EMAILS bootstrap");
-        ghi.setCreatedAt(now);
-        roleGrantLogRepo.save(ghi);
+        RoleGrantLog grantLog = new RoleGrantLog();
+        grantLog.setActor(a);
+        grantLog.setTarget(a);
+        grantLog.setRole(Role.ADMIN.name());
+        grantLog.setGranted(true);
+        grantLog.setReason("ADMIN_EMAILS bootstrap");
+        grantLog.setCreatedAt(now);
+        roleGrantLogRepo.save(grantLog);
         log.info("Cấp ADMIN cho tài khoản {} theo danh sách ADMIN_EMAILS", a.getId());
     }
 
@@ -641,21 +641,21 @@ public class AuthServiceImpl implements AuthService {
      * {@code equalsIgnoreCase} vì domain không phân biệt hoa thường còn phần local thì có, và
      * người dùng gõ email tay nên không thể kỳ vọng chữ hoa chữ thường khớp tuyệt đối.
      */
-    private boolean trongDanhSachAdmin(String email) {
+    private boolean isInAdminList(String email) {
         if (email == null || adminEmails == null || adminEmails.isBlank()) {
             return false;
         }
-        for (String muc : adminEmails.split(",")) {
-            if (!muc.isBlank() && email.equalsIgnoreCase(muc.trim())) {
+        for (String entry : adminEmails.split(",")) {
+            if (!entry.isBlank() && email.equalsIgnoreCase(entry.trim())) {
                 return true;
             }
         }
         return false;
     }
 
-    private void guiMailXacMinh(Account a, TokenCap tc) {
-        String link = publicBaseUrl + "/api/auth/verify?token=" + tc.goc();
-        events.publishEvent(new MailCanGui(a.getEmail(), "Xác minh email FinTeen",
+    private void sendVerificationMail(Account a, IssuedToken tc) {
+        String link = publicBaseUrl + "/api/auth/verify?token=" + tc.raw();
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Xác minh email FinTeen",
                 """
                         <p>Chào %s,</p>
                         <p>Cảm ơn bạn đã tạo tài khoản FinTeen. Bấm nút dưới để xác minh email, xong là
@@ -666,9 +666,9 @@ public class AuthServiceImpl implements AuthService {
                         """.formatted(escape(a.getDisplayName()), escape(link))));
     }
 
-    private void guiMailDatLaiMatKhau(Account a, TokenCap tc) {
-        String link = publicBaseUrl + "/api/auth/password/reset?token=" + tc.goc();
-        events.publishEvent(new MailCanGui(a.getEmail(), "Đặt lại mật khẩu FinTeen",
+    private void sendResetPasswordMail(Account a, IssuedToken tc) {
+        String link = publicBaseUrl + "/api/auth/password/reset?token=" + tc.raw();
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Đặt lại mật khẩu FinTeen",
                 """
                         <p>Chào %s,</p>
                         <p>Có yêu cầu đặt lại mật khẩu cho tài khoản này. Bấm nút dưới để đặt mật khẩu mới.</p>
@@ -678,7 +678,7 @@ public class AuthServiceImpl implements AuthService {
                         """.formatted(escape(a.getDisplayName()), escape(link))));
     }
 
-    private static String chuanHoa(String email) {
+    private static String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 

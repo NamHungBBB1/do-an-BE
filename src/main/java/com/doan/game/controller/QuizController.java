@@ -15,22 +15,22 @@ public class QuizController {
     private final QuizService quizService;
 
     @PostMapping
-    public void soanQuiz() {
+    public void createQuiz() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/publish")
-    public void phatHanh() {
+    public void publish() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @PostMapping("/{id}/submit")
-    public void nopBai() {
+    public void submitQuiz() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
     @GetMapping("/{id}/results")
-    public void xemKetQuaLop() {
+    public void getClassResults() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

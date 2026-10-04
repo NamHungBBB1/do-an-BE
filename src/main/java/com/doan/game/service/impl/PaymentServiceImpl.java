@@ -76,9 +76,9 @@ public class PaymentServiceImpl implements PaymentService {
     // ------------------------------------------------------------------ tạo link
     @Override
     @Transactional
-    public PaymentResponse taoGiaoDich(UUID accountId, BuyPlanRequest req) {
-        PlanKind kind = PlanServiceImpl.docKind(req.kind());
-        long gia = planRepo.findByKind(kind).map(Plan::getPrice)
+    public PaymentResponse createPayment(UUID accountId, BuyPlanRequest req) {
+        PlanKind kind = PlanServiceImpl.parseKind(req.kind());
+        long price = planRepo.findByKind(kind).map(Plan::getPrice)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));
         Account account = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
@@ -86,10 +86,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         Transaction tx = new Transaction();
         tx.setAccount(account);
-        tx.setOrderCode(sinhOrderCode());
+        tx.setOrderCode(generateOrderCode());
         tx.setKind(kind);
-        tx.setPurpose(dangConHan(accountId, kind) ? TransactionPurpose.RENEW : TransactionPurpose.NEW);
-        tx.setAmount(gia);
+        tx.setPurpose(hasActivePlan(accountId, kind) ? TransactionPurpose.RENEW : TransactionPurpose.NEW);
+        tx.setAmount(price);
         tx.setStatus(TransactionStatus.PENDING);
         tx.setCreatedAt(Instant.now(clock));
         // Lưu trước khi gọi PayOS: webhook chỉ tin orderCode đã có trong bảng.
@@ -97,7 +97,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         CreatePaymentLinkRequest data = CreatePaymentLinkRequest.builder()
                 .orderCode(tx.getOrderCode())
-                .amount(gia)
+                .amount(price)
                 // Nội dung chuyển khoản: PayOS giới hạn ngắn, không dấu.
                 .description("FinTeen " + (kind == PlanKind.PARENT ? "goi phu huynh" : "goi giao vien"))
                 .returnUrl(payOsProps.returnUrl())
@@ -118,23 +118,23 @@ public class PaymentServiceImpl implements PaymentService {
     // ------------------------------------------------------------------ xem / huỷ
     @Override
     @Transactional
-    public PaymentStatusResponse xemGiaoDich(UUID accountId, long orderCode) {
-        Transaction tx = cuaToi(accountId, orderCode);
+    public PaymentStatusResponse getPayment(UUID accountId, long orderCode) {
+        Transaction tx = findOwnedTransaction(accountId, orderCode);
         if (tx.getStatus() == TransactionStatus.PENDING) {
-            doiSoatVoiPayOS(tx);
+            reconcileWithPayOS(tx);
         }
         return toStatus(tx);
     }
 
     @Override
     @Transactional
-    public void huyGiaoDich(UUID accountId, long orderCode, String lyDo) {
-        Transaction tx = cuaToi(accountId, orderCode);
+    public void cancelPayment(UUID accountId, long orderCode, String reason) {
+        Transaction tx = findOwnedTransaction(accountId, orderCode);
         if (tx.getStatus() != TransactionStatus.PENDING) {
             throw new AppException(ErrorCode.TRANSACTION_NOT_PENDING, String.valueOf(orderCode));
         }
         try {
-            client().paymentRequests().cancel(orderCode, lyDo == null || lyDo.isBlank() ? "Nguoi dung huy" : lyDo);
+            client().paymentRequests().cancel(orderCode, reason == null || reason.isBlank() ? "Nguoi dung huy" : reason);
         } catch (PayOSException e) {
             throw new AppException(ErrorCode.PAYOS_ERROR, e.getMessage());
         }
@@ -144,7 +144,7 @@ public class PaymentServiceImpl implements PaymentService {
     // ------------------------------------------------------------------ webhook
     @Override
     @Transactional
-    public void nhanWebhook(String body) {
+    public void handleWebhook(String body) {
         PayOS client = payOS.getIfAvailable();
         if (client == null) {
             log.warn("Webhook PayOS tới nhưng máy chủ chưa cấu hình khoá — bỏ qua");
@@ -158,7 +158,7 @@ public class PaymentServiceImpl implements PaymentService {
             log.warn("Webhook PayOS sai chữ ký hoặc body lạ — bỏ qua: {}", e.getMessage());
             return;
         }
-        Optional<Transaction> opt = transactionRepo.khoaTheoOrderCode(data.getOrderCode());
+        Optional<Transaction> opt = transactionRepo.lockByOrderCode(data.getOrderCode());
         if (opt.isEmpty()) {
             // PayOS gửi webhook thử khi đăng ký URL, orderCode không có thật. Phải nhận 200, không phải lỗi.
             log.info("Webhook PayOS orderCode {} không có trong hệ thống — bỏ qua", data.getOrderCode());
@@ -175,19 +175,19 @@ public class PaymentServiceImpl implements PaymentService {
                     data.getOrderCode(), data.getAmount(), tx.getAmount());
             return;
         }
-        ghiNhanDaTra(tx, docThoiDiem(data.getTransactionDateTime()));
+        markPaid(tx, parsePayosTime(data.getTransactionDateTime()));
     }
 
     @Override
-    public String xacNhanWebhook(String url) {
-        String dich = url == null || url.isBlank() ? payOsProps.webhookUrl() : url;
+    public String confirmWebhook(String url) {
+        String target = url == null || url.isBlank() ? payOsProps.webhookUrl() : url;
         try {
-            client().webhooks().confirm(dich);
+            client().webhooks().confirm(target);
         } catch (PayOSException e) {
             throw new AppException(ErrorCode.PAYOS_ERROR, e.getMessage());
         }
-        log.info("Đã đăng ký webhook PayOS: {}", dich);
-        return dich;
+        log.info("Đã đăng ký webhook PayOS: {}", target);
+        return target;
     }
 
     // ------------------------------------------------------------------ cron
@@ -195,55 +195,55 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Scheduled(fixedDelayString = "${app.payos.sweep-ms:120000}", initialDelayString = "${app.payos.sweep-ms:120000}")
     @Transactional
-    public void quetGiaoDichTreo() {
+    public void sweepPendingTransactions() {
         if (payOS.getIfAvailable() == null) {
             return;
         }
         Instant now = Instant.now(clock);
-        List<Transaction> treo = transactionRepo.findByStatusAndCreatedAtBetween(
+        List<Transaction> pending = transactionRepo.findByStatusAndCreatedAtBetween(
                 TransactionStatus.PENDING, now.minus(25, ChronoUnit.HOURS), now.minus(2, ChronoUnit.MINUTES));
-        for (Transaction tx : treo) {
-            doiSoatVoiPayOS(tx);
+        for (Transaction tx : pending) {
+            reconcileWithPayOS(tx);
         }
-        if (!treo.isEmpty()) {
-            log.info("Đối soát {} giao dịch PENDING với PayOS", treo.size());
+        if (!pending.isEmpty()) {
+            log.info("Đối soát {} giao dịch PENDING với PayOS", pending.size());
         }
     }
 
     // ------------------------------------------------------------------ admin
     @Override
     @Transactional(readOnly = true)
-    public List<TransactionAdminResponse> danhSachGiaoDich(TransactionStatus status, int page, int size) {
-        Pageable trang = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        var ds = status == null
-                ? transactionRepo.findAllByOrderByCreatedAtDesc(trang)
-                : transactionRepo.findByStatusOrderByCreatedAtDesc(status, trang);
-        return ds.map(PaymentServiceImpl::toAdmin).getContent();
+    public List<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        var result = status == null
+                ? transactionRepo.findAllByOrderByCreatedAtDesc(pageable)
+                : transactionRepo.findByStatusOrderByCreatedAtDesc(status, pageable);
+        return result.map(PaymentServiceImpl::toAdmin).getContent();
     }
 
     @Override
     @Transactional
-    public PaymentStatusResponse doiSoat(long orderCode) {
-        Transaction tx = transactionRepo.khoaTheoOrderCode(orderCode)
+    public PaymentStatusResponse reconcile(long orderCode) {
+        Transaction tx = transactionRepo.lockByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
         if (tx.getStatus() == TransactionStatus.PENDING) {
-            doiSoatVoiPayOS(tx);
+            reconcileWithPayOS(tx);
         }
         return toStatus(tx);
     }
 
     // ------------------------------------------------------------------ lõi
     /** Hỏi PayOS trạng thái thật của một giao dịch PENDING và áp vào. Lỗi mạng thì để nguyên, lần sau quét lại. */
-    private void doiSoatVoiPayOS(Transaction tx) {
+    private void reconcileWithPayOS(Transaction tx) {
         PayOS client = payOS.getIfAvailable();
         if (client == null) {
             return;
         }
         try {
             PaymentLink link = client.paymentRequests().get(tx.getOrderCode());
-            String trangThai = link.getStatus() == null ? "" : link.getStatus().name();
-            switch (trangThai) {
-                case "PAID" -> ghiNhanDaTra(tx, Instant.now(clock));
+            String linkStatus = link.getStatus() == null ? "" : link.getStatus().name();
+            switch (linkStatus) {
+                case "PAID" -> markPaid(tx, Instant.now(clock));
                 case "CANCELLED", "EXPIRED", "FAILED" -> tx.setStatus(TransactionStatus.FAILED);
                 default -> { /* PENDING, PROCESSING, UNDERPAID…: chờ */ }
             }
@@ -252,8 +252,8 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
-    /** Idempotent. Gọi trong transaction đang giữ khoá hàng (khoaTheoOrderCode) hoặc trong cron. */
-    void ghiNhanDaTra(Transaction tx, Instant luc) {
+    /** Idempotent. Gọi trong transaction đang giữ khoá hàng (lockByOrderCode) hoặc trong cron. */
+    void markPaid(Transaction tx, Instant paidAt) {
         if (tx.getStatus() == TransactionStatus.PAID) {
             return;
         }
@@ -262,8 +262,8 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
         tx.setStatus(TransactionStatus.PAID);
-        tx.setPaidAt(luc);
-        entitlementRepo.save(capGoiTu(tx));
+        tx.setPaidAt(paidAt);
+        entitlementRepo.save(buildEntitlementFrom(tx));
         log.info("Giao dịch {} PAID, cấp gói {} cho tài khoản {}", tx.getOrderCode(), tx.getKind(), tx.getAccount().getId());
     }
 
@@ -272,34 +272,34 @@ public class PaymentServiceImpl implements PaymentService {
      * dùng hết ngày expiresOn, nên expiresOn = startsOn + N tháng − 1 ngày. N đọc từ Plan lúc cấp
      * (dòng Plan không có đường xoá; orElse chỉ để webhook không bao giờ ném).
      */
-    private Entitlement capGoiTu(Transaction tx) {
-        LocalDate homNay = LocalDate.now(clock);
-        LocalDate batDau = entitlementRepo
+    private Entitlement buildEntitlementFrom(Transaction tx) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate startDate = entitlementRepo
                 .findTopByAccount_IdAndKindOrderByExpiresOnDesc(tx.getAccount().getId(), tx.getKind())
                 .map(e -> e.getExpiresOn().plusDays(1))
-                .filter(d -> d.isAfter(homNay))
-                .orElse(homNay);
-        int thang = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.THANG_MAC_DINH);
+                .filter(d -> d.isAfter(today))
+                .orElse(today);
+        int months = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
         Entitlement e = new Entitlement();
         e.setAccount(tx.getAccount());
         e.setKind(tx.getKind());
         e.setSource(EntitlementSource.PAYMENT);
         e.setTransaction(tx);
-        e.setStartsOn(batDau);
-        e.setExpiresOn(batDau.plusMonths(thang).minusDays(1));
+        e.setStartsOn(startDate);
+        e.setExpiresOn(startDate.plusMonths(months).minusDays(1));
         e.setCreatedAt(Instant.now(clock));
         return e;
     }
 
-    private boolean dangConHan(UUID accountId, PlanKind kind) {
-        LocalDate homNay = LocalDate.now(clock);
+    private boolean hasActivePlan(UUID accountId, PlanKind kind) {
+        LocalDate today = LocalDate.now(clock);
         return entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(accountId, kind)
-                .filter(e -> !e.getExpiresOn().isBefore(homNay))
+                .filter(e -> !e.getExpiresOn().isBefore(today))
                 .isPresent();
     }
 
-    private Transaction cuaToi(UUID accountId, long orderCode) {
-        Transaction tx = transactionRepo.khoaTheoOrderCode(orderCode)
+    private Transaction findOwnedTransaction(UUID accountId, long orderCode) {
+        Transaction tx = transactionRepo.lockByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
         if (!tx.getAccount().getId().equals(accountId)) {
             throw new AppException(ErrorCode.FORBIDDEN);
@@ -319,12 +319,12 @@ public class PaymentServiceImpl implements PaymentService {
      * PayOS cần orderCode là số dương, duy nhất trong kênh, tối đa 9007199254740991.
      * Cách sinh: mili-giây hiện tại × 1000 + 3 chữ số ngẫu nhiên (≈1,8e15 < 9e15); trùng thì UNIQUE ở DB chặn.
      */
-    private long sinhOrderCode() {
+    private long generateOrderCode() {
         return Instant.now(clock).toEpochMilli() * 1000 + ThreadLocalRandom.current().nextInt(1000);
     }
 
     /** PayOS gửi "yyyy-MM-dd HH:mm:ss" theo giờ Việt Nam; đọc không ra thì lấy giờ hiện tại. */
-    private Instant docThoiDiem(String s) {
+    private Instant parsePayosTime(String s) {
         try {
             return LocalDateTime.parse(s, PAYOS_TIME).atZone(clock.getZone()).toInstant();
         } catch (Exception e) {

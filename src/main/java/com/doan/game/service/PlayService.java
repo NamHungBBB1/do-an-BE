@@ -12,8 +12,8 @@ import java.util.UUID;
  */
 public interface PlayService {
 
-    void nhanLoChuong(UUID slotId, ChapterBatchRequest req);
+    void submitChapterBatch(UUID slotId, ChapterBatchRequest req);
 
-    RunStateResponse xemTrangThai(UUID slotId);
+    RunStateResponse getRunState(UUID slotId);
 
 }

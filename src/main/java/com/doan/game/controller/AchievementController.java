@@ -15,7 +15,7 @@ public class AchievementController {
     private final AchievementService achievementService;
 
     @GetMapping
-    public void xemThanhTuu() {
+    public void listAchievements() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

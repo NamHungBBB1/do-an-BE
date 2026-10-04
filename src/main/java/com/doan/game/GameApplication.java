@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 // @EnableAsync cho MailService: gửi mail KHÔNG được nằm trong luồng của /register.
 // EXE201 từng để register treo theo SMTP vì gửi đồng bộ trong transaction.
 @EnableAsync
-// @EnableScheduling cho PaymentService.quetGiaoDichTreo: đối soát giao dịch PENDING với PayOS.
+// @EnableScheduling cho PaymentService.sweepPendingTransactions: đối soát giao dịch PENDING với PayOS.
 @EnableScheduling
 @SpringBootApplication
 public class GameApplication {
