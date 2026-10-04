@@ -56,6 +56,12 @@ public class Account {
      * Khi nào thu vai ADMIN hoặc thu gói cũng phải tăng số này — không thì vai/trong token cũ
      * vẫn còn tới khi token hết hạn.
      */
-    @Column(name = "token_version")
+    /**
+     * nullable=false + default 0 là BẮT BUỘC với cột mới thêm trên DB đã có dữ liệu:
+     * ddl-auto=update tạo cột cho phép NULL, nạp tài khoản cũ là Hibernate ném
+     * JpaSystemException "Null value was assigned to a property of primitive type" và
+     * đăng nhập ra 500. Câu default 0 also điền sẵn 0 cho các dòng cũ khi ALTER chạy.
+     */
+    @Column(name = "token_version", nullable = false, columnDefinition = "integer default 0 not null")
     private int tokenVersion;
 }

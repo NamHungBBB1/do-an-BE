@@ -158,9 +158,14 @@ public class AuthController {
     /**
      * Biến thể form-urlencoded cho trang ở trên: trình duyệt gửi form, không có ứng dụng JS nào để
      * dựng JSON. Trả HTML để người dùng thấy kết quả ngay tại chỗ, không bị ném về JSON lạnh lẽo.
-     * Lỗi vẫn ném ra GlobalExceptionHandler như mọi endpoint khác.
+     * Lỗi NGHIỆP VỤ trong form này cũng bắt và trả HTML (xem nhánh try bên dưới).
+     *
+     * produces BẮT BUỘC: không có thì Spring gán Content-Type mặc định text/plain và trình duyệt
+     * hiện nguyên chữ "<h1 ...>Đã đổi mật khẩu</h1>" thay vì render trang.
      */
-    @PostMapping(value = "/password/reset", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PostMapping(value = "/password/reset",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+            produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
     public ResponseEntity<String> datLaiMatKhauQuaForm(@RequestParam String token, @RequestParam String newPassword) {
         try {
             authService.datLaiMatKhau(new ResetPasswordRequest(token, newPassword));

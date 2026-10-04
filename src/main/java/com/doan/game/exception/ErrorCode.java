@@ -18,6 +18,7 @@ public enum ErrorCode {
     VALIDATION_FAILED(1001, "Dữ liệu gửi lên không hợp lệ", HttpStatus.BAD_REQUEST),
     MALFORMED_BODY(1002, "Body không đọc được", HttpStatus.BAD_REQUEST),
     NOT_FOUND(1003, "Không tìm thấy", HttpStatus.NOT_FOUND),
+    NOT_IMPLEMENTED(1004, "Chức năng này chưa được cài đặt", HttpStatus.NOT_IMPLEMENTED),
 
     SEED_REQUIRED(2001, "Thiếu seed — không có seed thì không so sánh được giữa các lượt chơi",
             HttpStatus.BAD_REQUEST),

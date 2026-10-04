@@ -322,7 +322,18 @@ class AuthFlowTest {
                         .param("token", token)
                         .param("newPassword", "matkhaumoi123"))
                 .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
                 .andExpect(content().string(containsString("Đã đổi mật khẩu")));
+
+        // Trang LỖI cũng phải là HTML và giữ mã lỗi: thiếu produces thì trình duyệt nhận
+        // text/plain và hiện nguyên chuỗi thẻ <h1> thay vì render (RV-02 L-14).
+        mvc.perform(post("/api/auth/password/reset")
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .param("token", "khong-phai-token")
+                        .param("newPassword", "matkhaumoi123"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Bấm lại link trong mail")));
 
         mvc.perform(dangNhap(email, "matkhau123"))
                 .andExpect(status().isUnauthorized());
@@ -426,6 +437,20 @@ class AuthFlowTest {
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer khong-phai-jwt"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(3003));
+    }
+
+    // ------------------------------------------------------------------ 16
+    /**
+     * Google chưa cài (thiếu OAuth client ID) phải trả 501/1004 rõ ràng. Ném
+     * UnsupportedOperationException thì rơi xuống lưới cuối thành 500 "Lỗi chưa phân loại".
+     */
+    @Test
+    void dangNhapGoogleChuaCaiDatTra501() throws Exception {
+        mvc.perform(post("/api/auth/login/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"GOOGLE\",\"idToken\":\"gia-mao\"}"))
+                .andExpect(status().isNotImplemented())
+                .andExpect(jsonPath("$.code").value(1004));
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu

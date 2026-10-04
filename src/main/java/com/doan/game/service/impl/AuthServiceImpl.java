@@ -357,7 +357,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenResponse dangNhapGoogle(String idToken) {
         // Cần spring-security-oauth2-client + GoogleIdTokenVerifier, và chưa có OAuth client ID.
-        throw new UnsupportedOperationException("chua cai dat — can OAuth client ID cua Google");
+        // AppException chứ không phải UnsupportedOperationException: ném loại kia rơi xuống lưới
+        // cuối thành 500 "Lỗi chưa phân loại" — endpoint này permitAll nên FE gọi thử là thấy lỗi máy.
+        throw new AppException(ErrorCode.NOT_IMPLEMENTED, "cần OAuth client ID của Google");
     }
 
     @Override
