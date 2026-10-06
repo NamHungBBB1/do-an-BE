@@ -38,7 +38,7 @@ public enum ErrorCode {
     SLOT_ARCHIVED(3009, "Lớp học đã kết thúc, mã này không dùng được nữa", HttpStatus.GONE),
     SLOT_ALREADY_LINKED(3010, "Slot đã liên kết với tài khoản khác", HttpStatus.CONFLICT),
 
-    EMAIL_NOT_VERIFIED(3011, "Chưa xác thực email — mở hộp thư và bấm link trong mail",
+    EMAIL_NOT_VERIFIED(3011, "Chưa xác thực email — nhập mã trong mail, hoặc bấm gửi lại mã",
             HttpStatus.FORBIDDEN),
     VERIFY_TOKEN_INVALID(3012, "Mã xác thực không đúng, đã dùng hoặc đã nhập sai quá 5 lần — xin mã mới", HttpStatus.BAD_REQUEST),
     VERIFY_TOKEN_EXPIRED(3013, "Mã xác thực đã hết hạn, bấm gửi lại mã", HttpStatus.GONE),
@@ -47,12 +47,12 @@ public enum ErrorCode {
             HttpStatus.TOO_MANY_REQUESTS),
     ACCOUNT_LOCKED(3016, "Sai mật khẩu quá nhiều lần, thử lại sau 15 phút",
             HttpStatus.LOCKED),
-    /** Tách khỏi 3012/3013 vì câu chữ trong mail là "link đặt lại mật khẩu", đọc chung sẽ thành sai ngữ cảnh. */
+    /** Tách khỏi 3012/3013: mã đặt lại mật khẩu và mã xác minh là hai việc khác nhau, gộp thì đọc sai ngữ cảnh. */
     RESET_TOKEN_INVALID(3017, "Mã đặt lại mật khẩu không đúng, đã dùng hoặc đã nhập sai quá 5 lần — xin mã mới", HttpStatus.BAD_REQUEST),
     RESET_TOKEN_EXPIRED(3018, "Mã đặt lại mật khẩu đã hết hạn, xin mã mới",
             HttpStatus.GONE),
-    /** Không giới hạn số lần xin link thì chính chỗ này thành công cụ spam mail tới người khác. */
-    RESET_TOO_SOON(3019, "Vừa gửi link đặt lại mật khẩu xong, đợi một phút rồi thử lại",
+    /** Không giới hạn số lần xin mã thì chính chỗ này thành công cụ spam mail tới người khác. */
+    RESET_TOO_SOON(3019, "Vừa gửi mã đặt lại mật khẩu xong, đợi một phút rồi thử lại",
             HttpStatus.TOO_MANY_REQUESTS),
 
     /**
