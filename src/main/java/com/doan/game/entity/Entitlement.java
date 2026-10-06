@@ -14,7 +14,8 @@ import lombok.Setter;
  * startsOn + 3 tháng − 1 ngày. Gia hạn tạo dòng mới, bắt đầu từ ngày sau hạn cũ nên không mất
  * ngày. Admin cấp được gói không cần thanh toán (source = ADMIN, ghi grantedById). BE kiểm bằng
  * EntitlementService.activePlans ở mọi thao tác. Ràng buộc: CHECK: source = PAYMENT thì
- * transactionId NOT NULL; source = ADMIN thì grantedById NOT NULL
+ * transactionId NOT NULL; source = ADMIN thì grantedById NOT NULL và reason NOT NULL (Hưng chốt
+ * 06/10)
  */
 @Entity
 @Table(name = "entitlement")
@@ -55,6 +56,9 @@ public class Entitlement {
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "granted_by_id", nullable = true)
     private Account grantedBy;
+
+    @Column(name = "reason", length = 255)
+    private String reason;
 
     @Column(name = "created_at")
     private Instant createdAt;
