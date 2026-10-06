@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -28,4 +29,10 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     @Query("select distinct e.kind from Entitlement e "
             + "where e.account.id = :id and e.startsOn <= :homNay and e.expiresOn >= :homNay")
     Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("homNay") LocalDate today);
+
+    /**
+     * Lịch sử gói của một tài khoản, hạn mới nhất đứng trước. CÓ cả gói hết hạn: người dùng cần
+     * thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
+     */
+    List<Entitlement> findByAccount_IdOrderByExpiresOnDesc(UUID accountId);
 }

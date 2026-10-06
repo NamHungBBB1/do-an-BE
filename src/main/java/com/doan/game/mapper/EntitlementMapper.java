@@ -15,6 +15,11 @@ public final class EntitlementMapper {
     }
 
     public static EntitlementResponse toResponse(Entitlement source) {
-        throw new UnsupportedOperationException("chua cai dat");
+        return new EntitlementResponse(
+                source.getId(),
+                source.getKind() == null ? null : source.getKind().name(),
+                source.getStartsOn(),
+                source.getExpiresOn(),
+                source.getSource() == null ? null : source.getSource().name());
     }
 }

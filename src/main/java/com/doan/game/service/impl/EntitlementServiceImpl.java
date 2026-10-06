@@ -41,9 +41,16 @@ public class EntitlementServiceImpl implements EntitlementService {
         return entitlementRepo.findActivePlanKinds(accountId, LocalDate.now(clock));
     }
 
+    /**
+     * Lịch sử gói của chính người gọi, hạn mới nhất trước. Trả cả gói hết hạn — còn hạn hay không
+     * là việc của activePlans (/api/auth/me), ở đây người dùng muốn xem đã mua / được cấp gì.
+     */
     @Override
+    @Transactional(readOnly = true)
     public java.util.List<EntitlementResponse> listPlans(UUID accountId) {
-        throw new UnsupportedOperationException("chua cai dat");
+        return entitlementRepo.findByAccount_IdOrderByExpiresOnDesc(accountId).stream()
+                .map(com.doan.game.mapper.EntitlementMapper::toResponse)
+                .toList();
     }
 
     @Override
