@@ -276,7 +276,7 @@ public class PaymentServiceImpl implements PaymentService {
      */
     private Entitlement buildEntitlementFrom(Transaction tx) {
         int months = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
-        return entitlementFactory.tao(tx.getAccount(), tx.getKind(), months,
+        return entitlementFactory.create(tx.getAccount(), tx.getKind(), months,
                 EntitlementSource.PAYMENT, tx, null, null);
     }
 

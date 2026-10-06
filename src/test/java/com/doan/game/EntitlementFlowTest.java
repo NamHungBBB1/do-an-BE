@@ -92,8 +92,8 @@ class EntitlementFlowTest {
     @Test
     void neverShowsAnotherAccountsPlan() throws Exception {
         Account mine = account();
-        Account khac = account();
-        entitlement(khac, PlanKind.PARENT, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31), Instant.now());
+        Account other = account();
+        entitlement(other, PlanKind.PARENT, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31), Instant.now());
 
         mvc.perform(get("/api/entitlements").with(asAccount(mine)))
                 .andExpect(status().isOk())
@@ -123,17 +123,17 @@ class EntitlementFlowTest {
     @Test
     void adminGrantsPlanAndOwnerSeesItImmediately() throws Exception {
         Account admin = account();
-        Account nhan = account();
+        Account recipient = account();
 
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 3, "dung thu 3 thang")))
+                        .content(grantJson(recipient, "PARENT", 3, "dung thu 3 thang")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.result.kind").value("PARENT"))
                 .andExpect(jsonPath("$.result.source").value("ADMIN"));
 
-        mvc.perform(get("/api/entitlements").with(asAccount(nhan)))
+        mvc.perform(get("/api/entitlements").with(asAccount(recipient)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.length()").value(1))
                 .andExpect(jsonPath("$.result[0].kind").value("PARENT"));
@@ -143,12 +143,12 @@ class EntitlementFlowTest {
     @Test
     void grantRenewsFromDayAfterPreviousExpiry() throws Exception {
         Account admin = account();
-        Account nhan = account();
-        entitlement(nhan, PlanKind.PARENT, LocalDate.of(2025, 10, 1), LocalDate.of(2026, 12, 31), Instant.now());
+        Account recipient = account();
+        entitlement(recipient, PlanKind.PARENT, LocalDate.of(2025, 10, 1), LocalDate.of(2026, 12, 31), Instant.now());
 
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 3, "keo dai som")))
+                        .content(grantJson(recipient, "PARENT", 3, "keo dai som")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.startsOn").value("2027-01-01"))
                 .andExpect(jsonPath("$.result.expiresOn").value("2027-03-31"));
@@ -158,48 +158,48 @@ class EntitlementFlowTest {
     @Test
     void grantStartsTodayWhenPreviousPlanExpired() throws Exception {
         Account admin = account();
-        Account nhan = account();
-        entitlement(nhan, PlanKind.TEACHER, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 6, 30), Instant.now());
+        Account recipient = account();
+        entitlement(recipient, PlanKind.TEACHER, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 6, 30), Instant.now());
 
-        LocalDate homNay = LocalDate.now(ClockConfig.VN);
+        LocalDate today = LocalDate.now(ClockConfig.VN);
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "TEACHER", 6, "den bu")))
+                        .content(grantJson(recipient, "TEACHER", 6, "den bu")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.startsOn").value(homNay.toString()))
-                .andExpect(jsonPath("$.result.expiresOn").value(homNay.plusMonths(6).minusDays(1).toString()));
+                .andExpect(jsonPath("$.result.startsOn").value(today.toString()))
+                .andExpect(jsonPath("$.result.expiresOn").value(today.plusMonths(6).minusDays(1).toString()));
     }
 
     @Test
     void grantRejectsBadInput() throws Exception {
         Account admin = account();
-        Account nhan = account();
+        Account recipient = account();
 
         // months = 0
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 0, "hop le")))
+                        .content(grantJson(recipient, "PARENT", 0, "hop le")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
 
         // months = 37 (vượt 36)
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 37, "hop le")))
+                        .content(grantJson(recipient, "PARENT", 37, "hop le")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
 
         // thiếu reason
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 3, "   ")))
+                        .content(grantJson(recipient, "PARENT", 3, "   ")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
 
         // loại gói lạ
         mvc.perform(post("/api/entitlements/grant").with(asAdmin(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "VIP", 3, "hop le")))
+                        .content(grantJson(recipient, "VIP", 3, "hop le")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(4001));
 
@@ -214,12 +214,12 @@ class EntitlementFlowTest {
 
     @Test
     void nonAdminCannotGrant() throws Exception {
-        Account thuong = account();
-        Account nhan = account();
+        Account regular = account();
+        Account recipient = account();
 
-        mvc.perform(post("/api/entitlements/grant").with(asAccount(thuong))
+        mvc.perform(post("/api/entitlements/grant").with(asAccount(regular))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(grantJson(nhan, "PARENT", 3, "khong du quyen")))
+                        .content(grantJson(recipient, "PARENT", 3, "khong du quyen")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
     }
@@ -246,8 +246,8 @@ class EntitlementFlowTest {
         return entitlementRepo.save(e);
     }
 
-    private static String grantJson(Account nhan, String kind, int months, String reason) {
-        return "{\"accountId\":\"" + nhan.getId() + "\",\"kind\":\"" + kind
+    private static String grantJson(Account recipient, String kind, int months, String reason) {
+        return "{\"accountId\":\"" + recipient.getId() + "\",\"kind\":\"" + kind
                 + "\",\"months\":" + months + ",\"reason\":\"" + reason + "\"}";
     }
 

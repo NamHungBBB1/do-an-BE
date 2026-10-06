@@ -42,7 +42,7 @@ import java.util.UUID;
 public class EntitlementServiceImpl implements EntitlementService {
 
     /** Số tháng tối đa cho một lần cấp tay (Hưng chốt 06/10: 1–36). */
-    static final int THANG_TOI_DA = 36;
+    static final int MAX_GRANT_MONTHS = 36;
 
     private final EntitlementRepository entitlementRepo;
     private final AccountRepository accountRepo;
@@ -82,22 +82,22 @@ public class EntitlementServiceImpl implements EntitlementService {
         if (req.accountId() == null) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "accountId: bắt buộc");
         }
-        PlanKind kind = doiLoaiGoi(req.kind());
-        if (req.months() < 1 || req.months() > THANG_TOI_DA) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "months: phải từ 1 đến " + THANG_TOI_DA);
+        PlanKind kind = parsePlanKind(req.kind());
+        if (req.months() < 1 || req.months() > MAX_GRANT_MONTHS) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "months: phải từ 1 đến " + MAX_GRANT_MONTHS);
         }
         if (req.reason() == null || req.reason().isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "reason: bắt buộc");
         }
-        Account nguoiNhan = accountRepo.findById(req.accountId())
+        Account recipient = accountRepo.findById(req.accountId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + req.accountId()));
         Account admin = accountRepo.findById(adminId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản admin " + adminId));
 
-        Entitlement dong = entitlementFactory.tao(nguoiNhan, kind, req.months(),
+        Entitlement entitlement = entitlementFactory.create(recipient, kind, req.months(),
                 EntitlementSource.ADMIN, null, admin, req.reason().trim());
-        entitlementRepo.save(dong);
-        return EntitlementMapper.toResponse(dong);
+        entitlementRepo.save(entitlement);
+        return EntitlementMapper.toResponse(entitlement);
     }
 
     @Override
@@ -105,7 +105,7 @@ public class EntitlementServiceImpl implements EntitlementService {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
-    private static PlanKind doiLoaiGoi(String kind) {
+    private static PlanKind parsePlanKind(String kind) {
         if (kind == null) {
             throw new AppException(ErrorCode.PLAN_KIND_INVALID);
         }

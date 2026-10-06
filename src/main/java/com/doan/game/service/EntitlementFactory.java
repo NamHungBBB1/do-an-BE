@@ -29,26 +29,26 @@ public class EntitlementFactory {
     private final EntitlementRepository entitlementRepo;
     private final Clock clock;
 
-    public Entitlement tao(Account account, PlanKind kind, int months, EntitlementSource source,
-                           Transaction transaction, Account grantedBy, String reason) {
-        LocalDate homNay = LocalDate.now(clock);
-        LocalDate batDau = entitlementRepo
+    public Entitlement create(Account account, PlanKind kind, int months, EntitlementSource source,
+                              Transaction transaction, Account grantedBy, String reason) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate startDate = entitlementRepo
                 .findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), kind)
                 .map(Entitlement::getExpiresOn)
-                .map(hanCu -> hanCu.plusDays(1))
-                .filter(d -> d.isAfter(homNay))
-                .orElse(homNay);
+                .map(previousExpiry -> previousExpiry.plusDays(1))
+                .filter(d -> d.isAfter(today))
+                .orElse(today);
 
-        Entitlement e = new Entitlement();
-        e.setAccount(account);
-        e.setKind(kind);
-        e.setSource(source);
-        e.setTransaction(transaction);
-        e.setGrantedBy(grantedBy);
-        e.setReason(reason);
-        e.setStartsOn(batDau);
-        e.setExpiresOn(batDau.plusMonths(months).minusDays(1));
-        e.setCreatedAt(Instant.now(clock));
-        return e;
+        Entitlement entitlement = new Entitlement();
+        entitlement.setAccount(account);
+        entitlement.setKind(kind);
+        entitlement.setSource(source);
+        entitlement.setTransaction(transaction);
+        entitlement.setGrantedBy(grantedBy);
+        entitlement.setReason(reason);
+        entitlement.setStartsOn(startDate);
+        entitlement.setExpiresOn(startDate.plusMonths(months).minusDays(1));
+        entitlement.setCreatedAt(Instant.now(clock));
+        return entitlement;
     }
 }
