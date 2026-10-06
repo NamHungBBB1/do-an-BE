@@ -632,6 +632,38 @@ class AuthFlowTest {
         assertThat(response.getResponse().getStatus()).isNotIn(401, 403);
     }
 
+    // ------------------------------------------------------------------ 23 (token thật)
+    /**
+     * Token THẬT lấy từ /api/auth/verify (đăng ký → OTP → token) rồi gọi GET /api/entitlements.
+     * Khác với EntitlementFlowTest (jwt giả): ca này đi qua RevocationAwareJwtDecoder thật, nên
+     * cửa TYP_ACCOUNT và cách decoder đọc subject được kiểm trên đúng token BE tự cấp.
+     */
+    @Test
+    void realTokenListsOwnEntitlements() throws Exception {
+        String email = "goicu-" + System.nanoTime() + "@test.local";
+        register(email);
+        String jwt = extractJwt(mvc.perform(verifyOtp(email, tokenFromMail()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        Account a = accountRepo.findByEmailIgnoreCase(email).orElseThrow();
+        Entitlement e = new Entitlement();
+        e.setAccount(a);
+        e.setKind(PlanKind.PARENT);
+        e.setStartsOn(LocalDate.now(FIXED_CLOCK).minusDays(1));
+        e.setExpiresOn(LocalDate.now(FIXED_CLOCK).plusMonths(3));
+        e.setSource(EntitlementSource.ADMIN);
+        e.setGrantedBy(a);
+        e.setCreatedAt(Instant.now(FIXED_CLOCK));
+        entitlementRepo.save(e);
+
+        mvc.perform(get("/api/entitlements").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(1))
+                .andExpect(jsonPath("$.result[0].kind").value("PARENT"));
+    }
+
     // ------------------------------------------------------------------ dựng dữ liệu
     private void register(String email) throws Exception {
         mvc.perform(post("/api/auth/register")

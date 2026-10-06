@@ -31,8 +31,9 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("homNay") LocalDate today);
 
     /**
-     * Lịch sử gói của một tài khoản, hạn mới nhất đứng trước. CÓ cả gói hết hạn: người dùng cần
-     * thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
+     * Lịch sử gói của một tài khoản, hạn mới nhất đứng trước; hai gói cùng hạn thì dòng tạo sau
+     * đứng trước (createdAt) để thứ tự không phụ thuộc thứ tự ghi của CSDL. CÓ cả gói hết hạn:
+     * người dùng cần thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
      */
-    List<Entitlement> findByAccount_IdOrderByExpiresOnDesc(UUID accountId);
+    List<Entitlement> findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(UUID accountId);
 }

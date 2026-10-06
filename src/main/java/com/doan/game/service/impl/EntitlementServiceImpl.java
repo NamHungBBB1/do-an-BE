@@ -1,9 +1,17 @@
 package com.doan.game.service.impl;
 
-import com.doan.game.DTO.request.*;
-import com.doan.game.DTO.response.*;
+import com.doan.game.DTO.request.GrantPlanRequest;
+import com.doan.game.DTO.response.EntitlementResponse;
+import com.doan.game.entity.Account;
+import com.doan.game.entity.Entitlement;
+import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
+import com.doan.game.exception.AppException;
+import com.doan.game.exception.ErrorCode;
+import com.doan.game.mapper.EntitlementMapper;
+import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
+import com.doan.game.service.EntitlementFactory;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -11,24 +19,34 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Gói đang giữ. Parent / Teacher KHÔNG lưu ở Account mà suy từ Entitlement còn hạn, tính theo NGÀY giờ Việt Nam; mọi thao tác cần gói đều gọi lại activePlans, không tin vai trong JWT. Admin cấp được gói không cần thanh toán.
  *
- * CÓ RUỘT phần activePlans (02/10, làm cùng đợt AuthService): đây là nơi duy nhất quyết định
- * một tài khoản có gói hay không, nên nó phải chạy được TRƯỚC khi AuthService phát token.
- * activePlans xong thì AccountResponse và scope PARENT / TEACHER mới lấp được.
+ * CÓ RUỘT cả ba hàm (06/10):
+ * - activePlans (02/10): nơi duy nhất quyết định một tài khoản có gói hay không, nên nó phải chạy
+ *   được TRƯỚC khi AuthService phát token. activePlans xong thì AccountResponse và scope
+ *   PARENT / TEACHER mới lấp được.
+ * - listPlans: lịch sử gói của chính người gọi, cả gói hết hạn.
+ * - grantPlan: admin cấp tay, dựng dòng qua EntitlementFactory — cùng một quy tắc ngày với payment.
  *
- * Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném UnsupportedOperationException
- * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
+ * Phần remindExpiringPlans vẫn là KHUNG — ném UnsupportedOperationException để không ai vô tình
+ * dùng một lớp rỗng mà tưởng nó chạy.
  */
 @Service
 @RequiredArgsConstructor
 public class EntitlementServiceImpl implements EntitlementService {
 
+    /** Số tháng tối đa cho một lần cấp tay (Hưng chốt 06/10: 1–36). */
+    static final int THANG_TOI_DA = 36;
+
     private final EntitlementRepository entitlementRepo;
+    private final AccountRepository accountRepo;
+    private final EntitlementFactory entitlementFactory;
     private final Clock clock;
 
     /**
@@ -47,20 +65,55 @@ public class EntitlementServiceImpl implements EntitlementService {
      */
     @Override
     @Transactional(readOnly = true)
-    public java.util.List<EntitlementResponse> listPlans(UUID accountId) {
-        return entitlementRepo.findByAccount_IdOrderByExpiresOnDesc(accountId).stream()
-                .map(com.doan.game.mapper.EntitlementMapper::toResponse)
+    public List<EntitlementResponse> listPlans(UUID accountId) {
+        return entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(accountId).stream()
+                .map(EntitlementMapper::toResponse)
                 .toList();
     }
 
+    /**
+     * Admin cấp gói không qua thanh toán (dùng thử, đền bù). Nghiệp vụ nằm hết ở đây để controller
+     * chỉ nhận và gọi: kiểm dữ liệu, tìm hai tài khoản, dựng dòng qua EntitlementFactory
+     * (source = ADMIN, grantedBy = admin, transaction = null — Hưng chốt 06/10).
+     */
     @Override
+    @Transactional
     public EntitlementResponse grantPlan(UUID adminId, GrantPlanRequest req) {
-        throw new UnsupportedOperationException("chua cai dat");
+        if (req.accountId() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "accountId: bắt buộc");
+        }
+        PlanKind kind = doiLoaiGoi(req.kind());
+        if (req.months() < 1 || req.months() > THANG_TOI_DA) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "months: phải từ 1 đến " + THANG_TOI_DA);
+        }
+        if (req.reason() == null || req.reason().isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "reason: bắt buộc");
+        }
+        Account nguoiNhan = accountRepo.findById(req.accountId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + req.accountId()));
+        Account admin = accountRepo.findById(adminId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản admin " + adminId));
+
+        Entitlement dong = entitlementFactory.tao(nguoiNhan, kind, req.months(),
+                EntitlementSource.ADMIN, null, admin, req.reason().trim());
+        entitlementRepo.save(dong);
+        return EntitlementMapper.toResponse(dong);
     }
 
     @Override
-    public void remindExpiringPlans(java.time.LocalDate today) {
+    public void remindExpiringPlans(LocalDate today) {
         throw new UnsupportedOperationException("chua cai dat");
+    }
+
+    private static PlanKind doiLoaiGoi(String kind) {
+        if (kind == null) {
+            throw new AppException(ErrorCode.PLAN_KIND_INVALID);
+        }
+        try {
+            return PlanKind.valueOf(kind.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.PLAN_KIND_INVALID);
+        }
     }
 
 }

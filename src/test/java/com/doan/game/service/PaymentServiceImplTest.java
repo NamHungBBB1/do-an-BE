@@ -60,7 +60,8 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        svc = new PaymentServiceImpl(transactionRepo, entitlementRepo, accountRepo, planRepo, payOSProvider,
+        svc = new PaymentServiceImpl(transactionRepo, entitlementRepo,
+                new EntitlementFactory(entitlementRepo, clock), accountRepo, planRepo, payOSProvider,
                 new PayOsProperties("id", "key", "sum", "https://x/webhook", "https://fe/ok", "https://fe/cancel"),
                 clock, new ObjectMapper());
         account = new Account();

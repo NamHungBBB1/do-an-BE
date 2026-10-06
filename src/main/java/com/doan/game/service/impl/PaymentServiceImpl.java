@@ -19,6 +19,7 @@ import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.PlanRepository;
 import com.doan.game.repository.TransactionRepository;
+import com.doan.game.service.EntitlementFactory;
 import com.doan.game.service.PaymentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final TransactionRepository transactionRepo;
     private final EntitlementRepository entitlementRepo;
+    /** Quy tắc ngày của gói sống ở đó, dùng chung cho admin cấp tay. */
+    private final EntitlementFactory entitlementFactory;
     private final AccountRepository accountRepo;
     private final PlanRepository planRepo;
     /** Không có khoá thì không có bean (PayOsConfig); getIfAvailable() trả null thay vì chết lúc khởi động. */
@@ -268,27 +271,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Gói mới bắt đầu từ hôm nay, hoặc từ ngày sau hạn của gói còn hiệu lực (gia hạn sớm không mất ngày);
-     * dùng hết ngày expiresOn, nên expiresOn = startsOn + N tháng − 1 ngày. N đọc từ Plan lúc cấp
-     * (dòng Plan không có đường xoá; orElse chỉ để webhook không bao giờ ném).
+     * N đọc từ Plan lúc cấp (dòng Plan không có đường xoá; orElse chỉ để webhook không bao giờ ném).
+     * Ngày startsOn / expiresOn do EntitlementFactory tính, dùng chung với admin cấp tay.
      */
     private Entitlement buildEntitlementFrom(Transaction tx) {
-        LocalDate today = LocalDate.now(clock);
-        LocalDate startDate = entitlementRepo
-                .findTopByAccount_IdAndKindOrderByExpiresOnDesc(tx.getAccount().getId(), tx.getKind())
-                .map(e -> e.getExpiresOn().plusDays(1))
-                .filter(d -> d.isAfter(today))
-                .orElse(today);
         int months = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
-        Entitlement e = new Entitlement();
-        e.setAccount(tx.getAccount());
-        e.setKind(tx.getKind());
-        e.setSource(EntitlementSource.PAYMENT);
-        e.setTransaction(tx);
-        e.setStartsOn(startDate);
-        e.setExpiresOn(startDate.plusMonths(months).minusDays(1));
-        e.setCreatedAt(Instant.now(clock));
-        return e;
+        return entitlementFactory.tao(tx.getAccount(), tx.getKind(), months,
+                EntitlementSource.PAYMENT, tx, null, null);
     }
 
     private boolean hasActivePlan(UUID accountId, PlanKind kind) {
