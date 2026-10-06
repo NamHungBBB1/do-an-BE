@@ -6,6 +6,7 @@ import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
 import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
+import com.doan.game.DTO.request.VerifyEmailRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.TokenResponse;
 import com.doan.game.security.FirebaseIdTokenDecoder;
@@ -41,16 +42,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -78,8 +74,10 @@ public class AuthServiceImpl implements AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
 
     /** Link xác minh email dùng lâu, đặt lại mật khẩu thì ngắn — token đó mở được tài khoản. */
-    private static final Duration VERIFY_EMAIL_TTL = Duration.ofHours(24);
-    private static final Duration RESET_PASSWORD_TTL = Duration.ofMinutes(30);
+    /** Mã OTP 6 số (chốt 14/09): hết hạn 10 phút, sai 5 lần là hỏng, phải xin mã mới. */
+    private static final Duration OTP_TTL = Duration.ofMinutes(10);
+    private static final int MAX_OTP_ATTEMPTS = 5;
+    private static final Pattern OTP_PATTERN = Pattern.compile("^\\d{6}$");
     /** Gửi lại mail cách nhau tối thiểu một phút, chặn spam tới hộp thư người khác. */
     private static final Duration RESEND_COOLDOWN = Duration.ofMinutes(1);
     private static final int MAX_PASSWORD_ATTEMPTS = 5;
@@ -103,10 +101,6 @@ public class AuthServiceImpl implements AuthService {
     private final TransactionTemplate txTemplate;
 
     private final SecureRandom rng = new SecureRandom();
-
-    /** Gốc URL đặt trong link xác minh. Không có sau dấu "/" để nối link cho sạch. */
-    @Value("${app.public-base-url:http://localhost:8080}")
-    String publicBaseUrl;
 
     /** Danh sách email được cấp ADMIN ngay khi xác minh xong. Rỗng thì không ai tự cấp. */
     @Value("${app.admin-emails:}")
@@ -164,31 +158,41 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.EMAIL_TAKEN);
         }
 
-        sendVerificationMail(a, createToken(a, TokenPurpose.VERIFY_EMAIL, VERIFY_EMAIL_TTL));
+        sendVerificationMail(a, createOtp(a, TokenPurpose.VERIFY_EMAIL));
 
         // KHÔNG trả token: chưa xác minh thì chưa đăng nhập được, trả token chỉ là hứa hão.
         return AccountMapper.toResponse(a);
     }
 
     // ================================================================ xác minh email
+    /**
+     * Nhập mã OTP trong mail đăng ký. Đúng thì xác minh VÀ trả token luôn — người dùng vừa chứng
+     * minh sở hữu hộp thư, bắt đăng nhập lại chỉ thêm một bước thừa.
+     *
+     * CỐ Ý KHÔNG @Transactional (cùng bẫy với login): nhập sai phải tăng bộ đếm rồi ném lỗi; trong
+     * transaction thì rollback xoá luôn bộ đếm và 5 lần sai không bao giờ khoá được mã.
+     */
     @Override
-    @Transactional
-    public void verifyEmail(String rawToken) {
-        VerificationToken t = findToken(rawToken, TokenPurpose.VERIFY_EMAIL);
-
-        Account a = t.getAccount();
-        Instant now = Instant.now(clock);
-        if (a.getEmailVerifiedAt() != null) {
+    public TokenResponse verifyEmail(VerifyEmailRequest req) {
+        Account found = findAccountForOtp(req == null ? null : req.email(), TokenPurpose.VERIFY_EMAIL);
+        if (found.getEmailVerifiedAt() != null) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
         }
-        a.setEmailVerifiedAt(now);
-        t.setUsedAt(now);
-        // Email đã xác minh ở phía mình thì cũng xác minh ở đường vào tương ứng.
-        credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD)
-                .ifPresent(c -> c.setEmailVerifiedAt(now));
+        VerificationToken checked = checkOtp(found, req.otp(), TokenPurpose.VERIFY_EMAIL);
 
-        grantBootstrapAdmin(a);
-        log.info("Xác minh email tài khoản {} xong", a.getId());
+        return txTemplate.execute(status -> {
+            Instant now = Instant.now(clock);
+            VerificationToken t = tokenRepo.findById(checked.getId()).orElseThrow();
+            Account a = t.getAccount();
+            a.setEmailVerifiedAt(now);
+            t.setUsedAt(now);
+            // Email đã xác minh ở phía mình thì cũng xác minh ở đường vào tương ứng.
+            credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD)
+                    .ifPresent(c -> c.setEmailVerifiedAt(now));
+            grantBootstrapAdmin(a);
+            log.info("Xác minh email tài khoản {} xong", a.getId());
+            return issueToken(a);
+        });
     }
 
     // ================================================================ đăng nhập
@@ -258,8 +262,7 @@ public class AuthServiceImpl implements AuthService {
         if (isResendTooSoon(a, TokenPurpose.RESET_PASSWORD)) {
             return;
         }
-        IssuedToken tc = createToken(a, TokenPurpose.RESET_PASSWORD, RESET_PASSWORD_TTL);
-        sendResetPasswordMail(a, tc);
+        sendResetPasswordMail(a, createOtp(a, TokenPurpose.RESET_PASSWORD));
     }
 
     /**
@@ -278,22 +281,28 @@ public class AuthServiceImpl implements AuthService {
         if (isResendTooSoon(a, TokenPurpose.VERIFY_EMAIL)) {
             return;
         }
-        sendVerificationMail(a, createToken(a, TokenPurpose.VERIFY_EMAIL, VERIFY_EMAIL_TTL));
+        sendVerificationMail(a, createOtp(a, TokenPurpose.VERIFY_EMAIL));
     }
 
+    /** CỐ Ý KHÔNG @Transactional — xem verifyEmail: bộ đếm nhập sai phải sống qua lỗi. */
     @Override
-    @Transactional
     public void resetPassword(ResetPasswordRequest req) {
         if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_PASSWORD_LENGTH) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu mới tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
         }
-        VerificationToken t = findToken(req.token(), TokenPurpose.RESET_PASSWORD);
+        Account found = findAccountForOtp(req.email(), TokenPurpose.RESET_PASSWORD);
+        VerificationToken checked = checkOtp(found, req.otp(), TokenPurpose.RESET_PASSWORD);
+        txTemplate.executeWithoutResult(status -> applyNewPassword(checked.getId(), req.newPassword()));
+    }
+
+    private void applyNewPassword(UUID tokenId, String newPassword) {
+        VerificationToken t = tokenRepo.findById(tokenId).orElseThrow();
         Account a = t.getAccount();
         Instant now = Instant.now(clock);
 
         Credential c = credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_CREDENTIALS));
-        c.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        c.setPasswordHash(passwordEncoder.encode(newPassword));
         c.setLastUsedAt(now);
         credentialRepo.save(c);
 
@@ -306,8 +315,7 @@ public class AuthServiceImpl implements AuthService {
         a.setTokenVersion(a.getTokenVersion() + 1);
         accountRepo.save(a);
 
-        // Vô hiệu MỌI link đặt lại còn hiệu lực, không chỉ link vừa dùng — nếu không thì một link
-        // cũ bị chặn chưa ai dùng vẫn dùng được và đặt lại mật khẩu lần nữa.
+        // Vô hiệu MỌI mã đặt lại còn hiệu lực, không chỉ mã vừa dùng.
         tokenRepo.findByAccount_IdAndPurposeAndUsedAtIsNull(a.getId(), TokenPurpose.RESET_PASSWORD)
                 .forEach(x -> x.setUsedAt(now));
 
@@ -557,44 +565,59 @@ public class AuthServiceImpl implements AuthService {
         return s;
     }
 
-    /** Token mới 32 byte; trả cả bản ghi để ghi usedAt, và bản GỐC để đưa vào mail. */
-    private record IssuedToken(String raw, VerificationToken record) {
-    }
-
-    private IssuedToken createToken(Account a, TokenPurpose purpose, Duration ttl) {
-        byte[] randomBytes = new byte[32];
-        rng.nextBytes(randomBytes);
-        String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    /**
+     * Sinh mã OTP 6 số, trả mã GỐC để đưa vào mail; bảng chỉ giữ hash BCrypt (có muối, nên hai
+     * người trùng mã không trùng hash — cột tokenHash vẫn UNIQUE được). Mã cũ chưa dùng của cùng
+     * mục đích bị huỷ: lúc nào cũng chỉ MỘT mã sống, "gửi lại mã" không nhân đôi số lần đoán.
+     */
+    private String createOtp(Account a, TokenPurpose purpose) {
         Instant now = Instant.now(clock);
+        tokenRepo.findByAccount_IdAndPurposeAndUsedAtIsNull(a.getId(), purpose).forEach(x -> x.setUsedAt(now));
+        String otp = String.format("%06d", rng.nextInt(1_000_000));
         VerificationToken t = new VerificationToken();
         t.setAccount(a);
         t.setPurpose(purpose);
-        t.setTokenHash(sha256Hex(raw));
-        t.setExpiresAt(now.plus(ttl));
+        t.setTokenHash(passwordEncoder.encode(otp));
+        t.setAttempts(0);
+        t.setExpiresAt(now.plus(OTP_TTL));
         t.setCreatedAt(now);
-        return new IssuedToken(raw, tokenRepo.save(t));
+        tokenRepo.save(t);
+        return otp;
+    }
+
+    /** Email không có tài khoản trả CÙNG lỗi với mã sai — không lộ email nào đã đăng ký. */
+    private Account findAccountForOtp(String email, TokenPurpose purpose) {
+        String e = normalizeEmail(email);
+        Account a = e == null ? null : accountRepo.findByEmailIgnoreCase(e).orElse(null);
+        if (a == null) {
+            throw new AppException(invalidTokenError(purpose));
+        }
+        return a;
     }
 
     /**
-     * Băm lại token người dùng đưa rồi mới tra — bảng KHÔNG có token gốc để mà so.
-     * Hết hạn và dùng rồi là hai lỗi khác nhau: hết hạn thì bảo "bấm gửi lại", dùng rồi thì
-     * bảo "không đúng hoặc đã dùng" — gộp hai cái lại thì người dùng không biết làm gì.
+     * Kiểm mã mới nhất còn sống. Sai thì tăng attempts và LƯU ngay (nơi gọi không có transaction)
+     * rồi mới ném; đủ 5 lần sai thì mã chết, kể cả lần sau gõ đúng.
+     * Hết hạn và sai là hai lỗi khác nhau: hết hạn thì bảo "gửi lại mã", sai thì bảo "không đúng".
      */
-    private VerificationToken findToken(String rawToken, TokenPurpose expectedPurpose) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new AppException(invalidTokenError(expectedPurpose));
-        }
-        VerificationToken t = tokenRepo.findByTokenHash(sha256Hex(rawToken))
-                .orElseThrow(() -> new AppException(invalidTokenError(expectedPurpose)));
-        if (t.getUsedAt() != null) {
-            throw new AppException(invalidTokenError(expectedPurpose));
-        }
-        if (!expectedPurpose.equals(t.getPurpose())) {
-            throw new AppException(invalidTokenError(expectedPurpose));
-        }
+    private VerificationToken checkOtp(Account a, String otp, TokenPurpose purpose) {
+        ErrorCode invalid = invalidTokenError(purpose);
+        VerificationToken t = tokenRepo.findTopByAccount_IdAndPurposeOrderByCreatedAtDesc(a.getId(), purpose)
+                .filter(x -> x.getUsedAt() == null)
+                .orElseThrow(() -> new AppException(invalid));
         if (t.getExpiresAt().isBefore(Instant.now(clock))) {
-            throw new AppException(expectedPurpose == TokenPurpose.RESET_PASSWORD
+            throw new AppException(purpose == TokenPurpose.RESET_PASSWORD
                     ? ErrorCode.RESET_TOKEN_EXPIRED : ErrorCode.VERIFY_TOKEN_EXPIRED);
+        }
+        int attempts = t.getAttempts() == null ? 0 : t.getAttempts();
+        if (attempts >= MAX_OTP_ATTEMPTS) {
+            throw new AppException(invalid);
+        }
+        String code = otp == null ? "" : otp.trim();
+        if (!OTP_PATTERN.matcher(code).matches() || !passwordEncoder.matches(code, t.getTokenHash())) {
+            t.setAttempts(attempts + 1);
+            tokenRepo.save(t);
+            throw new AppException(invalid);
         }
         return t;
     }
@@ -671,29 +694,27 @@ public class AuthServiceImpl implements AuthService {
         return false;
     }
 
-    private void sendVerificationMail(Account a, IssuedToken tc) {
-        String link = publicBaseUrl + "/api/auth/verify?token=" + tc.raw();
-        events.publishEvent(new OutgoingMail(a.getEmail(), "Xác minh email FinTeen",
+    private void sendVerificationMail(Account a, String otp) {
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã xác minh FinTeen: " + otp,
                 """
                         <p>Chào %s,</p>
-                        <p>Cảm ơn bạn đã tạo tài khoản FinTeen. Bấm nút dưới để xác minh email, xong là
-                        bạn đăng nhập được ngay.</p>
-                        <p><a href="%s">Xác minh email</a></p>
-                        <p>Link hết hạn sau 24 giờ và chỉ dùng được một lần. Không phải bạn xin link này
-                        thì kệ, không có gì xảy ra.</p>
-                        """.formatted(escape(a.getDisplayName()), escape(link))));
+                        <p>Cảm ơn bạn đã tạo tài khoản FinTeen. Nhập mã dưới đây vào ứng dụng để xác minh email:</p>
+                        <p style="font-size:28px;font-weight:bold;letter-spacing:6px">%s</p>
+                        <p>Mã hết hạn sau 10 phút và chỉ dùng được một lần. Không phải bạn đăng ký thì kệ,
+                        không có gì xảy ra.</p>
+                        """.formatted(escape(a.getDisplayName()), otp)));
     }
 
-    private void sendResetPasswordMail(Account a, IssuedToken tc) {
-        String link = publicBaseUrl + "/api/auth/password/reset?token=" + tc.raw();
-        events.publishEvent(new OutgoingMail(a.getEmail(), "Đặt lại mật khẩu FinTeen",
+    private void sendResetPasswordMail(Account a, String otp) {
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã đặt lại mật khẩu FinTeen: " + otp,
                 """
                         <p>Chào %s,</p>
-                        <p>Có yêu cầu đặt lại mật khẩu cho tài khoản này. Bấm nút dưới để đặt mật khẩu mới.</p>
-                        <p><a href="%s">Đặt lại mật khẩu</a></p>
-                        <p>Link hết hạn sau 30 phút và chỉ dùng được một lần. Không phải bạn xin link này
-                        thì đừng bấm — khi đó chỉ cần báo lại mật khẩu cũ của bạn, chúng tôi không xem được.</p>
-                        """.formatted(escape(a.getDisplayName()), escape(link))));
+                        <p>Có yêu cầu đặt lại mật khẩu cho tài khoản này. Nhập mã dưới đây vào ứng dụng
+                        cùng mật khẩu mới:</p>
+                        <p style="font-size:28px;font-weight:bold;letter-spacing:6px">%s</p>
+                        <p>Mã hết hạn sau 10 phút và chỉ dùng được một lần. Không phải bạn yêu cầu thì đừng
+                        đưa mã cho ai — mật khẩu hiện tại của bạn vẫn giữ nguyên.</p>
+                        """.formatted(escape(a.getDisplayName()), otp)));
     }
 
     private static String normalizeEmail(String email) {
@@ -710,19 +731,5 @@ public class AuthServiceImpl implements AuthService {
             return "";
         }
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
-    }
-
-    /**
-     * SHA-256 chuẩn hoá hex, 64 ký tự — vừa khớp cột tokenHash CHAR(64). stdlib Java 17,
-     * không cần thêm thư viện.
-     */
-    static String sha256Hex(String s) {
-        try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 là bắt buộc phải có trong mọi JRE; không có thì JRE đó hỏng rồi.
-            throw new IllegalStateException(e);
-        }
     }
 }

@@ -9,8 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Token xác minh email và đặt lại mật khẩu, chỉ lưu SHA-256 (Register NFR đã ghi, nhưng trước đây
- * không có bảng). Dùng một lần, có hạn.
+ * Mã OTP 6 số xác minh email và đặt lại mật khẩu (chốt 14/09, làm 06/10): chỉ lưu hash BCrypt,
+ * dùng một lần, hết hạn 10 phút, sai 5 lần (attempts) là hỏng.
  */
 @Entity
 @Table(name = "verification_token")
@@ -37,6 +37,9 @@ public class VerificationToken {
 
     @Column(name = "expires_at")
     private Instant expiresAt;
+
+    @Column(name = "attempts")
+    private Integer attempts;
 
     @Column(name = "used_at")
     private Instant usedAt;

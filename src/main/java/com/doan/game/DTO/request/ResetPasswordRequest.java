@@ -1,5 +1,5 @@
 package com.doan.game.DTO.request;
 
-/** Token từ email, dùng một lần, chỉ lưu hash (VerificationToken). */
-public record ResetPasswordRequest(String token, String newPassword) {
+/** Đặt lại mật khẩu bằng mã OTP 6 số gửi qua email (chỉ lưu hash BCrypt ở VerificationToken). */
+public record ResetPasswordRequest(String email, String otp, String newPassword) {
 }

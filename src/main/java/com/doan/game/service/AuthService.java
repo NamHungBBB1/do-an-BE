@@ -14,7 +14,7 @@ public interface AuthService {
 
     AccountResponse register(RegisterRequest req);
 
-    void verifyEmail(String token);
+    TokenResponse verifyEmail(VerifyEmailRequest req);
 
     /**
      * Gửi lại mail xác minh. Email không có tài khoản hoặc đã xác minh rồi thì im lặng —

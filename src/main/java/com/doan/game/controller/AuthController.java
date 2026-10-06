@@ -6,13 +6,12 @@ import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
 import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
+import com.doan.game.DTO.request.VerifyEmailRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.TokenResponse;
 import com.doan.game.service.AuthService;
-import com.doan.game.web.HtmlPages;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +27,7 @@ import java.util.UUID;
  * Cửa vào HTTP cho auth. Tầng này MỎNG: nhận, gọi service, trả về. Có ruột (02/10), bộ sinh
  * khung giữ nguyên tệp này.
  *
- * KHÔNG try/catch ở đây (kể cả các trang HTML): lỗi ném AppException(ErrorCode) và GlobalExceptionHandler dựng vỏ
+ * KHÔNG try/catch ở đây: lỗi ném AppException(ErrorCode) và GlobalExceptionHandler dựng vỏ
  * ApiResponse cho tất cả. Chỗ DUY NHẤT được phép bắt lỗi là endpoint mà bên ngoài đòi phải
  * trả 200 — webhook PayOS, không phải file này.
  */
@@ -45,20 +44,15 @@ public class AuthController {
     }
 
     /**
-     * Link người dùng bấm từ hộp thư, không có token ở đó nên đường này permitAll.
-     * Trả HTML chứ không trả JSON: đây là trình duyệt đang mở, không phải FE gọi bằng fetch.
-     * Lỗi nghiệp vụ cũng phải ra HTML — ném AppException thì GlobalExceptionHandler dựng JSON,
-     * người dùng mở link hỏng và thấy nguyên khối {"code":3012,...} trên trang trắng.
+     * Nhập mã OTP 6 số trong mail đăng ký (chốt 14/09). Đúng thì trả token luôn — không bắt đăng
+     * nhập lại. permitAll: người dùng chưa có token nào.
      */
-    @GetMapping(value = "/verify", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String verifyEmail(@RequestParam String token) {
-        // Lỗi nghiệp vụ không bắt ở đây: GlobalExceptionHandler thấy endpoint trả HTML thì tự dựng
-        // trang lỗi HTML và GIỮ NGUYÊN mã lỗi (400 link sai, 410 hết hạn).
-        authService.verifyEmail(token);
-        return HtmlPages.page("Đã xác minh email", "Xong rồi. Quay lại ứng dụng và đăng nhập bằng mật khẩu của bạn.");
+    @PostMapping("/verify")
+    public ApiResponse<TokenResponse> verifyEmail(@RequestBody VerifyEmailRequest req) {
+        return ApiResponse.ok(authService.verifyEmail(req));
     }
 
-    /** Gửi lại mail xác minh. Email không có tài khoản cũng trả 200 — không lộ email nào đã đăng ký. */
+    /** Gửi lại mã xác minh. Email không có tài khoản cũng trả 200 — không lộ email nào đã đăng ký. */
     @PostMapping("/verify/resend")
     public ApiResponse<Void> resendVerification(@RequestParam String email) {
         authService.resendVerification(email);
@@ -121,43 +115,10 @@ public class AuthController {
         return ApiResponse.ok();
     }
 
-    /**
-     * Trang nhận mật khẩu mới từ link trong mail. Link trong mail là GET, còn đổi mật khẩu thì phải
-     * POST — không có trang này thì người dùng bấm link là gặp 405, đúng là loại lỗi mà FE chưa có
-     * domain cứu nổi. BE tự phục vụ form giống /verify: không đoán đường dẫn trang của FE.
-     *
-     * CỐ Ý không kiểm token ở đây. Trình đọc mail của nhiều hãng tự mở sẵn link để quét virus, mở
-     * một lần là token hỏng và người dùng không làm gì cũng thấy "link không đúng". Chỉ POST mới
-     * thực sự tiêu token.
-     *
-     * action CỐ Ý là đường dẫn TƯƠNG ĐỐI ("reset"). Ghi chết "/api/auth/password/reset" thì khi
-     * VPS chạy với CONTEXT_PATH=/finteen, form sẽ POST sang .../api/auth/password/reset không có
-     * /finteen và nhận 404 — người dùng không đổi được mật khẩu trên máy chủ.
-     */
-    @GetMapping(value = "/password/reset", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String resetPasswordPage(@RequestParam String token) {
-        return HtmlPages.resetPasswordForm(token);
-    }
-
-    @PostMapping(value = "/password/reset", consumes = MediaType.APPLICATION_JSON_VALUE)
+    /** Đặt lại mật khẩu bằng email + mã OTP trong mail + mật khẩu mới. Mọi token cũ chết. */
+    @PostMapping("/password/reset")
     public ApiResponse<Void> resetPassword(@RequestBody ResetPasswordRequest req) {
         authService.resetPassword(req);
         return ApiResponse.ok();
-    }
-
-    /**
-     * Biến thể form-urlencoded cho trang ở trên: trình duyệt gửi form, không có ứng dụng JS nào để
-     * dựng JSON. Trả HTML để người dùng thấy kết quả ngay tại chỗ, không bị ném về JSON lạnh lẽo.
-     * Lỗi NGHIỆP VỤ trong form này cũng bắt và trả HTML (xem nhánh try bên dưới).
-     *
-     * produces BẮT BUỘC: không có thì Spring gán Content-Type mặc định text/plain và trình duyệt
-     * hiện nguyên chữ "<h1 ...>Đã đổi mật khẩu</h1>" thay vì render trang.
-     */
-    @PostMapping(value = "/password/reset",
-            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
-            produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String resetPasswordForm(@RequestParam String token, @RequestParam String newPassword) {
-        authService.resetPassword(new ResetPasswordRequest(token, newPassword));
-        return HtmlPages.page("Đã đổi mật khẩu", "Đăng nhập bằng mật khẩu vừa đặt.");
     }
 }
