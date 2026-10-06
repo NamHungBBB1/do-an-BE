@@ -171,8 +171,6 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
   người dùng vẫn tiếng Việt. Bộ sinh khung cũng sinh tên tiếng Anh. Đổi 04/10: 216 tên, 4 tệp đổi tên.
 - `security` — `RevocationAwareJwtDecoder` (kiểm `tv`, thay scope bằng vai + gói hiện tại trong DB),
   `FirebaseIdTokenDecoder` / `FirebaseNimbusIdTokenDecoder` (kiểm ID token Google, khoá công khai, không bí mật).
-- `web` — `HtmlPages`: vài trang HTML BE tự phục vụ (link mở từ mail). Controller KHÔNG dựng HTML, KHÔNG
-  try/catch: lỗi ở endpoint `produces text/html` được `GlobalExceptionHandler` dựng thành trang HTML, giữ mã lỗi.
 - `service` có vài lớp hạ tầng không interface (`TokenService`, `MailService`, `OutgoingMail`): chỉ một cách
   làm, thêm interface là thừa. Service nghiệp vụ vẫn theo cặp interface + Impl.
 
@@ -183,4 +181,7 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 `sub` = id tài khoản hoặc slot, `typ` ACCOUNT / SLOT, `tv` = `Account.tokenVersion` (tăng khi đổi mật khẩu → mọi
 token cũ chết ngay). Scope không lưu cứng: mỗi request decoder thay bằng vai + gói hiện có, nên mua gói xong có
 quyền ngay mà không bị đá ra. Đăng nhập Google lần đầu gửi trùng (bấm đúp) ra cùng một tài khoản.
-Review: RV-01 → RV-03 trên hub `#/kiem-thu`.
+Xác minh email và quên mật khẩu dùng **mã OTP 6 số** qua mail (chốt 14/09, làm 06/10, thay link + trang HTML):
+mã hết hạn 10 phút, chỉ một mã sống mỗi mục đích, sai 5 lần là mã chết; `POST /auth/verify {email, otp}` trả token
+luôn. BE không còn phục vụ trang HTML nào — mọi endpoint trả `ApiResponse`.
+Review: RV-01 → RV-04 trên hub `#/kiem-thu`.

@@ -10,12 +10,14 @@ import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.SlotStatus;
+import com.doan.game.enums.TokenPurpose;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.VerificationTokenRepository;
 import com.doan.game.service.OutgoingMail;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -72,7 +75,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthFlowTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-10-02T03:00:00Z"), ClockConfig.VN);
-    private static final Pattern TOKEN_IN_LINK = Pattern.compile("token=([A-Za-z0-9_-]+)");
+    private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
 
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
@@ -80,6 +83,7 @@ class AuthFlowTest {
     @Autowired LearnerGroupRepository groupRepo;
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired PasswordEncoder encoder;
+    @Autowired VerificationTokenRepository tokenRepo;
     @Autowired MailCatcher mailCatcher;
     @Autowired FakeGoogleDecoder price;
 
@@ -158,19 +162,17 @@ class AuthFlowTest {
     }
 
     // ------------------------------------------------------------------ 5
+    /** Mã đã dùng không dùng lại được: tài khoản đã xác minh thì báo 3014, không phát token lần hai. */
     @Test
-    void verificationTokenReuseIsRejected() throws Exception {
+    void verifyingTwiceReturnsAlreadyVerified() throws Exception {
         String email = "haiLan-" + System.nanoTime() + "@test.local";
         register(email);
-        String token = tokenFromMail();
+        String otp = tokenFromMail();
 
-        verify(token);
-        // Vẫn 400 (mã lỗi nghiệp vụ giữ nguyên), nhưng THÂN TRANG là HTML cho người bấm link
-        // bằng trình duyệt — không tung {"code":3012,...} lên màn hình trắng.
-        mvc.perform(get("/api/auth/verify").param("token", token))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
-                .andExpect(content().string(containsString("Không hoàn tất được")));
+        verify(otp);
+        mvc.perform(verifyOtp(email, otp))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3014));
     }
 
     // ------------------------------------------------------------------ 6
@@ -199,7 +201,8 @@ class AuthFlowTest {
 
         mvc.perform(post("/api/auth/password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"token\":\"" + tokenFromMail() + "\",\"newPassword\":\"matkhaumoi123\"}"))
+                        .content("{\"email\":\"" + email + "\",\"otp\":\"" + tokenFromMail()
+                                + "\",\"newPassword\":\"matkhaumoi123\"}"))
                 .andExpect(status().isOk());
 
         mvc.perform(login(email, "matkhau123"))
@@ -298,53 +301,54 @@ class AuthFlowTest {
 
     // ------------------------------------------------------------------ 11
     /**
-     * Link đặt lại mật khẩu trong mail là GET, mà đổi mật khẩu phải POST. Không có trang nhận liệu
-     * thì bấm link là 405 và không ai đổi được mật khẩu.
-     *
-     * GET cố Ý KHÔNG tiêu token: trình đọc mail tự mở sẵn link để quét virus, tiêu token ở đó là
-     * người dùng bấm link thật của mình thì gặp "link không đúng".
+     * Mã 6 số chỉ có 1 triệu tổ hợp: sai 5 lần thì mã chết, kể cả lần thứ 6 gõ ĐÚNG. Bộ đếm phải
+     * sống qua lỗi — verifyEmail cố ý không @Transactional, nếu lỡ thêm vào thì ca này đỏ.
      */
     @Test
-    void resetLinkOpensFormWithoutConsumingToken() throws Exception {
-        String email = "formreset-" + System.nanoTime() + "@test.local";
+    void fiveWrongOtpsKillTheCode() throws Exception {
+        String email = "doma-" + System.nanoTime() + "@test.local";
         register(email);
-        verify(tokenFromMail());
+        String otp = tokenFromMail();
+        String wrong = otp.equals("000000") ? "111111" : "000000";
 
-        mvc.perform(post("/api/auth/password/forgot")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\"}"))
-                .andExpect(status().isOk());
-        String token = tokenFromMail();
-
-        mvc.perform(get("/api/auth/password/reset").param("token", token))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("name=\"newPassword\"")))
-                .andExpect(content().string(containsString(token)));
-
-        // Mở trang xong token còn sống: POST form mới thực sự tiêu nó.
-        mvc.perform(post("/api/auth/password/reset")
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .param("token", token)
-                        .param("newPassword", "matkhaumoi123"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
-                .andExpect(content().string(containsString("Đã đổi mật khẩu")));
-
-        // Trang LỖI cũng phải là HTML và giữ mã lỗi: thiếu produces thì trình duyệt nhận
-        // text/plain và hiện nguyên chuỗi thẻ <h1> thay vì render (RV-02 L-14).
-        mvc.perform(post("/api/auth/password/reset")
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .param("token", "khong-phai-token")
-                        .param("newPassword", "matkhaumoi123"))
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(verifyOtp(email, wrong))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(3012));
+        }
+        mvc.perform(verifyOtp(email, otp))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
-                .andExpect(content().string(containsString("xin link mới")));
+                .andExpect(jsonPath("$.code").value(3012));
+    }
 
-        mvc.perform(login(email, "matkhau123"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(login(email, "matkhaumoi123"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
+    /** Gửi lại mã thì mã cũ chết: lúc nào cũng chỉ một mã sống, gửi lại không nhân đôi số lần đoán. */
+    @Test
+    void resendKillsOldCodeAndNewCodeWorks() throws Exception {
+        String email = "guilai-" + System.nanoTime() + "@test.local";
+        register(email);
+        String oldOtp = tokenFromMail();
+
+        // Đồng hồ đóng băng nên chặn "gửi lại trong 1 phút" luôn bật — lùi createdAt của mã cũ.
+        UUID accountId = accountRepo.findByEmailIgnoreCase(email).orElseThrow().getId();
+        tokenRepo.findByAccount_IdAndPurposeAndUsedAtIsNull(accountId, TokenPurpose.VERIFY_EMAIL)
+                .forEach(t -> { t.setCreatedAt(t.getCreatedAt().minusSeconds(120)); tokenRepo.save(t); });
+        mvc.perform(post("/api/auth/verify/resend").param("email", email)).andExpect(status().isOk());
+        String newOtp = tokenFromMail();
+
+        if (!oldOtp.equals(newOtp)) {
+            mvc.perform(verifyOtp(email, oldOtp))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(3012));
+        }
+        verify(newOtp);
+    }
+
+    /** Email không có tài khoản trả cùng lỗi với mã sai — không dò được email nào đã đăng ký. */
+    @Test
+    void unknownEmailOtpLooksLikeWrongCode() throws Exception {
+        mvc.perform(verifyOtp("khongco-" + System.nanoTime() + "@test.local", "123456"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(3012));
     }
 
     // ------------------------------------------------------------------ 12  (C1)
@@ -637,8 +641,16 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.code").value(0));
     }
 
-    private void verify(String token) throws Exception {
-        mvc.perform(get("/api/auth/verify").param("token", token)).andExpect(status().isOk());
+    /** Xác minh bằng mã OTP của lá mail mới nhất, gửi tới đúng email người nhận lá đó. */
+    private void verify(String otp) throws Exception {
+        mvc.perform(verifyOtp(lastMail().to(), otp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
+    }
+
+    private static MockHttpServletRequestBuilder verifyOtp(String email, String otp) {
+        return post("/api/auth/verify").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + email + "\",\"otp\":\"" + otp + "\"}");
     }
 
     private LearnerSlot slot(String code, String pin, SlotStatus status) {
@@ -713,12 +725,16 @@ class AuthFlowTest {
         }
     }
 
-    /** Bắt token GỐC trong nội dung mail — nơi duy nhất nó còn tồn tại sau khi băm SHA-256. */
+    /** Bắt mã OTP GỐC trong lá mail mới nhất — nơi duy nhất nó còn tồn tại sau khi băm BCrypt. */
     private String tokenFromMail() {
         assertThat(mailCatcher.sent).isNotEmpty();
-        Matcher m = TOKEN_IN_LINK.matcher(mailCatcher.sent.get(mailCatcher.sent.size() - 1).body());
-        assertThat(m.find()).as("mail phai co link chua token").isTrue();
+        Matcher m = OTP_IN_MAIL.matcher(lastMail().body());
+        assertThat(m.find()).as("mail phai co ma OTP 6 so").isTrue();
         return m.group(1);
+    }
+
+    private OutgoingMail lastMail() {
+        return mailCatcher.sent.get(mailCatcher.sent.size() - 1);
     }
 
     /**
