@@ -21,13 +21,18 @@ public interface SlotService {
      */
     SlotResponse openSlot(UUID callerId, CreateSlotRequest req);
 
-    java.util.List<SlotResponse> openSlots(UUID groupId, CreateSlotsRequest req);
+    /**
+     * Mở nhiều slot một lần (lớp dán danh sách). Mọi phần tử phải cùng groupId; vượt hạn mức
+     * thì TỪ CHỐI CẢ LÔ (3006); tất cả trong MỘT transaction, khoá dòng nhóm một lần.
+     * Cùng thứ tự kiểm với openSlot. 07/10 (Kidz chốt phạm vi PR 2b).
+     */
+    java.util.List<SlotResponse> openSlots(UUID callerId, CreateSlotsRequest req);
 
     /**
      * Trả slot (ACTIVE → ARCHIVED, giữ tên và mã nhưng mã hết hiệu lực — 3009 khi trẻ dùng lại),
-     * xoá sạch (WIPED: bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ), đổi PIN (vẫn ACTIVE, reset
-     * bộ đếm sai và thời khoá). Cả ba chỉ chủ nhóm của slot (3004) và slot còn ACTIVE (5004).
-     * 07/10 (Kidz chốt phạm vi PR 2).
+     * xoá sạch (WIPED: bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ — nhận cả ACTIVE lẫn ARCHIVED,
+     * WIPED thì 5004 — Hưng chốt 07/10), đổi PIN (vẫn ACTIVE, reset bộ đếm sai và thời khoá).
+     * Cả ba chỉ chủ nhóm của slot (3004). 07/10 (Kidz chốt phạm vi PR 2).
      */
     void returnSlot(UUID callerId, UUID slotId);
 

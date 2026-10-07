@@ -29,7 +29,12 @@ public interface GroupService {
      */
     void confirmConsent(UUID callerId, UUID groupId);
 
-    void closeGroup(UUID groupId);
+    /**
+     * Kết thúc nhóm (giáo viên gọi là kết thúc lớp): closedAt = now, openContext = NULL để trả
+     * chỗ UNIQUE cho nhóm mới, mọi slot ACTIVE → ARCHIVED. KHÔNG xoá gì, KHÔNG có API khôi phục
+     * (muốn dạy tiếp thì mở lớp mới) — Hưng chốt 07/10. Chỉ chủ nhóm (3004).
+     */
+    void closeGroup(UUID callerId, UUID groupId);
 
     /** Chỗ trống = slotLimit − số slot ACTIVE, chỉ chủ nhóm (3004). */
     int countFreeSlots(UUID callerId, UUID groupId);

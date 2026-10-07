@@ -25,10 +25,18 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Slot của một nhóm, cũ đến mới — FE danh sách theo thứ tự mở. */
     java.util.List<LearnerSlot> findByGroup_IdOrderByCreatedAtAsc(UUID groupId);
 
-    /** Một câu đếm cho TẤT cả nhóm của người gọi (GET /api/groups) — tránh N+1 từng nhóm. */
+    /** Đóng nhóm: mọi slot ACTIVE của nhóm được đưa sang ARCHIVED một lần. */
+    java.util.List<LearnerSlot> findByGroup_IdAndStatus(UUID groupId, SlotStatus status);
+
+    /**
+     * Một câu đếm slot ACTIVE cho TẤT cả nhóm của MỘT người gọi (GET /api/groups) — tránh N+1
+     * từng nhóm. Lọc owner ngay trong SQL: đếm cả hệ thống rồi lọc ở Java là lãng phí vô ích
+     * (Kidz góp ý review PR 2a, 07/10).
+     */
     @Query("select s.group.id as groupId, count(s) as used from LearnerSlot s "
-            + "where s.status = :status group by s.group.id")
-    java.util.List<SlotUsedRow> countByStatusGroupedByGroup(@Param("status") SlotStatus status);
+            + "where s.status = :status and s.group.owner.id = :ownerId group by s.group.id")
+    java.util.List<SlotUsedRow> countByStatusGroupedByGroup(@Param("status") SlotStatus status,
+                                                            @Param("ownerId") UUID ownerId);
 
     /** Dòng kết quả của countByStatusGroupedByGroup — interface projection, không cần class mới. */
     interface SlotUsedRow {

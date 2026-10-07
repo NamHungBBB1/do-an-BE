@@ -61,9 +61,14 @@ public class GroupController {
         return ApiResponse.ok();
     }
 
+    /**
+     * Kết thúc nhóm: closedAt = now, slot ACTIVE → ARCHIVED, không xoá gì và không có API khôi
+     * phục (Hưng chốt 07/10 — muốn dạy tiếp thì mở lớp mới). Chỉ chủ nhóm.
+     */
     @PostMapping("/{id}/close")
-    public void closeGroup() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<Void> closeGroup(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        groupService.closeGroup(currentAccountId(jwt), id);
+        return ApiResponse.ok();
     }
 
     private static UUID currentAccountId(Jwt jwt) {
