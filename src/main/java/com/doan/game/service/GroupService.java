@@ -14,7 +14,11 @@ public interface GroupService {
 
     LearnerGroupResponse openGroup(UUID ownerId, CreateGroupRequest req);
 
-    void confirmConsent(UUID groupId);
+    /**
+     * Chủ nhóm CLASS xác nhận đã có đồng ý của phụ huynh (consentConfirmedAt = now) — bắt buộc
+     * trước khi mở slot trong nhóm CLASS (5003); FAMILY không cần. 07/10, Hưng chốt.
+     */
+    void confirmConsent(UUID callerId, UUID groupId);
 
     void closeGroup(UUID groupId);
 

@@ -14,7 +14,19 @@ public final class LearnerGroupMapper {
     private LearnerGroupMapper() {
     }
 
+    /** Vừa mở nhóm thì chưa có slot nào. */
     public static LearnerGroupResponse toResponse(LearnerGroup source) {
-        throw new UnsupportedOperationException("chua cai dat");
+        return toResponse(source, 0);
+    }
+
+    /** slotUsed phải do service đếm (slot ACTIVE) — mapper không tự tra repo. */
+    public static LearnerGroupResponse toResponse(LearnerGroup source, int slotUsed) {
+        return new LearnerGroupResponse(
+                source.getId(),
+                source.getName(),
+                source.getContext() == null ? null : source.getContext().name(),
+                source.getSlotLimit() == null ? 0 : source.getSlotLimit(),
+                slotUsed,
+                source.getConsentConfirmedAt() != null);
     }
 }

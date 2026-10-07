@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
  *   1xxx  chung / dữ liệu vào
  *   2xxx  telemetry
  *   3xxx  xác thực / slot của trẻ
+ *   4xxx  thanh toán và gói
+ *   5xxx  nhóm học
  * Thêm nhóm mới thì cấp dải mới, ĐỪNG chen số vào giữa dải cũ —
  * FE có thể đã bắt theo mã.
  */
@@ -69,7 +71,13 @@ public enum ErrorCode {
     PAYOS_ERROR(4004, "Cổng thanh toán báo lỗi", HttpStatus.BAD_GATEWAY),
     TRANSACTION_NOT_FOUND(4005, "Không tìm thấy giao dịch", HttpStatus.NOT_FOUND),
     TRANSACTION_NOT_PENDING(4006, "Giao dịch không còn ở trạng thái chờ", HttpStatus.CONFLICT),
-    PLAN_PRICE_INVALID(4007, "Giá gói phải là số dương (VND)", HttpStatus.BAD_REQUEST);
+    PLAN_PRICE_INVALID(4007, "Giá gói phải là số dương (VND)", HttpStatus.BAD_REQUEST),
+    // 5xxx  nhóm học
+    GROUP_ALREADY_OPEN(5001, "Đã có nhóm đang mở cho loại này — đóng nhóm cũ trước khi mở nhóm mới",
+            HttpStatus.CONFLICT),
+    GROUP_CLOSED(5002, "Nhóm đã kết thúc, không mở thêm slot", HttpStatus.CONFLICT),
+    GROUP_CONSENT_REQUIRED(5003, "Lớp học cần xác nhận đã có đồng ý của phụ huynh trước khi mở slot",
+            HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;
