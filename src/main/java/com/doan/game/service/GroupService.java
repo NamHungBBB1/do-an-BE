@@ -15,6 +15,15 @@ public interface GroupService {
     LearnerGroupResponse openGroup(UUID ownerId, CreateGroupRequest req);
 
     /**
+     * Các nhóm của NGƯỜI GỌI: nhóm đang mở đứng trước, nhóm đã đóng theo sau — FE chỉ gọi một
+     * đường là thấy đủ. slotUsed đếm slot ACTIVE. 07/10 (Kidz chốt phạm vi PR 2).
+     */
+    java.util.List<LearnerGroupResponse> getMyGroups(UUID callerId);
+
+    /** Slot trong một nhóm (mọi trạng thái để FE thấy cả ARCHIVED / WIPED), chỉ chủ nhóm (3004). */
+    java.util.List<SlotResponse> listSlots(UUID callerId, UUID groupId);
+
+    /**
      * Chủ nhóm CLASS xác nhận đã có đồng ý của phụ huynh (consentConfirmedAt = now) — bắt buộc
      * trước khi mở slot trong nhóm CLASS (5003); FAMILY không cần. 07/10, Hưng chốt.
      */
@@ -22,6 +31,7 @@ public interface GroupService {
 
     void closeGroup(UUID groupId);
 
-    int countFreeSlots(UUID groupId);
+    /** Chỗ trống = slotLimit − số slot ACTIVE, chỉ chủ nhóm (3004). */
+    int countFreeSlots(UUID callerId, UUID groupId);
 
 }

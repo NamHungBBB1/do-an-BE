@@ -17,9 +17,12 @@ public interface LearnerGroupRepository extends JpaRepository<LearnerGroup, UUID
     /**
      * Khoá dòng nhóm (SELECT ... FOR UPDATE) khi mở slot: đếm slot rồi chèn mà không khoá thì
      * hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4. Mẫu có sẵn:
-     * TransactionRepository.lockByOrderCode. Hưng chốt 07/10.
+     * TransactionRepository.lockByOrderCode. Kidz góp ý review 07/10.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from LearnerGroup g where g.id = :id")
     Optional<LearnerGroup> lockById(@Param("id") UUID id);
+
+    /** Nhóm của người gọi, mới mở đến đóng — GET /api/groups sắp xếp lại trong service. */
+    java.util.List<LearnerGroup> findByOwner_IdOrderByOpenedAtDesc(UUID ownerId);
 }

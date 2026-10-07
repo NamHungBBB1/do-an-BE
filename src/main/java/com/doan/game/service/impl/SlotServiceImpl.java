@@ -32,8 +32,9 @@ import java.util.UUID;
  * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
  *
  * CÓ RUỘT loginSlot (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng TokenService,
- * và openSlot (07/10, feat/group-slot). Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném
- * UnsupportedOperationException để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
+ * openSlot (07/10, feat/group-slot) và returnSlot / wipeSlot / changePin (PR 2a). Phần còn lại
+ * vẫn là KHUNG — openSlots (bulk, PR 2b) ném UnsupportedOperationException để không ai vô tình
+ * dùng một lớp rỗng mà tưởng nó chạy.
  */
 @Service
 @RequiredArgsConstructor
@@ -66,7 +67,7 @@ public class SlotServiceImpl implements SlotService {
      * tên / PIN hợp lệ (1001) → còn chỗ (3006).
      *
      * KHÔNG kiểm gói ở đây: mở nhóm đã kiểm rồi (openGroup), còn "gói hết hạn có được mở slot
-     * mới không" là câu hỏi để Hưng chốt — giữ nguyên, ghi vào PR (Kidz 07/10).
+     * mới không" là câu hỏi để Hưng chốt — giữ nguyên, ghi vào PR chờ chốt.
      */
     @Override
     @Transactional
@@ -76,7 +77,8 @@ public class SlotServiceImpl implements SlotService {
         }
         UUID groupId = req.groupId();
         // lockById = khóa dòng nhóm (FOR UPDATE) trước khi đếm: đếm-cho-roi-chen không khóa thì
-        // hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4 (Hưng chốt 07/10).
+        // hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4 (Kidz góp ý review
+        // 07/10, mẫu TransactionRepository.lockByOrderCode).
         LearnerGroup group = groupRepo.lockById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
         if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
@@ -150,19 +152,71 @@ public class SlotServiceImpl implements SlotService {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    /**
+     * Trả slot: ACTIVE → ARCHIVED, ghi archivedAt. Giữ nguyên tên và mã — chỉ là trạng thái đổi,
+     * trẻ dùng lại mã thì loginSlot trả 3009 (đã có từ trước). Trả lại chỗ cho hạn mức vì
+     * đếm slot đang làm trên ACTIVE (ERD mục 5).
+     */
     @Override
-    public void returnSlot(UUID slotId) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional
+    public void returnSlot(UUID callerId, UUID slotId) {
+        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        slot.setStatus(SlotStatus.ARCHIVED);
+        slot.setArchivedAt(Instant.now(clock));
+        slotRepo.save(slot);
     }
 
+    /**
+     * Xoá sạch: WIPED, bỏ tên, mã và PIN — nhưng GIỮ dòng cho báo cáo cũ (ERD mục 5). Mã về NULL
+     * nên trẻ không còn login được (findByCode không ra → 3007). Badge giữ lại: đó là cột phân
+     * nhóm / báo cáo, không phải dữ liệu định danh của trẻ.
+     */
     @Override
-    public void wipeSlot(UUID slotId) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional
+    public void wipeSlot(UUID callerId, UUID slotId) {
+        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        slot.setStatus(SlotStatus.WIPED);
+        slot.setWipedAt(Instant.now(clock));
+        slot.setCode(null);
+        slot.setPinHash(null);
+        slot.setDisplayName(null);
+        slotRepo.save(slot);
     }
 
+    /**
+     * Đổi PIN: vẫn ACTIVE (ERD mục 5). Reset failedAttempts + lockedUntil — đổi PIN là hành động
+     * của người lớn tin cậy, gỡ luôn thời khoá đang treo cho trẻ.
+     */
     @Override
-    public void changePin(UUID slotId, ChangePinRequest req) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional
+    public void changePin(UUID callerId, UUID slotId, ChangePinRequest req) {
+        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        String pin = req == null ? null : req.pin();
+        if (pin == null || !pin.matches("\\d{6}")) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
+        }
+        slot.setPinHash(passwordEncoder.encode(pin));
+        slot.setFailedAttempts(0);
+        slot.setLockedUntil(null);
+        slotRepo.save(slot);
+    }
+
+    /**
+     * Cửa chung cho trả / xoá / đổi PIN: slot phải có (3007) → là của người gọi (3004,
+     * kiểm qua chủ nhóm) → còn ACTIVE (5004). Thứ tự này cố ý: người khác không được biết
+     * slot của người khác có tồn tại hay đang ở trạng thái gì.
+     */
+    private LearnerSlot requireOwnedActive(UUID callerId, UUID slotId) {
+        LearnerSlot slot = slotRepo.findById(slotId)
+                .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
+        LearnerGroup group = slot.getGroup();
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (slot.getStatus() != SlotStatus.ACTIVE) {
+            throw new AppException(ErrorCode.SLOT_NOT_ACTIVE);
+        }
+        return slot;
     }
 
     /**

@@ -31,6 +31,25 @@ public class GroupController {
         return ApiResponse.ok(groupService.openGroup(currentAccountId(jwt), req));
     }
 
+    /** Nhóm của tôi: đang mở trước, đã đóng sau; kèm slotUsed (số slot ACTIVE). */
+    @GetMapping
+    public ApiResponse<java.util.List<LearnerGroupResponse>> getMyGroups(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(groupService.getMyGroups(currentAccountId(jwt)));
+    }
+
+    /** Slot trong nhóm (cả ARCHIVED / WIPED), chỉ chủ nhóm — người khác 3004. */
+    @GetMapping("/{id}/slots")
+    public ApiResponse<java.util.List<com.doan.game.DTO.response.SlotResponse>> listSlots(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return ApiResponse.ok(groupService.listSlots(currentAccountId(jwt), id));
+    }
+
+    /** Chỗ trống = slotLimit − số slot ACTIVE; chỉ chủ nhóm. */
+    @GetMapping("/{id}/capacity")
+    public ApiResponse<Integer> countFreeSlots(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return ApiResponse.ok(groupService.countFreeSlots(currentAccountId(jwt), id));
+    }
+
     /**
      * Chủ nhóm CLASS xác nhận đã có đồng ý của phụ huynh — bắt buộc trước khi mở slot trong
      * nhóm CLASS (5003); FAMILY không cần. Idempotent.
@@ -44,11 +63,6 @@ public class GroupController {
 
     @PostMapping("/{id}/close")
     public void closeGroup() {
-        throw new UnsupportedOperationException("chua cai dat");
-    }
-
-    @GetMapping("/{id}/capacity")
-    public void countFreeSlots() {
         throw new UnsupportedOperationException("chua cai dat");
     }
 

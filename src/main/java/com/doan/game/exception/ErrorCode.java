@@ -77,6 +77,9 @@ public enum ErrorCode {
             HttpStatus.CONFLICT),
     GROUP_CLOSED(5002, "Nhóm đã kết thúc, không mở thêm slot", HttpStatus.CONFLICT),
     GROUP_CONSENT_REQUIRED(5003, "Lớp học cần xác nhận đã có đồng ý của phụ huynh trước khi mở slot",
+            HttpStatus.CONFLICT),
+    /** Trả / xoá / đổi PIN chỉ làm được trên slot ACTIVE — ARCHIVED và WIPED đã kết thúc vòng đời. */
+    SLOT_NOT_ACTIVE(5004, "Slot không còn đang mở — việc này chỉ làm được khi slot còn ACTIVE",
             HttpStatus.CONFLICT);
 
     private final int code;

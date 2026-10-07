@@ -43,19 +43,29 @@ public class SlotController {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    /**
+     * Trả slot: ACTIVE → ARCHIVED, giữ tên và mã (mã hết hiệu lực — trẻ login lại được 3009),
+     * trả lại chỗ cho hạn mức. Chỉ chủ nhóm, slot còn ACTIVE.
+     */
     @PostMapping("/{id}/return")
-    public void returnSlot() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<Void> returnSlot(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        slotService.returnSlot(UUID.fromString(jwt.getSubject()), id);
+        return ApiResponse.ok();
     }
 
+    /** Xoá sạch: WIPED — bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ. */
     @DeleteMapping("/{id}")
-    public void wipeSlot() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<Void> wipeSlot(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        slotService.wipeSlot(UUID.fromString(jwt.getSubject()), id);
+        return ApiResponse.ok();
     }
 
+    /** Đổi PIN: vẫn ACTIVE, reset bộ đếm sai và thời khoá. */
     @PostMapping("/{id}/pin")
-    public void changePin() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<Void> changePin(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                       @RequestBody ChangePinRequest req) {
+        slotService.changePin(UUID.fromString(jwt.getSubject()), id, req);
+        return ApiResponse.ok();
     }
 
     @PostMapping("/login")
