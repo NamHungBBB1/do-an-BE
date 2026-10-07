@@ -23,11 +23,17 @@ public interface SlotService {
 
     java.util.List<SlotResponse> openSlots(UUID groupId, CreateSlotsRequest req);
 
-    void returnSlot(UUID slotId);
+    /**
+     * Trả slot (ACTIVE → ARCHIVED, giữ tên và mã nhưng mã hết hiệu lực — 3009 khi trẻ dùng lại),
+     * xoá sạch (WIPED: bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ), đổi PIN (vẫn ACTIVE, reset
+     * bộ đếm sai và thời khoá). Cả ba chỉ chủ nhóm của slot (3004) và slot còn ACTIVE (5004).
+     * 07/10 (Kidz chốt phạm vi PR 2).
+     */
+    void returnSlot(UUID callerId, UUID slotId);
 
-    void wipeSlot(UUID slotId);
+    void wipeSlot(UUID callerId, UUID slotId);
 
-    void changePin(UUID slotId, ChangePinRequest req);
+    void changePin(UUID callerId, UUID slotId, ChangePinRequest req);
 
     TokenResponse loginSlot(String code, String pin);
 

@@ -5,14 +5,18 @@ import com.doan.game.DTO.request.*;
 import com.doan.game.DTO.response.*;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.LearnerGroup;
+import com.doan.game.entity.LearnerSlot;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.DbErrors;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.LearnerGroupMapper;
+import com.doan.game.mapper.SlotMapper;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.LearnerGroupRepository;
+import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -21,18 +25,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
  *
- * CÓ RUỘT openGroup (07/10, feat/group-slot). Ràng buộc UNIQUE(owner, openContext) nằm sẵn trên
- * entity: mỗi tài khoản tối đa 1 nhóm ĐANG MỞ cho mỗi context (openContext = context khi mở, NULL
- * khi đã đóng). CLASS đi chung một đường với FAMILY — chỉ khác gói cần và hạn mức; nếu sau này
- * giáo viên được mở nhiều lớp cùng lúc thì chỉ đổi ràng buộc ở ERD, code gần như giữ nguyên.
- *
- * Phần confirmConsent / closeGroup / countFreeSlots vẫn là KHUNG — ném UnsupportedOperationException
+ * CÓ RUỘT openGroup + confirmConsent (07/10, feat/group-slot) và getMyGroups / listSlots /
+ * countFreeSlots (PR 2a). closeGroup vẫn là KHUNG — ném UnsupportedOperationException
  * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
  */
 @Service
@@ -44,6 +48,7 @@ public class GroupServiceImpl implements GroupService {
     static final int CLASS_SLOT_LIMIT = 40;
 
     private final LearnerGroupRepository groupRepo;
+    private final LearnerSlotRepository slotRepo;
     private final AccountRepository accountRepo;
     private final EntitlementService entitlementService;
     private final Clock clock;
@@ -95,17 +100,56 @@ public class GroupServiceImpl implements GroupService {
     }
 
     /**
+     * Nhóm của người gọi: đang mở trước, đã đóng sau. slotUsed lấy từ MỘT câu đếm gộp
+     * (countByStatusGroupedByGroup) thay vì N+1 từng nhóm.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<LearnerGroupResponse> getMyGroups(UUID callerId) {
+        Map<UUID, Long> used = new HashMap<>();
+        for (LearnerSlotRepository.SlotUsedRow row : slotRepo.countByStatusGroupedByGroup(SlotStatus.ACTIVE)) {
+            used.put(row.getGroupId(), row.getUsed());
+        }
+        List<LearnerGroup> groups = groupRepo.findByOwner_IdOrderByOpenedAtDesc(callerId);
+        // Mới mở đến đóng: openContext = NULL nghĩa là đã đóng (UNIQUE(owner, openContext) ở entity).
+        List<LearnerGroup> open = new ArrayList<>();
+        List<LearnerGroup> closed = new ArrayList<>();
+        for (LearnerGroup g : groups) {
+            (g.getOpenContext() == null ? closed : open).add(g);
+        }
+        open.addAll(closed);
+        List<LearnerGroupResponse> result = new ArrayList<>(open.size());
+        for (LearnerGroup g : open) {
+            result.add(LearnerGroupMapper.toResponse(g, used.getOrDefault(g.getId(), 0L).intValue()));
+        }
+        return result;
+    }
+
+    /**
+     * Slot của một nhóm — MỌI trạng thái (cả ARCHIVED / WIPED) vì FE danh sách phải thấy được
+     * lịch sử; locked tính theo đồng hồ của service, mapper không có đồng hồ.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<SlotResponse> listSlots(UUID callerId, UUID groupId) {
+        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        Instant now = Instant.now(clock);
+        List<SlotResponse> result = new ArrayList<>();
+        for (LearnerSlot slot : slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId())) {
+            boolean locked = slot.getLockedUntil() != null && slot.getLockedUntil().isAfter(now);
+            result.add(SlotMapper.toResponse(slot, locked));
+        }
+        return result;
+    }
+
+    /**
      * Chủ nhóm bấm "đã có đồng ý": ghi consentConfirmedAt = now. Idempotent — bấm lần hai vẫn
      * 200, giữ mốc lần đầu. Chỉ chủ nhóm mới bấm được (3004) — cùng một cửa với mở slot.
      */
     @Override
     @Transactional
     public void confirmConsent(UUID callerId, UUID groupId) {
-        LearnerGroup group = groupRepo.findById(groupId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
-        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
-            throw new AppException(ErrorCode.FORBIDDEN);
-        }
+        LearnerGroup group = requireOwnedGroup(callerId, groupId);
         if (group.getConsentConfirmedAt() == null) {
             group.setConsentConfirmedAt(Instant.now(clock));
             groupRepo.save(group);
@@ -117,9 +161,23 @@ public class GroupServiceImpl implements GroupService {
         throw new UnsupportedOperationException("chua cai dat");
     }
 
+    /** Chỗ trống = hạn mức − slot ACTIVE; ARCHIVED / WIPED đã trả lại chỗ (ERD mục 5). */
     @Override
-    public int countFreeSlots(UUID groupId) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional(readOnly = true)
+    public int countFreeSlots(UUID callerId, UUID groupId) {
+        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        int limit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
+        return limit - (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
+    }
+
+    /** Nhóm phải tồn tại (1003) và phải là của người gọi (3004) — một cửa cho mọi thao tác. */
+    private LearnerGroup requireOwnedGroup(UUID callerId, UUID groupId) {
+        LearnerGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        return group;
     }
 
     private static LearningContext parseContext(String context) {
