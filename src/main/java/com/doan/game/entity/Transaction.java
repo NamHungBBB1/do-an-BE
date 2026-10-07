@@ -11,7 +11,9 @@ import lombok.Setter;
 /**
  * Một lần thanh toán PayOS: mua mới hoặc gia hạn gói Phụ huynh / Giáo viên. orderCode là số do
  * mình sinh, PayOS bắt buộc (02/10, theo tài liệu SDK); gatewayRef là paymentLinkId PayOS trả về.
- * Trạng thái chỉ chuyển tiến; webhook trùng bỏ qua. Bỏ UPGRADE.
+ * Trạng thái chỉ chuyển tiến; webhook trùng bỏ qua. Bỏ UPGRADE. QR + tài khoản nhận + hạn lưu lại
+ * (07/10, Hưng chốt hiện QR trong app) để bấm Mua lại khi còn đơn chờ cùng gói thì trả đúng đơn
+ * đó, không tạo đơn mới.
  */
 @Entity
 @Table(name = "transaction")
@@ -55,4 +57,22 @@ public class Transaction {
 
     @Column(name = "paid_at")
     private Instant paidAt;
+
+    @Column(name = "qr_code", length = 512)
+    private String qrCode;
+
+    @Column(name = "bank_bin", length = 16)
+    private String bankBin;
+
+    @Column(name = "bank_account_number", length = 32)
+    private String bankAccountNumber;
+
+    @Column(name = "bank_account_name", length = 128)
+    private String bankAccountName;
+
+    @Column(name = "transfer_note", length = 64)
+    private String transferNote;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
 }

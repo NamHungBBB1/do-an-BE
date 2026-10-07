@@ -1,6 +1,7 @@
 package com.doan.game.repository;
 
 import com.doan.game.entity.Transaction;
+import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -35,4 +36,11 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     Page<Transaction> findAllByOrderByCreatedAtDesc(Pageable p);
 
     Page<Transaction> findByStatusOrderByCreatedAtDesc(TransactionStatus status, Pageable p);
+
+    /** Lịch sử giao dịch của chính người dùng, mới nhất trước. */
+    Page<Transaction> findByAccount_IdOrderByCreatedAtDesc(UUID accountId, Pageable p);
+
+    /** Đơn còn chờ cùng gói, QR còn hạn: bấm Mua lại thì trả đúng đơn này (idempotent). */
+    Optional<Transaction> findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
+            UUID accountId, PlanKind kind, TransactionStatus status, Instant after);
 }

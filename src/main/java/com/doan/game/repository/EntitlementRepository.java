@@ -36,4 +36,7 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
      * người dùng cần thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
      */
     List<Entitlement> findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(UUID accountId);
+
+    /** Gói hết hạn đúng ngày này — job nhắc gia hạn dùng. */
+    List<Entitlement> findByExpiresOn(LocalDate expiresOn);
 }
