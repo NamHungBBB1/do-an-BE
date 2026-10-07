@@ -19,6 +19,7 @@ import com.doan.game.enums.AuthProvider;
 import com.doan.game.enums.Role;
 import com.doan.game.enums.TokenPurpose;
 import com.doan.game.exception.AppException;
+import com.doan.game.exception.DbErrors;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.AccountMapper;
 import com.doan.game.repository.AccountRepository;
@@ -152,7 +153,7 @@ public class AuthServiceImpl implements AuthService {
             // Ném AppException sẽ rollback transaction — không có Account nửa vời nào bị chừa lại.
             // CHỈ khi trùng khoá thật: 06/10 một cột NOT NULL sót lại trong DB production bị báo nhầm
             // thành "email đã có tài khoản" cho mọi email.
-            if (!isUniqueViolation(e)) {
+            if (!DbErrors.isUniqueViolation(e)) {
                 throw e;
             }
             throw new AppException(ErrorCode.EMAIL_TAKEN);
@@ -400,7 +401,7 @@ public class AuthServiceImpl implements AuthService {
         try {
             return txTemplate.execute(status -> issueToken(findOrCreateGoogleAccount(user)));
         } catch (DataIntegrityViolationException | PessimisticLockingFailureException conflict) {
-            if (conflict instanceof DataIntegrityViolationException && !isUniqueViolation(conflict)) {
+            if (conflict instanceof DataIntegrityViolationException && !DbErrors.isUniqueViolation(conflict)) {
                 throw conflict;
             }
             log.info("Đăng nhập Google {} va chạm với request song song — tra lại", user.sub());
@@ -414,16 +415,6 @@ public class AuthServiceImpl implements AuthService {
             }
             return t;
         }
-    }
-
-    /** SQLState 23505 = unique_violation (H2 và PostgreSQL). Lỗi ràng buộc khác không phải "đã tồn tại". */
-    static boolean isUniqueViolation(Throwable e) {
-        for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof java.sql.SQLException sql && "23505".equals(sql.getSQLState())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private TokenResponse issueToken(Account a) {

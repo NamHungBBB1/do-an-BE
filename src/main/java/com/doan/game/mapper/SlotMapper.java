@@ -14,7 +14,21 @@ public final class SlotMapper {
     private SlotMapper() {
     }
 
+    /** locked tính từ lockedUntil (đã do service so với now) — mapper không có đồng hồ. */
+    public static SlotResponse toResponse(LearnerSlot source, boolean locked) {
+        return new SlotResponse(
+                source.getId(),
+                source.getCode(),
+                source.getDisplayName(),
+                source.getBadge(),
+                source.getStatus() == null ? null : source.getStatus().name(),
+                locked);
+    }
+
+    /** Slot mới mở / chưa từng sai PIN thì không bị khoá. */
     public static SlotResponse toResponse(LearnerSlot source) {
-        throw new UnsupportedOperationException("chua cai dat");
+        boolean locked = source.getLockedUntil() != null
+                && source.getLockedUntil().isAfter(java.time.Instant.now());
+        return toResponse(source, locked);
     }
 }

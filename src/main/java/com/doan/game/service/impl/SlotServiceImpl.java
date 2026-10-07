@@ -5,17 +5,23 @@ import com.doan.game.DTO.request.CreateSlotRequest;
 import com.doan.game.DTO.request.CreateSlotsRequest;
 import com.doan.game.DTO.response.SlotResponse;
 import com.doan.game.DTO.response.TokenResponse;
+import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
+import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
+import com.doan.game.mapper.SlotMapper;
+import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.SlotService;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,9 +31,9 @@ import java.util.UUID;
 /**
  * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
  *
- * CÓ RUỘT phần loginSlot (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng
- * TokenService. Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném UnsupportedOperationException
- * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
+ * CÓ RUỘT loginSlot (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng TokenService,
+ * và openSlot (07/10, feat/group-slot). Phần còn lại vẫn là KHUNG — mọi hàm chưa làm còn ném
+ * UnsupportedOperationException để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,14 +43,106 @@ public class SlotServiceImpl implements SlotService {
     private static final int MAX_PIN_ATTEMPTS = 5;
     private static final Duration PIN_LOCK_DURATION = Duration.ofMinutes(15);
 
+    /**
+     * Bảng chữ sinh mã slot: bỏ ký tự dễ nhầm (0, O, 1, I, L). 31 ký tự ^ 8 vị trí ≈ 8.5e11 tổ
+     * hợp — trùng khoá là may rủi siêu hiếm, nhưng vẫn thử lại tối đa 5 lần rồi mới báo lỗi.
+     */
+    private static final String CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    private static final int CODE_LENGTH = 8;
+    private static final int MAX_CODE_ATTEMPTS = 5;
+    private static final SecureRandom CODE_RANDOM = new SecureRandom();
+
     private final LearnerSlotRepository slotRepo;
+    private final LearnerGroupRepository groupRepo;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
+    /**
+     * Người lớn mở một slot: tên + PIN 6 số; mã chữ do BE sinh (trẻ gõ mã + PIN để vào).
+     *
+     * Thứ tự kiểm (Hưng chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
+     * → nhóm chưa đóng (5002) → nhóm CLASS đã có consent (5003, FAMILY không cần) →
+     * tên / PIN hợp lệ (1001) → còn chỗ (3006).
+     *
+     * KHÔNG kiểm gói ở đây: mở nhóm đã kiểm rồi (openGroup), còn "gói hết hạn có được mở slot
+     * mới không" là câu hỏi để Hưng chốt — giữ nguyên, ghi vào PR (Kidz 07/10).
+     */
     @Override
-    public SlotResponse openSlot(UUID groupId, CreateSlotRequest req) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional
+    public SlotResponse openSlot(UUID callerId, CreateSlotRequest req) {
+        if (req == null || req.groupId() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "groupId: bắt buộc");
+        }
+        UUID groupId = req.groupId();
+        // lockById = khóa dòng nhóm (FOR UPDATE) trước khi đếm: đếm-cho-roi-chen không khóa thì
+        // hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4 (Hưng chốt 07/10).
+        LearnerGroup group = groupRepo.lockById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_CLOSED);
+        }
+        // Hưng chốt 07/10: lớp phải có xác nhận đồng ý của phụ huynh trước khi có slot.
+        if (group.getContext() == LearningContext.CLASS && group.getConsentConfirmedAt() == null) {
+            throw new AppException(ErrorCode.GROUP_CONSENT_REQUIRED);
+        }
+
+        String displayName = req.displayName();
+        if (displayName == null || displayName.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: bắt buộc");
+        }
+        if (displayName.trim().length() > 40) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: tối đa 40 ký tự");
+        }
+        String pin = req.pin();
+        if (pin == null || !pin.matches("\\d{6}")) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
+        }
+        String badge = req.badge();
+        if (badge != null && badge.length() > 40) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "badge: tối đa 40 ký tự");
+        }
+
+        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
+        if (slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) >= slotLimit) {
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
+        }
+
+        LearnerSlot slot = new LearnerSlot();
+        slot.setGroup(group);
+        slot.setPinHash(passwordEncoder.encode(pin));
+        slot.setDisplayName(displayName.trim());
+        slot.setBadge(badge == null ? null : badge.trim());
+        slot.setStatus(SlotStatus.ACTIVE);
+        slot.setFailedAttempts(0);
+        slot.setCreatedAt(Instant.now(clock));
+        slot.setCode(nextFreeCode());
+        slotRepo.saveAndFlush(slot);
+        return SlotMapper.toResponse(slot, false);
+    }
+
+    /**
+     * Sinh mã chưa có ai dùng — kiểm existsByCode TRƯỚC, chèn MỘT lần sau đó.
+     *
+     * Không được bắt lỗi chèn trong vòng lặp: trong @Transactional, saveAndFlush ném
+     * DataIntegrityViolation thì session Hibernate đã hỏng và transaction bị đánh dấu
+     * rollback-only — thử lại trong cùng transaction không cứu được, cuối cùng ra
+     * UnexpectedRollbackException (500). Kiểm rồi mới chèn chỉ để lại khe hai request cùng lúc
+     * chọn trùng một mã (31^8 gần như không xảy ra) — nếu trúng thì để 500, không vì xác suất
+     * 1e-11 mà khoá bảng.
+     */
+    private String nextFreeCode() {
+        for (int attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
+            String code = randomCode();
+            if (!slotRepo.existsByCode(code)) {
+                return code;
+            }
+        }
+        throw new AppException(ErrorCode.UNCATEGORIZED,
+                "sinh mã slot thất bại sau " + MAX_CODE_ATTEMPTS + " lần — thử lại");
     }
 
     @Override
@@ -113,6 +211,15 @@ public class SlotServiceImpl implements SlotService {
         s.setLockedUntil(null);
         slotRepo.save(s);
         return tokenService.issueForSlot(s.getId());
+    }
+
+    /** 8 ký tự HOA từ bảng chữ bỏ ký tự dễ nhầm — trẻ gõ tay nên từng chữ phải đọc được. */
+    private static String randomCode() {
+        StringBuilder code = new StringBuilder(CODE_LENGTH);
+        for (int i = 0; i < CODE_LENGTH; i++) {
+            code.append(CODE_ALPHABET.charAt(CODE_RANDOM.nextInt(CODE_ALPHABET.length())));
+        }
+        return code.toString();
     }
 
 }
