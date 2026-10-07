@@ -98,6 +98,7 @@ public class PaymentServiceImpl implements PaymentService {
         // Lưu trước khi gọi PayOS: webhook chỉ tin orderCode đã có trong bảng.
         tx = transactionRepo.saveAndFlush(tx);
 
+        Instant expiresAt = Instant.now(clock).plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
         CreatePaymentLinkRequest data = CreatePaymentLinkRequest.builder()
                 .orderCode(tx.getOrderCode())
                 .amount(price)
@@ -106,12 +107,13 @@ public class PaymentServiceImpl implements PaymentService {
                 .returnUrl(payOsProps.returnUrl())
                 .cancelUrl(payOsProps.cancelUrl())
                 // Link tự hết hạn sau 24h để giao dịch treo không sống mãi; cron thấy EXPIRED thì FAILED.
-                .expiredAt(Instant.now(clock).plus(1, ChronoUnit.DAYS).getEpochSecond())
+                .expiredAt(expiresAt.getEpochSecond())
                 .build();
         try {
             CreatePaymentLinkResponse res = client.paymentRequests().create(data);
             tx.setGatewayRef(res.getPaymentLinkId());
-            return new PaymentResponse(res.getCheckoutUrl(), tx.getOrderCode());
+            return new PaymentResponse(tx.getOrderCode(), res.getQrCode(), res.getBin(), res.getAccountNumber(),
+                    res.getAccountName(), price, res.getDescription(), expiresAt, res.getCheckoutUrl());
         } catch (PayOSException e) {
             // Ném ra là rollback cả dòng PENDING: không có link thì không có giao dịch.
             throw new AppException(ErrorCode.PAYOS_ERROR, e.getMessage());
