@@ -24,7 +24,7 @@ public interface SlotService {
     /**
      * Mở nhiều slot một lần (lớp dán danh sách). Mọi phần tử phải cùng groupId; vượt hạn mức
      * thì TỪ CHỐI CẢ LÔ (3006); tất cả trong MỘT transaction, khoá dòng nhóm một lần.
-     * Cùng thứ tự kiểm với openSlot. 07/10 (Kidz chốt phạm vi PR 2b).
+     * Cùng thứ tự kiểm với openSlot. 07/10 (Hưng chốt phạm vi PR 2b).
      */
     java.util.List<SlotResponse> openSlots(UUID callerId, CreateSlotsRequest req);
 

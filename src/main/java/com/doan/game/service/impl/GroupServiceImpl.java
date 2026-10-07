@@ -167,7 +167,14 @@ public class GroupServiceImpl implements GroupService {
     @Override
     @Transactional
     public void closeGroup(UUID callerId, UUID groupId) {
-        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        // lockById (FOR UPDATE) chứ không phải findById: openSlot/bulk đang chèn song song thì
+        // closeGroup phải đứng sau nó — nếu không, hai bên commit song song và nhóm ĐÃ ĐÓNG vẫn
+        // còn một slot ACTIVE (Kidz góp ý review PR 2b, 07/10).
+        LearnerGroup group = groupRepo.lockById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
         if (group.getClosedAt() != null) {
             throw new AppException(ErrorCode.GROUP_CLOSED);
         }
