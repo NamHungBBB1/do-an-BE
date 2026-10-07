@@ -69,7 +69,7 @@ public class GroupServiceImpl implements GroupService {
         LearningContext context = parseContext(req.context());
         PlanKind required = context == LearningContext.FAMILY ? PlanKind.PARENT : PlanKind.TEACHER;
         if (!entitlementService.activePlans(ownerId).contains(required)) {
-            // Dùng lại 3005 PLAN_REQUIRED có sẵn (Kidz chốt 07/10) — hai mã cùng nghĩa thì FE
+            // Dùng lại 3005 PLAN_REQUIRED có sẵn (Hưng chốt 07/10) — hai mã cùng nghĩa thì FE
             // phải bắt cả hai, mà 3005 đúng nghĩa "cần mua gói trước" và chưa nơi nào dùng.
             throw new AppException(ErrorCode.PLAN_REQUIRED);
         }

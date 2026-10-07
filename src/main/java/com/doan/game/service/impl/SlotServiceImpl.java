@@ -10,7 +10,6 @@ import com.doan.game.entity.LearnerSlot;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
-import com.doan.game.exception.DbErrors;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.SlotMapper;
 import com.doan.game.repository.LearnerGroupRepository;
@@ -18,7 +17,6 @@ import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.SlotService;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,9 +61,12 @@ public class SlotServiceImpl implements SlotService {
     /**
      * Người lớn mở một slot: tên + PIN 6 số; mã chữ do BE sinh (trẻ gõ mã + PIN để vào).
      *
-     * Thứ tự kiểm (Kidz Bridge chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
+     * Thứ tự kiểm (Hưng chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
      * → nhóm chưa đóng (5002) → nhóm CLASS đã có consent (5003, FAMILY không cần) →
      * tên / PIN hợp lệ (1001) → còn chỗ (3006).
+     *
+     * KHÔNG kiểm gói ở đây: mở nhóm đã kiểm rồi (openGroup), còn "gói hết hạn có được mở slot
+     * mới không" là câu hỏi để Hưng chốt — giữ nguyên, ghi vào PR (Kidz 07/10).
      */
     @Override
     @Transactional
@@ -74,7 +75,9 @@ public class SlotServiceImpl implements SlotService {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "groupId: bắt buộc");
         }
         UUID groupId = req.groupId();
-        LearnerGroup group = groupRepo.findById(groupId)
+        // lockById = khóa dòng nhóm (FOR UPDATE) trước khi đếm: đếm-cho-roi-chen không khóa thì
+        // hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4 (Hưng chốt 07/10).
+        LearnerGroup group = groupRepo.lockById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
         if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
             throw new AppException(ErrorCode.FORBIDDEN);
@@ -116,23 +119,30 @@ public class SlotServiceImpl implements SlotService {
         slot.setStatus(SlotStatus.ACTIVE);
         slot.setFailedAttempts(0);
         slot.setCreatedAt(Instant.now(clock));
-        // Trùng mã là may rủi siêu hiếm; nếu có thì thử mã khác, không phải lỗi nghiệp vụ nào.
-        for (int attempt = 1; ; attempt++) {
-            slot.setCode(randomCode());
-            try {
-                slotRepo.saveAndFlush(slot);
-                break;
-            } catch (DataIntegrityViolationException e) {
-                if (!DbErrors.isUniqueViolation(e)) {
-                    throw e;
-                }
-                if (attempt >= MAX_CODE_ATTEMPTS) {
-                    throw new AppException(ErrorCode.UNCATEGORIZED,
-                            "sinh mã slot thất bại sau " + MAX_CODE_ATTEMPTS + " lần — thử lại");
-                }
+        slot.setCode(nextFreeCode());
+        slotRepo.saveAndFlush(slot);
+        return SlotMapper.toResponse(slot, false);
+    }
+
+    /**
+     * Sinh mã chưa có ai dùng — kiểm existsByCode TRƯỚC, chèn MỘT lần sau đó.
+     *
+     * Không được bắt lỗi chèn trong vòng lặp: trong @Transactional, saveAndFlush ném
+     * DataIntegrityViolation thì session Hibernate đã hỏng và transaction bị đánh dấu
+     * rollback-only — thử lại trong cùng transaction không cứu được, cuối cùng ra
+     * UnexpectedRollbackException (500). Kiểm rồi mới chèn chỉ để lại khe hai request cùng lúc
+     * chọn trùng một mã (31^8 gần như không xảy ra) — nếu trúng thì để 500, không vì xác suất
+     * 1e-11 mà khoá bảng.
+     */
+    private String nextFreeCode() {
+        for (int attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
+            String code = randomCode();
+            if (!slotRepo.existsByCode(code)) {
+                return code;
             }
         }
-        return SlotMapper.toResponse(slot, false);
+        throw new AppException(ErrorCode.UNCATEGORIZED,
+                "sinh mã slot thất bại sau " + MAX_CODE_ATTEMPTS + " lần — thử lại");
     }
 
     @Override

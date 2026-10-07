@@ -14,6 +14,9 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Trẻ gõ mã, luôn viết hoa trước khi tra. */
     Optional<LearnerSlot> findByCode(String code);
 
+    /** Sinh mã slot: kiểm TRƯỚC khi chèn — chèn rồi bắt lỗi thì session Hibernate hỏng (xem openSlot). */
+    boolean existsByCode(String code);
+
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);
 }

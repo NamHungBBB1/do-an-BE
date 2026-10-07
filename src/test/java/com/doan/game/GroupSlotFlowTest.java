@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * nhóm phải sống qua RevocationAwareJwtDecoder thật — fake JWT chỉ dựng được claim, không kiểm
  * được cửa SCOPE_PARENT ở SecurityConfig bằng đúng token BE tự cấp.
  *
- * Kiểm những gì Kidz Bridge chốt 07/10: có PARENT mới mở được FAMILY (không gói → 3005),
+ * Kiểm những gì Hưng chốt 07/10: có PARENT mới mở được FAMILY (không gói → 3005),
  * mỗi tài khoản tối đa 1 nhóm đang mở (5001), mở slot ra mã chữ và login được token SLOT,
  * vượt hạn mức 4 slot (3006), không mở slot vào nhóm người khác (3004),
  * nhóm CLASS phải có consent trước khi mở slot (5003).
@@ -83,7 +83,7 @@ class GroupSlotFlowTest {
     void withoutPlanCannotOpenGroup() throws Exception {
         String jwt = registerAndVerify("khongoi-" + System.nanoTime() + "@test.local");
 
-        // Dùng lại 3005 PLAN_REQUIRED (Kidz chốt 07/10) — HTTP 402 đúng nghĩa "cần mua gói trước".
+        // Dùng lại 3005 PLAN_REQUIRED (Hưng chốt 07/10) — HTTP 402 đúng nghĩa "cần mua gói trước".
         mvc.perform(openGroup(jwt, "Nha test", "FAMILY"))
                 .andExpect(status().isPaymentRequired())
                 .andExpect(jsonPath("$.code").value(3005));

@@ -15,7 +15,7 @@ public interface SlotService {
     /**
      * Mở một slot cho trẻ trong nhóm của NGƯỜI GỌI.
      *
-     * 07/10 (Kidz chốt): chữ ký là (callerId, req) — groupId lấy từ req.groupId() (DTO đổi qua
+     * 07/10 (Hưng chốt): chữ ký là (callerId, req) — groupId lấy từ req.groupId() (DTO đổi qua
      * PR #10, Hưng duyệt), callerId để service tự kiểm "nhóm là của mình" (3004), không tin vai
      * trong JWT. Controller lấy callerId từ JWT sub.
      */
