@@ -40,6 +40,6 @@ public interface SlotService {
 
     void changePin(UUID callerId, UUID slotId, ChangePinRequest req);
 
-    TokenResponse loginSlot(String code, String pin);
+    SlotLoginResponse loginSlot(String code, String pin);
 
 }

@@ -6,7 +6,7 @@ import com.doan.game.DTO.request.CreateSlotsRequest;
 import com.doan.game.DTO.request.SlotLoginRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.SlotResponse;
-import com.doan.game.DTO.response.TokenResponse;
+import com.doan.game.DTO.response.SlotLoginResponse;
 import com.doan.game.service.SlotService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -75,7 +75,7 @@ public class SlotController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> loginSlot(@Valid @RequestBody SlotLoginRequest req) {
+    public ApiResponse<SlotLoginResponse> loginSlot(@Valid @RequestBody SlotLoginRequest req) {
         return ApiResponse.ok(slotService.loginSlot(req.code(), req.pin()));
     }
 

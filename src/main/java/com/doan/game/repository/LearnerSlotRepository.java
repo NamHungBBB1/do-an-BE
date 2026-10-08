@@ -13,7 +13,11 @@ import java.util.UUID;
 @Repository
 public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> {
 
-    /** Trẻ gõ mã, luôn viết hoa trước khi tra. */
+    /**
+     * Trẻ gõ mã, luôn viết hoa trước khi tra. Nạp kèm nhóm: loginSlot chạy NGOÀI transaction (để bộ
+     * đếm sai PIN không bị rollback) nên không lazy-load nhóm được, mà response cần groupContext.
+     */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "group")
     Optional<LearnerSlot> findByCode(String code);
 
     /** Sinh mã slot: kiểm TRƯỚC khi chèn — chèn rồi bắt lỗi thì session Hibernate hỏng (xem openSlot). */

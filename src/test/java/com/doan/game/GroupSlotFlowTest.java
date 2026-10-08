@@ -136,7 +136,11 @@ class GroupSlotFlowTest {
                         .content("{\"code\":\"" + code + "\",\"pin\":\"123456\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.result.expiresIn").value(8 * 3600));
+                .andExpect(jsonPath("$.result.expiresIn").value(8 * 3600))
+                // Hồ sơ trẻ trả kèm để FE hiện tên + nhãn gia đình / lớp (token SLOT không gọi được /auth/me)
+                .andExpect(jsonPath("$.result.slot.displayName").value("Be An"))
+                .andExpect(jsonPath("$.result.slot.groupContext").value("FAMILY"))
+                .andExpect(jsonPath("$.result.slot.id").isNotEmpty());
     }
 
     /** SLOT_LIMIT_REACHED (3006) dùng chung cho cả hai vế hạn mức 4 / 40. */
