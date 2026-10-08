@@ -36,6 +36,14 @@ public class PaymentController {
         return ApiResponse.ok(paymentService.createPayment(currentAccountId(jwt), req));
     }
 
+    /** Lịch sử giao dịch của tôi (kể cả PENDING / FAILED), mới nhất trước. */
+    @GetMapping
+    public ApiResponse<java.util.List<com.doan.game.DTO.response.TransactionAdminResponse>> listMyPayments(
+            @AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(paymentService.listMyTransactions(currentAccountId(jwt), page, size));
+    }
+
     @GetMapping("/{orderCode}")
     public ApiResponse<PaymentStatusResponse> getPayment(@AuthenticationPrincipal Jwt jwt,
                                                           @PathVariable long orderCode) {

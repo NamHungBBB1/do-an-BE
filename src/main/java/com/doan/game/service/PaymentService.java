@@ -26,6 +26,9 @@ public interface PaymentService {
     /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (đường returnUrl). */
     PaymentStatusResponse getPayment(UUID accountId, long orderCode);
 
+    /** Lịch sử giao dịch của chính người gọi, mới nhất trước. */
+    List<TransactionAdminResponse> listMyTransactions(UUID accountId, int page, int size);
+
     void cancelPayment(UUID accountId, long orderCode, String reason);
 
     /** Nhận body thô của webhook PayOS. Không bao giờ ném ra ngoài: PayOS cần 200. */

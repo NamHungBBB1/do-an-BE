@@ -20,12 +20,14 @@ import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.PlanRepository;
 import com.doan.game.repository.TransactionRepository;
 import com.doan.game.service.EntitlementFactory;
+import com.doan.game.service.OutgoingMail;
 import com.doan.game.service.PaymentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -45,6 +47,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -63,6 +66,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentServiceImpl.class);
     private static final DateTimeFormatter PAYOS_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    public static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter DMY_HM = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
 
     private final TransactionRepository transactionRepo;
     private final EntitlementRepository entitlementRepo;
@@ -75,6 +80,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PayOsProperties payOsProps;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher events;
 
     // ------------------------------------------------------------------ tạo link
     @Override
@@ -83,6 +89,16 @@ public class PaymentServiceImpl implements PaymentService {
         PlanKind kind = PlanServiceImpl.parseKind(req.kind());
         long price = planRepo.findByKind(kind).map(Plan::getPrice)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));
+        // Idempotent: còn đơn chờ cùng gói, cùng giá, QR còn hạn ít nhất 1 phút thì trả lại đúng đơn đó.
+        // Bấm Mua hai lần hay tải lại trang không sinh đơn rác, và không có hai QR để lỡ trả hai lần.
+        // ponytail: hai request cùng lúc vẫn có thể tạo hai đơn; khoá dòng account nếu gặp thật.
+        Optional<Transaction> open = transactionRepo
+                .findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
+                        accountId, kind, TransactionStatus.PENDING, Instant.now(clock).plus(1, ChronoUnit.MINUTES))
+                .filter(t -> t.getQrCode() != null && t.getAmount() == price);
+        if (open.isPresent()) {
+            return toPaymentResponse(open.get());
+        }
         Account account = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
         PayOS client = client();
@@ -112,8 +128,13 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             CreatePaymentLinkResponse res = client.paymentRequests().create(data);
             tx.setGatewayRef(res.getPaymentLinkId());
-            return new PaymentResponse(tx.getOrderCode(), res.getQrCode(), res.getBin(), res.getAccountNumber(),
-                    res.getAccountName(), price, res.getDescription(), expiresAt, res.getCheckoutUrl());
+            tx.setQrCode(res.getQrCode());
+            tx.setBankBin(res.getBin());
+            tx.setBankAccountNumber(res.getAccountNumber());
+            tx.setBankAccountName(res.getAccountName());
+            tx.setTransferNote(res.getDescription());
+            tx.setExpiresAt(expiresAt);
+            return toPaymentResponse(tx);
         } catch (PayOSException e) {
             // Ném ra là rollback cả dòng PENDING: không có link thì không có giao dịch.
             throw new AppException(ErrorCode.PAYOS_ERROR, e.getMessage());
@@ -129,6 +150,14 @@ public class PaymentServiceImpl implements PaymentService {
             reconcileWithPayOS(tx);
         }
         return toStatus(tx);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransactionAdminResponse> listMyTransactions(UUID accountId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        return transactionRepo.findByAccount_IdOrderByCreatedAtDesc(accountId, pageable)
+                .map(PaymentServiceImpl::toAdmin).getContent();
     }
 
     @Override
@@ -268,7 +297,9 @@ public class PaymentServiceImpl implements PaymentService {
         }
         tx.setStatus(TransactionStatus.PAID);
         tx.setPaidAt(paidAt);
-        entitlementRepo.save(buildEntitlementFrom(tx));
+        Entitlement e = buildEntitlementFrom(tx);
+        entitlementRepo.save(e);
+        sendReceiptMail(tx, e);
         log.info("Giao dịch {} PAID, cấp gói {} cho tài khoản {}", tx.getOrderCode(), tx.getKind(), tx.getAccount().getId());
     }
 
@@ -321,6 +352,37 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (Exception e) {
             return Instant.now(clock);
         }
+    }
+
+    /** Biên nhận: phát sự kiện, MailService gửi SAU KHI COMMIT — rollback thì không có mail. */
+    private void sendReceiptMail(Transaction tx, Entitlement e) {
+        Account a = tx.getAccount();
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Biên nhận thanh toán FinTeen #" + tx.getOrderCode(),
+                """
+                        <p>Chào %s,</p>
+                        <p>FinTeen đã nhận thanh toán của bạn.</p>
+                        <ul>
+                        <li>Mã đơn: <b>%d</b></li>
+                        <li>Gói: <b>%s</b> (%s)</li>
+                        <li>Số tiền: <b>%s đ</b></li>
+                        <li>Thanh toán lúc: %s</li>
+                        <li>Thời hạn gói: %s – %s</li>
+                        </ul>
+                        <p>Thắc mắc về giao dịch, trả lời mail này kèm mã đơn.</p>
+                        """.formatted(AuthServiceImpl.escape(a.getDisplayName()), tx.getOrderCode(),
+                        planLabel(tx.getKind()), tx.getPurpose() == TransactionPurpose.RENEW ? "gia hạn" : "mua mới",
+                        String.format(Locale.ROOT, "%,d", tx.getAmount()).replace(',', '.'),
+                        DMY_HM.format(tx.getPaidAt().atZone(clock.getZone())),
+                        DMY.format(e.getStartsOn()), DMY.format(e.getExpiresOn()))));
+    }
+
+    public static String planLabel(PlanKind kind) {
+        return kind == PlanKind.PARENT ? "Phụ huynh" : "Giáo viên";
+    }
+
+    private PaymentResponse toPaymentResponse(Transaction tx) {
+        return new PaymentResponse(tx.getOrderCode(), tx.getQrCode(), tx.getBankBin(), tx.getBankAccountNumber(),
+                tx.getBankAccountName(), tx.getAmount(), tx.getTransferNote(), tx.getExpiresAt());
     }
 
     private static PaymentStatusResponse toStatus(Transaction tx) {

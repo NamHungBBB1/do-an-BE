@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import vn.payos.PayOS;
 import vn.payos.model.webhooks.WebhookData;
 import vn.payos.service.blocking.webhooks.WebhooksService;
@@ -33,6 +34,9 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,6 +55,7 @@ class PaymentServiceImplTest {
     @Mock ObjectProvider<PayOS> payOSProvider;
     @Mock PayOS payOS;
     @Mock WebhooksService webhooks;
+    @Mock ApplicationEventPublisher events;
 
     /** 10:00 sáng 02/10/2026 giờ Việt Nam. */
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-02T03:00:00Z"), ClockConfig.VN);
@@ -63,7 +68,7 @@ class PaymentServiceImplTest {
         svc = new PaymentServiceImpl(transactionRepo, entitlementRepo,
                 new EntitlementFactory(entitlementRepo, clock), accountRepo, planRepo, payOSProvider,
                 new PayOsProperties("id", "key", "sum", "https://x/webhook", "https://fe/ok", "https://fe/cancel"),
-                clock, new ObjectMapper());
+                clock, new ObjectMapper(), events);
         account = new Account();
         account.setId(UUID.randomUUID());
         tx = new Transaction();
@@ -111,6 +116,27 @@ class PaymentServiceImplTest {
         // 02/10 + 3 tháng = 02/01/2027, dùng hết ngày 01/01/2027
         assertEquals(LocalDate.of(2027, 1, 1), captor.getValue().getExpiresOn());
         assertEquals(tx, captor.getValue().getTransaction());
+        // Biên nhận: một mail, có mã đơn và hạn gói
+        ArgumentCaptor<OutgoingMail> mail = ArgumentCaptor.forClass(OutgoingMail.class);
+        verify(events).publishEvent(mail.capture());
+        assertTrue(mail.getValue().body().contains("123") && mail.getValue().body().contains("01/01/2027"));
+    }
+
+    @Test
+    void buyingAgainReturnsTheOpenOrderWithoutCallingPayOS() {
+        threeMonthPlan();
+        tx.setQrCode("000201...");
+        tx.setExpiresAt(Instant.now(clock).plusSeconds(3600));
+        when(transactionRepo.findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
+                eq(account.getId()), eq(PlanKind.PARENT), eq(TransactionStatus.PENDING), any()))
+                .thenReturn(Optional.of(tx));
+
+        var res = svc.createPayment(account.getId(), new com.doan.game.DTO.request.BuyPlanRequest("PARENT"));
+
+        assertEquals(123L, res.orderCode());
+        assertEquals("000201...", res.qrCode());
+        verifyNoInteractions(payOSProvider);
+        verify(transactionRepo, never()).saveAndFlush(any());
     }
 
     @Test

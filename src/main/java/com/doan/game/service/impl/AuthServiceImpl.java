@@ -717,7 +717,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /** Chèn vào HTML thì thoát ký tự đặc biệt — tên người dùng là dữ liệu, không phải mã. */
-    private static String escape(String s) {
+    public static String escape(String s) {
         if (s == null) {
             return "";
         }
