@@ -1,5 +1,7 @@
-# Chạy test mỗi lần push. BE chạy trên VPS Vietnix và deploy BẰNG TAY qua
-# ops/finteen-deploy/redeploy.sh (thư mục đồ án) — main đổi không tự lên máy chủ.
+# Chạy test mỗi lần push / PR. Push lên main (merge PR) mà test đạt thì TỰ DEPLOY lên VPS
+# (Hưng duyệt 08/10). Khoá SSH trong secret DEPLOY_SSH_KEY chỉ chạy được một việc trên VPS:
+# /opt/finteen-ci-deploy.sh nhận jar qua stdin, pg_dump trước, thay jar, restart, chờ health,
+# không lên thì tự lùi bản cũ. Bản script nằm ở ops/finteen-deploy/ci-deploy.sh (ngoài repo).
 name: ci
 
 on:
@@ -18,3 +20,32 @@ jobs:
           distribution: temurin
           cache: maven
       - run: mvn -B test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Hai lần merge sát nhau: lần sau chờ lần trước xong, không chạy chồng.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+      - run: mvn -B -q package -DskipTests
+      - name: Deploy to VPS
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes "root@$HOST" < target/game-backend-0.0.1-SNAPSHOT.jar
+      - name: Check public health
+        run: curl -sf -m 20 https://kidzeconomy.com.vn/finteen/api/health
