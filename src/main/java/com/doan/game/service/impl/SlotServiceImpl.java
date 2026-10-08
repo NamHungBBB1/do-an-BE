@@ -4,6 +4,8 @@ import com.doan.game.DTO.request.ChangePinRequest;
 import com.doan.game.DTO.request.CreateSlotRequest;
 import com.doan.game.DTO.request.CreateSlotsRequest;
 import com.doan.game.DTO.response.SlotResponse;
+import com.doan.game.DTO.response.SlotLoginResponse;
+import com.doan.game.DTO.response.SlotProfileResponse;
 import com.doan.game.DTO.response.TokenResponse;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
@@ -316,7 +318,7 @@ public class SlotServiceImpl implements SlotService {
      * là bẫy đã có test ở commit a982abc; học theo nguyên văn lần này.
      */
     @Override
-    public TokenResponse loginSlot(String code, String pin) {
+    public SlotLoginResponse loginSlot(String code, String pin) {
         if (code == null || code.isBlank() || pin == null || pin.isBlank()) {
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
         }
@@ -353,7 +355,11 @@ public class SlotServiceImpl implements SlotService {
         s.setFailedAttempts(0);
         s.setLockedUntil(null);
         slotRepo.save(s);
-        return tokenService.issueForSlot(s.getId());
+        TokenResponse t = tokenService.issueForSlot(s.getId());
+        LearnerGroup g = s.getGroup();
+        return new SlotLoginResponse(t.accessToken(), t.refreshToken(), t.expiresIn(), new SlotProfileResponse(
+                s.getId(), s.getDisplayName(), s.getBadge(),
+                g == null || g.getContext() == null ? null : g.getContext().name()));
     }
 
     /** 8 ký tự HOA từ bảng chữ bỏ ký tự dễ nhầm — trẻ gõ tay nên từng chữ phải đọc được. */
