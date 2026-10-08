@@ -8,12 +8,14 @@ import com.doan.game.DTO.response.TokenResponse;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.enums.LearningContext;
+import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.SlotMapper;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.service.EntitlementService;
 import com.doan.game.service.SlotService;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
@@ -25,16 +27,16 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
+ * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều
+ * slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15
+ * phút (tính từ lockedUntil, không có job mở khoá).
  *
- * CÓ RUỘT loginSlot (02/10, làm cùng đợt AuthService) vì nó phát token qua cùng TokenService,
- * openSlot (07/10, feat/group-slot) và returnSlot / wipeSlot / changePin (PR 2a). Phần còn lại
- * vẫn là KHUNG — openSlots (bulk, PR 2b) ném UnsupportedOperationException để không ai vô tình
- * dùng một lớp rỗng mà tưởng nó chạy.
+ * CÓ RUỘT tất cả hàm (loginSlot 02/10, openSlot 07/10, PR 2a đọc/trả/xoá/đổi PIN, PR 2b bulk).
  */
 @Service
 @RequiredArgsConstructor
@@ -56,6 +58,7 @@ public class SlotServiceImpl implements SlotService {
     private final LearnerSlotRepository slotRepo;
     private final LearnerGroupRepository groupRepo;
     private final TokenService tokenService;
+    private final EntitlementService entitlementService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -63,11 +66,12 @@ public class SlotServiceImpl implements SlotService {
      * Người lớn mở một slot: tên + PIN 6 số; mã chữ do BE sinh (trẻ gõ mã + PIN để vào).
      *
      * Thứ tự kiểm (Hưng chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
-     * → nhóm chưa đóng (5002) → nhóm CLASS đã có consent (5003, FAMILY không cần) →
-     * tên / PIN hợp lệ (1001) → còn chỗ (3006).
+     * → nhóm chưa đóng (5002) → gói còn hạn đúng loại (3005, Hưng chốt thêm 07/10) →
+     * nhóm CLASS đã có consent (5003, FAMILY không cần) → tên / PIN hợp lệ (1001) →
+     * còn chỗ (3006).
      *
-     * KHÔNG kiểm gói ở đây: mở nhóm đã kiểm rồi (openGroup), còn "gói hết hạn có được mở slot
-     * mới không" là câu hỏi để Hưng chốt — giữ nguyên, ghi vào PR chờ chốt.
+     * Kiểm gói TẠI ĐÂY (PR 2b): mở nhóm đã kiểm rồi, nhưng gói có thể hết hạn sau khi mở nhóm —
+     * đúng loại FAMILY→PARENT, CLASS→TEACHER như openGroup. Slot cũ vẫn chơi bình thường.
      */
     @Override
     @Transactional
@@ -81,32 +85,16 @@ public class SlotServiceImpl implements SlotService {
         // 07/10, mẫu TransactionRepository.lockByOrderCode).
         LearnerGroup group = groupRepo.lockById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
-        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
-            throw new AppException(ErrorCode.FORBIDDEN);
-        }
+        requireOwner(group, callerId);
         if (group.getClosedAt() != null) {
             throw new AppException(ErrorCode.GROUP_CLOSED);
         }
+        requireActivePlan(callerId, group);
         // Hưng chốt 07/10: lớp phải có xác nhận đồng ý của phụ huynh trước khi có slot.
         if (group.getContext() == LearningContext.CLASS && group.getConsentConfirmedAt() == null) {
             throw new AppException(ErrorCode.GROUP_CONSENT_REQUIRED);
         }
-
-        String displayName = req.displayName();
-        if (displayName == null || displayName.isBlank()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: bắt buộc");
-        }
-        if (displayName.trim().length() > 40) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: tối đa 40 ký tự");
-        }
-        String pin = req.pin();
-        if (pin == null || !pin.matches("\\d{6}")) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
-        }
-        String badge = req.badge();
-        if (badge != null && badge.length() > 40) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "badge: tối đa 40 ký tự");
-        }
+        validateSlotInput(req.displayName(), req.pin(), req.badge());
 
         int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
         if (slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) >= slotLimit) {
@@ -115,15 +103,113 @@ public class SlotServiceImpl implements SlotService {
 
         LearnerSlot slot = new LearnerSlot();
         slot.setGroup(group);
-        slot.setPinHash(passwordEncoder.encode(pin));
-        slot.setDisplayName(displayName.trim());
-        slot.setBadge(badge == null ? null : badge.trim());
+        slot.setPinHash(passwordEncoder.encode(req.pin()));
+        slot.setDisplayName(req.displayName().trim());
+        slot.setBadge(req.badge() == null ? null : req.badge().trim());
         slot.setStatus(SlotStatus.ACTIVE);
         slot.setFailedAttempts(0);
         slot.setCreatedAt(Instant.now(clock));
         slot.setCode(nextFreeCode());
         slotRepo.saveAndFlush(slot);
         return SlotMapper.toResponse(slot, false);
+    }
+
+    /**
+     * Mở hàng loạt cho lớp (PR 2b): MỘT transaction, khoá dòng nhóm MỘT lần, vượt hạn mức thì
+     * TỪ CHỐI CẢ LÔ (3006) — không mở được nửa lô rồi treo. Cùng thứ tự kiểm với openSlot;
+     * phần tử rời rạc không cùng groupId hay thiếu trường thì 1001 ngay khi còn chưa chèn gì.
+     */
+    @Override
+    @Transactional
+    public List<SlotResponse> openSlots(UUID callerId, CreateSlotsRequest req) {
+        List<CreateSlotRequest> items = req == null ? null : req.slots();
+        if (items == null || items.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "slots: ít nhất một slot");
+        }
+        UUID groupId = null;
+        for (CreateSlotRequest item : items) {
+            if (item == null || item.groupId() == null) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED, "groupId: bắt buộc");
+            }
+            if (groupId == null) {
+                groupId = item.groupId();
+            } else if (!groupId.equals(item.groupId())) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "slots: mọi phần tử phải cùng một groupId");
+            }
+        }
+        final UUID bulkGroupId = groupId;
+        LearnerGroup group = groupRepo.lockById(bulkGroupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + bulkGroupId));
+        requireOwner(group, callerId);
+        if (group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_CLOSED);
+        }
+        requireActivePlan(callerId, group);
+        if (group.getContext() == LearningContext.CLASS && group.getConsentConfirmedAt() == null) {
+            throw new AppException(ErrorCode.GROUP_CONSENT_REQUIRED);
+        }
+        // Kiểm dữ liệu TRƯỚC hạn mức: lô không hợp lệ thì 1001, lô hợp lệ nhưng nhiều quá thì 3006.
+        for (CreateSlotRequest item : items) {
+            validateSlotInput(item.displayName(), item.pin(), item.badge());
+        }
+        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
+        long willHave = slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) + items.size();
+        if (willHave > slotLimit) {
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
+        }
+
+        Instant now = Instant.now(clock);
+        List<SlotResponse> result = new ArrayList<>(items.size());
+        for (CreateSlotRequest item : items) {
+            LearnerSlot slot = new LearnerSlot();
+            slot.setGroup(group);
+            slot.setPinHash(passwordEncoder.encode(item.pin()));
+            slot.setDisplayName(item.displayName().trim());
+            slot.setBadge(item.badge() == null ? null : item.badge().trim());
+            slot.setStatus(SlotStatus.ACTIVE);
+            slot.setFailedAttempts(0);
+            slot.setCreatedAt(now);
+            slot.setCode(nextFreeCode());
+            slotRepo.saveAndFlush(slot);
+            result.add(SlotMapper.toResponse(slot, false));
+        }
+        return result;
+    }
+
+    /**
+     * Gói đúng loại với loại nhóm — chung luật với openGroup, dùng lại 3005 PLAN_REQUIRED
+     * (Hưng chốt 07/10). Gói hết hạn giữa chừng thì không mở thêm slot; slot cũ vẫn chơi.
+     */
+    private void requireActivePlan(UUID callerId, LearnerGroup group) {
+        PlanKind required = group.getContext() == LearningContext.FAMILY
+                ? PlanKind.PARENT : PlanKind.TEACHER;
+        if (!entitlementService.activePlans(callerId).contains(required)) {
+            throw new AppException(ErrorCode.PLAN_REQUIRED);
+        }
+    }
+
+    /** Nhóm phải là của người gọi (3004) — một cửa cho mọi thao tác trên slot của nhóm. */
+    private static void requireOwner(LearnerGroup group, UUID callerId) {
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    /** Tên bắt buộc ≤ 40, PIN đúng 6 chữ số, badge (nếu có) ≤ 40 — một chỗ cho cả open lẫn bulk. */
+    private static void validateSlotInput(String displayName, String pin, String badge) {
+        if (displayName == null || displayName.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: bắt buộc");
+        }
+        if (displayName.trim().length() > 40) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: tối đa 40 ký tự");
+        }
+        if (pin == null || !pin.matches("\\d{6}")) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
+        }
+        if (badge != null && badge.length() > 40) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "badge: tối đa 40 ký tự");
+        }
     }
 
     /**
@@ -147,11 +233,6 @@ public class SlotServiceImpl implements SlotService {
                 "sinh mã slot thất bại sau " + MAX_CODE_ATTEMPTS + " lần — thử lại");
     }
 
-    @Override
-    public List<SlotResponse> openSlots(UUID groupId, CreateSlotsRequest req) {
-        throw new UnsupportedOperationException("chua cai dat");
-    }
-
     /**
      * Trả slot: ACTIVE → ARCHIVED, ghi archivedAt. Giữ nguyên tên và mã — chỉ là trạng thái đổi,
      * trẻ dùng lại mã thì loginSlot trả 3009 (đã có từ trước). Trả lại chỗ cho hạn mức vì
@@ -160,7 +241,8 @@ public class SlotServiceImpl implements SlotService {
     @Override
     @Transactional
     public void returnSlot(UUID callerId, UUID slotId) {
-        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        LearnerSlot slot = requireOwned(callerId, slotId);
+        requireStatus(slot, SlotStatus.ACTIVE);
         slot.setStatus(SlotStatus.ARCHIVED);
         slot.setArchivedAt(Instant.now(clock));
         slotRepo.save(slot);
@@ -170,11 +252,17 @@ public class SlotServiceImpl implements SlotService {
      * Xoá sạch: WIPED, bỏ tên, mã và PIN — nhưng GIỮ dòng cho báo cáo cũ (ERD mục 5). Mã về NULL
      * nên trẻ không còn login được (findByCode không ra → 3007). Badge giữ lại: đó là cột phân
      * nhóm / báo cáo, không phải dữ liệu định danh của trẻ.
+     *
+     * Nhận cả ACTIVE lẫn ARCHIVED — phụ huynh trả slot xong vẫn xoá được tên con; WIPED thì 5004
+     * (Hưng chốt 07/10).
      */
     @Override
     @Transactional
     public void wipeSlot(UUID callerId, UUID slotId) {
-        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        LearnerSlot slot = requireOwned(callerId, slotId);
+        if (slot.getStatus() == SlotStatus.WIPED) {
+            throw new AppException(ErrorCode.SLOT_NOT_ACTIVE);
+        }
         slot.setStatus(SlotStatus.WIPED);
         slot.setWipedAt(Instant.now(clock));
         slot.setCode(null);
@@ -190,7 +278,8 @@ public class SlotServiceImpl implements SlotService {
     @Override
     @Transactional
     public void changePin(UUID callerId, UUID slotId, ChangePinRequest req) {
-        LearnerSlot slot = requireOwnedActive(callerId, slotId);
+        LearnerSlot slot = requireOwned(callerId, slotId);
+        requireStatus(slot, SlotStatus.ACTIVE);
         String pin = req == null ? null : req.pin();
         if (pin == null || !pin.matches("\\d{6}")) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
@@ -202,21 +291,21 @@ public class SlotServiceImpl implements SlotService {
     }
 
     /**
-     * Cửa chung cho trả / xoá / đổi PIN: slot phải có (3007) → là của người gọi (3004,
-     * kiểm qua chủ nhóm) → còn ACTIVE (5004). Thứ tự này cố ý: người khác không được biết
-     * slot của người khác có tồn tại hay đang ở trạng thái gì.
+     * Cửa chung cho trả / xoá / đổi PIN: slot phải có (3007) → là của người gọi (3004, kiểm qua
+     * chủ nhóm). Thứ tự này cố ý: người khác không được biết slot của người khác có tồn tại hay
+     * đang ở trạng thái gì. Trạng thái ACTIVE kiểm riêng từng việc (5004).
      */
-    private LearnerSlot requireOwnedActive(UUID callerId, UUID slotId) {
+    private LearnerSlot requireOwned(UUID callerId, UUID slotId) {
         LearnerSlot slot = slotRepo.findById(slotId)
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
-        LearnerGroup group = slot.getGroup();
-        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
-            throw new AppException(ErrorCode.FORBIDDEN);
-        }
-        if (slot.getStatus() != SlotStatus.ACTIVE) {
+        requireOwner(slot.getGroup(), callerId);
+        return slot;
+    }
+
+    private static void requireStatus(LearnerSlot slot, SlotStatus expected) {
+        if (slot.getStatus() != expected) {
             throw new AppException(ErrorCode.SLOT_NOT_ACTIVE);
         }
-        return slot;
     }
 
     /**

@@ -35,9 +35,8 @@ import java.util.UUID;
 /**
  * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
  *
- * CÓ RUỘT openGroup + confirmConsent (07/10, feat/group-slot) và getMyGroups / listSlots /
- * countFreeSlots (PR 2a). closeGroup vẫn là KHUNG — ném UnsupportedOperationException
- * để không ai vô tình dùng một lớp rỗng mà tưởng nó chạy.
+ * CÓ RUỘT openGroup + confirmConsent (07/10, feat/group-slot), getMyGroups / listSlots /
+ * countFreeSlots (PR 2a) và closeGroup (PR 2b).
  */
 @Service
 @RequiredArgsConstructor
@@ -107,7 +106,8 @@ public class GroupServiceImpl implements GroupService {
     @Transactional(readOnly = true)
     public List<LearnerGroupResponse> getMyGroups(UUID callerId) {
         Map<UUID, Long> used = new HashMap<>();
-        for (LearnerSlotRepository.SlotUsedRow row : slotRepo.countByStatusGroupedByGroup(SlotStatus.ACTIVE)) {
+        for (LearnerSlotRepository.SlotUsedRow row
+                : slotRepo.countByStatusGroupedByGroup(SlotStatus.ACTIVE, callerId)) {
             used.put(row.getGroupId(), row.getUsed());
         }
         List<LearnerGroup> groups = groupRepo.findByOwner_IdOrderByOpenedAtDesc(callerId);
@@ -156,9 +156,37 @@ public class GroupServiceImpl implements GroupService {
         }
     }
 
+    /**
+     * Kết thúc nhóm. Đóng lần hai thì 5002 (đã đóng — ghi vào PR hỏi lại nếu Hưng muốn idempotent).
+     *
+     * ERD mục 4: "đông cứng báo cáo nhóm, lưu trữ nhóm và các slot, trả lại hạn mức, không xoá gì".
+     * Báo cáo hiện là khung, nên ghi rõ trong PR: báo cáo dựng sau từ dữ liệu tới closedAt — sau
+     * khi đóng, slot đã ARCHIVED nên dữ liệu không thay đổi nữa. openContext = NULL trả chỗ cho
+     * UNIQUE(ownerId, openContext) để mở nhóm mới. Hưng chốt 07/10: không có API khôi phục.
+     */
     @Override
-    public void closeGroup(UUID groupId) {
-        throw new UnsupportedOperationException("chua cai dat");
+    @Transactional
+    public void closeGroup(UUID callerId, UUID groupId) {
+        // lockById (FOR UPDATE) chứ không phải findById: openSlot/bulk đang chèn song song thì
+        // closeGroup phải đứng sau nó — nếu không, hai bên commit song song và nhóm ĐÃ ĐÓNG vẫn
+        // còn một slot ACTIVE (Kidz góp ý review PR 2b, 07/10).
+        LearnerGroup group = groupRepo.lockById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_CLOSED);
+        }
+        Instant now = Instant.now(clock);
+        group.setClosedAt(now);
+        group.setOpenContext(null);
+        groupRepo.save(group);
+        for (LearnerSlot slot : slotRepo.findByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE)) {
+            slot.setStatus(SlotStatus.ARCHIVED);
+            slot.setArchivedAt(now);
+            slotRepo.save(slot);
+        }
     }
 
     /** Chỗ trống = hạn mức − slot ACTIVE; ARCHIVED / WIPED đã trả lại chỗ (ERD mục 5). */

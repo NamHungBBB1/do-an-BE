@@ -2,6 +2,7 @@ package com.doan.game.controller;
 
 import com.doan.game.DTO.request.ChangePinRequest;
 import com.doan.game.DTO.request.CreateSlotRequest;
+import com.doan.game.DTO.request.CreateSlotsRequest;
 import com.doan.game.DTO.request.SlotLoginRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.SlotResponse;
@@ -38,9 +39,14 @@ public class SlotController {
         return ApiResponse.ok(slotService.openSlot(UUID.fromString(jwt.getSubject()), req));
     }
 
+    /**
+     * Mở nhiều slot một lần (giáo viên dán danh sách lớp). Cùng groupId, vượt hạn mức từ chối
+     * CẢ LÔ (3006), một transaction. groupId lấy từ body, callerId từ JWT sub — như openSlot.
+     */
     @PostMapping("/bulk")
-    public void openSlots() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<java.util.List<SlotResponse>> openSlots(@AuthenticationPrincipal Jwt jwt,
+                                                               @RequestBody CreateSlotsRequest req) {
+        return ApiResponse.ok(slotService.openSlots(UUID.fromString(jwt.getSubject()), req));
     }
 
     /**
