@@ -93,7 +93,9 @@ class GroupCloseBulkFlowTest {
                 .andExpect(jsonPath("$.result.length()").value(2))
                 .andExpect(jsonPath("$.result[0].id").value(newId))
                 .andExpect(jsonPath("$.result[1].id").value(closedId))
-                .andExpect(jsonPath("$.result[1].slotUsed").value(0));
+                .andExpect(jsonPath("$.result[1].slotUsed").value(0))
+                .andExpect(jsonPath("$.result[0].closedAt").doesNotExist())
+                .andExpect(jsonPath("$.result[1].closedAt").isNotEmpty());
 
         // Đóng lần hai: 5002 (ghi vào PR hỏi lại nếu Hưng muốn idempotent).
         mvc.perform(post("/api/groups/" + closedId + "/close").header("Authorization", "Bearer " + jwt))

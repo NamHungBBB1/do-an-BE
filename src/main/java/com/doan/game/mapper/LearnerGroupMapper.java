@@ -27,6 +27,7 @@ public final class LearnerGroupMapper {
                 source.getContext() == null ? null : source.getContext().name(),
                 source.getSlotLimit() == null ? 0 : source.getSlotLimit(),
                 slotUsed,
-                source.getConsentConfirmedAt() != null);
+                source.getConsentConfirmedAt() != null,
+                source.getClosedAt());
     }
 }
