@@ -78,6 +78,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/slots/**").hasAnyAuthority("SCOPE_PARENT", "SCOPE_TEACHER")
                 // Cổng của TRẺ: token typ=SLOT, sub là id slot, scope CHILD.
                 .requestMatchers("/api/play/**").hasAuthority("SCOPE_CHILD")
+                // Dashboard người học cùng cửa với /api/play: token SLOT, trước anyRequest —
+                // token người lớn không có SCOPE_CHILD nên rơi vào 403/3004 (Hưng chốt 08/10).
+                .requestMatchers("/api/learner/**").hasAuthority("SCOPE_CHILD")
                 // Mọi đường còn lại là của người lớn. Trước đây đây là `.authenticated()` —
                 // mà token trẻ cũng "đã đăng nhập", nên child token gọi được cả /api/payments,
                 // /api/auth/me... và controller đọc jwt.getSubject() như id tài khoản thì tra ra
