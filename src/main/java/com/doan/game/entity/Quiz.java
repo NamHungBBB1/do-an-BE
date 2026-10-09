@@ -35,7 +35,7 @@ public class Quiz {
     @Column(name = "title", length = 120)
     private String title;
 
-    @Column(name = "question_ids")
+    @Column(name = "question_ids", columnDefinition = "text")
     private String questionIds;
 
     @Column(name = "due_at")

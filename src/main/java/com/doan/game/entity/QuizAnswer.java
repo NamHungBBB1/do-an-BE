@@ -36,6 +36,6 @@ public class QuizAnswer {
     @Column(name = "chosen_index")
     private Integer chosenIndex;
 
-    @Column(name = "correct")
+    @Column(name = "correct", nullable = false, columnDefinition = "boolean default false not null")
     private boolean correct;
 }

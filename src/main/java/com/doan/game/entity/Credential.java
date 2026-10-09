@@ -11,10 +11,12 @@ import lombok.Setter;
 /**
  * Một đường vào tài khoản; mật khẩu chỉ là một hàng trong số đó. Khoá trên (provider, subject) chứ
  * không trên email — OpenID Connect Core mục 5.7 nói rõ email KHÔNG được dùng làm định danh duy
- * nhất, vì nó đổi được và có thể cấp lại cho người khác.
+ * nhất, vì nó đổi được và có thể cấp lại cho người khác. Ràng buộc: UNIQUE(provider, subject)
  */
 @Entity
-@Table(name = "credential")
+@Table(name = "credential", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"provider", "subject"})
+})
 @Getter
 @Setter
 @NoArgsConstructor

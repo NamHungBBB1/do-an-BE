@@ -32,6 +32,6 @@ public class GroupReportRow {
     @JoinColumn(name = "slot_id", nullable = false)
     private LearnerSlot slot;
 
-    @Column(name = "figures")
+    @Column(name = "figures", columnDefinition = "text")
     private String figures;
 }

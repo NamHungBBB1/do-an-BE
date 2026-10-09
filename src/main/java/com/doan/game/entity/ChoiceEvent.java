@@ -8,10 +8,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một lựa chọn người học đưa ra trong đoạn thoại. KHÔNG có đáp án đúng — cột effects ghi lựa chọn
- * đó làm năm chỉ số dịch chuyển ra sao. Cố ý tách khỏi MiniGameResult: nhét sở thích chung bảng
- * với đáp án đúng–sai thì hoặc để một cột rỗng vĩnh viễn, hoặc mời người ta đi chấm điểm một sở
- * thích. Ràng buộc: UNIQUE(slotId, chapter, attemptIndex, sceneId): chống ghi trùng khi gửi lại lô
+ * Một lựa chọn người học đưa ra trong đoạn thoại: cảnh nào, nút nào, bản phát hành nào. KHÔNG có
+ * đáp án đúng. effects là hiệu ứng BE tra từ bản phát hành rồi ghi lại (08/10), không phải số
+ * client gửi. Ràng buộc: UNIQUE(slotId, chapter, attemptIndex, sceneId): chống ghi trùng khi gửi
+ * lại lô
  */
 @Entity
 @Table(name = "choice_event", uniqueConstraints = {
@@ -43,7 +43,7 @@ public class ChoiceEvent {
     @Column(name = "choice_id", length = 64)
     private String choiceId;
 
-    @Column(name = "effects")
+    @Column(name = "effects", columnDefinition = "text")
     private String effects;
 
     @Column(name = "build_version", length = 32)
