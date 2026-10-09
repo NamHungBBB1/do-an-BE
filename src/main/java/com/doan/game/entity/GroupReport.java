@@ -33,6 +33,6 @@ public class GroupReport {
     @Column(name = "formula_version", length = 32)
     private String formulaVersion;
 
-    @Column(name = "summary")
+    @Column(name = "summary", columnDefinition = "text")
     private String summary;
 }

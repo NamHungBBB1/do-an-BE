@@ -34,7 +34,7 @@ public class Account {
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
 
-    @Column(name = "must_change_password")
+    @Column(name = "must_change_password", nullable = false, columnDefinition = "boolean default false not null")
     private boolean mustChangePassword;
 
     @Column(name = "failed_attempts")

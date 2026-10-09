@@ -42,7 +42,7 @@ public class DailySummary {
     @Column(name = "summary_date")
     private LocalDate summaryDate;
 
-    @Column(name = "summary", length = 8000)
+    @Column(name = "summary", columnDefinition = "text")
     private String summary;
 
     @Enumerated(EnumType.STRING)

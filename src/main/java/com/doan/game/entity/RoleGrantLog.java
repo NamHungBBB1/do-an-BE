@@ -35,7 +35,7 @@ public class RoleGrantLog {
     @Column(name = "role", length = 16)
     private String role;
 
-    @Column(name = "granted")
+    @Column(name = "granted", nullable = false, columnDefinition = "boolean default false not null")
     private boolean granted;
 
     @Column(name = "reason", length = 255)

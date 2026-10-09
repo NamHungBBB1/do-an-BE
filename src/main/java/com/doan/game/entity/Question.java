@@ -26,10 +26,10 @@ public class Question {
     @Column(name = "pool", length = 40)
     private String pool;
 
-    @Column(name = "stem", length = 8000)
+    @Column(name = "stem", columnDefinition = "text")
     private String stem;
 
-    @Column(name = "options")
+    @Column(name = "options", columnDefinition = "text")
     private String options;
 
     @Column(name = "correct_index")

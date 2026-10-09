@@ -8,9 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Trạng thái bền của một người học: đã xong chương nào và năm chỉ số — chúng cộng dồn suốt cả lượt
- * chứ không reset mỗi chương. Máy khách gửi số tổng nên lô gửi lại chỉ ghi đè vô hại. Ràng buộc:
- * CHECK: 5 chỉ số trong 0..100
+ * Trạng thái bền của một người học: đã xong chương nào và năm chỉ số ẩn cộng dồn suốt cả lượt.
+ * 08/10 (Hưng chốt): BE TỰ TÍNH từ ChoiceEvent theo bản phát hành đã đóng băng (ReleaseChapter),
+ * không tin số tổng do máy khách gửi lên. Ràng buộc: CHECK: 5 chỉ số trong 0..100
  */
 @Entity
 @Table(name = "run_state")
@@ -28,7 +28,7 @@ public class RunState {
     @JoinColumn(name = "slot_id", nullable = false, unique = true)
     private LearnerSlot slot;
 
-    @Column(name = "chapters_done")
+    @Column(name = "chapters_done", columnDefinition = "text")
     private String chaptersDone;
 
     @Column(name = "wealth")

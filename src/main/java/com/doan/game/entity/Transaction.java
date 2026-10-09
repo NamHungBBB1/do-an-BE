@@ -13,7 +13,9 @@ import lombok.Setter;
  * mình sinh, PayOS bắt buộc (02/10, theo tài liệu SDK); gatewayRef là paymentLinkId PayOS trả về.
  * Trạng thái chỉ chuyển tiến; webhook trùng bỏ qua. Bỏ UPGRADE. QR + tài khoản nhận + hạn lưu lại
  * (07/10, Hưng chốt hiện QR trong app) để bấm Mua lại khi còn đơn chờ cùng gói thì trả đúng đơn
- * đó, không tạo đơn mới.
+ * đó, không tạo đơn mới. 09/10 (rà soát): months chép số tháng lúc mua (đổi giá / tháng sau không
+ * ảnh hưởng); needsReview + note ghi lại tiền về mà không cấp gói (lệch số, về sau khi đơn hết
+ * hạn) để admin đối soát thay vì chỉ nằm trong log.
  */
 @Entity
 @Table(name = "transaction")
@@ -75,4 +77,13 @@ public class Transaction {
 
     @Column(name = "expires_at")
     private Instant expiresAt;
+
+    @Column(name = "months")
+    private Integer months;
+
+    @Column(name = "note", length = 255)
+    private String note;
+
+    @Column(name = "needs_review", nullable = false, columnDefinition = "boolean default false not null")
+    private boolean needsReview;
 }

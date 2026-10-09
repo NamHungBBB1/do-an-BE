@@ -50,7 +50,7 @@ public class MiniGameResult {
     @Column(name = "chosen", length = 64)
     private String chosen;
 
-    @Column(name = "correct")
+    @Column(name = "correct", nullable = false, columnDefinition = "boolean default false not null")
     private boolean correct;
 
     @Column(name = "build_version", length = 32)
