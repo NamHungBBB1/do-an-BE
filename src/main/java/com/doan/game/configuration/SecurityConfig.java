@@ -71,8 +71,12 @@ public class SecurityConfig {
                 // Telemetry là sổ ghi ẩn danh của client, chốt D3 bảo game phải chạy được
                 // cả khi server chết — bắt đăng nhập ở đây là đi ngược chốt đó.
                 .requestMatchers("/api/telemetry/**").permitAll()
-                // Việc của admin: cấp / thu vai, cấp gói không thanh toán, đăng ký URL webhook PayOS.
-                .requestMatchers("/api/admin/**", "/api/entitlements/grant",
+                // Nội dung game CÔNG KHAI (Hưng chốt 08/10): kịch bản không bí mật, thứ thu tiền là
+                // báo cáo và chỉ số. Chỉ GET; đường ghi nằm ở /api/studio.
+                .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
+                // Việc của admin: cấp / thu vai, cấp gói không thanh toán, đăng ký URL webhook PayOS,
+                // Studio giai đoạn 1 (lưu nháp + phát hành nội dung game).
+                .requestMatchers("/api/admin/**", "/api/entitlements/grant", "/api/studio/**",
                         "/api/payments/webhook/confirm").hasAuthority("SCOPE_ADMIN")
                 // Phát và thu slot là việc của người lớn ĐÃ MUA GÓI. Vai nằm trong token.
                 .requestMatchers("/api/slots/**").hasAnyAuthority("SCOPE_PARENT", "SCOPE_TEACHER")

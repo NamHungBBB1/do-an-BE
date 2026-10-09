@@ -82,7 +82,10 @@ public enum ErrorCode {
             HttpStatus.CONFLICT),
     /** Trả / xoá / đổi PIN chỉ làm được trên slot ACTIVE — ARCHIVED và WIPED đã kết thúc vòng đời. */
     SLOT_NOT_ACTIVE(5004, "Slot không còn đang mở — việc này chỉ làm được khi slot còn ACTIVE",
-            HttpStatus.CONFLICT);
+            HttpStatus.CONFLICT),
+
+    // 6xxx — nội dung game (Studio): bản phát hành đóng băng theo phiên bản, không ghi đè.
+    RELEASE_VERSION_TAKEN(6001, "Phiên bản này đã phát hành rồi — tăng số phiên bản", HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;
