@@ -21,6 +21,8 @@ public enum ErrorCode {
     MALFORMED_BODY(1002, "Body không đọc được", HttpStatus.BAD_REQUEST),
     NOT_FOUND(1003, "Không tìm thấy", HttpStatus.NOT_FOUND),
     NOT_IMPLEMENTED(1004, "Chức năng này chưa được cài đặt", HttpStatus.NOT_IMPLEMENTED),
+    /** Filter giới hạn theo IP (IpRateLimitFilter) ném cho các cửa công khai có gửi mail — rà soát 09/10. */
+    TOO_MANY_REQUESTS(1005, "Thao tác quá nhiều lần, thử lại sau", HttpStatus.TOO_MANY_REQUESTS),
 
     SEED_REQUIRED(2001, "Thiếu seed — không có seed thì không so sánh được giữa các lượt chơi",
             HttpStatus.BAD_REQUEST),

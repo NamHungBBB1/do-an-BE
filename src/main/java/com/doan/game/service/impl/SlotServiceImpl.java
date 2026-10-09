@@ -341,20 +341,12 @@ public class SlotServiceImpl implements SlotService {
         }
 
         if (!passwordEncoder.matches(pin, s.getPinHash())) {
-            int attempts = (s.getFailedAttempts() == null ? 0 : s.getFailedAttempts()) + 1;
-            if (attempts >= MAX_PIN_ATTEMPTS) {
-                s.setFailedAttempts(0);
-                s.setLockedUntil(now.plus(PIN_LOCK_DURATION));
-            } else {
-                s.setFailedAttempts(attempts);
-            }
-            slotRepo.save(s);
+            // Một câu UPDATE nguyên tử trong DB thay cho đọc → +1 → save (rà soát 09/10, G-02 / G-04).
+            slotRepo.recordFailedPin(s.getId(), MAX_PIN_ATTEMPTS, now.plus(PIN_LOCK_DURATION));
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
         }
 
-        s.setFailedAttempts(0);
-        s.setLockedUntil(null);
-        slotRepo.save(s);
+        slotRepo.resetFailedPin(s.getId());
         TokenResponse t = tokenService.issueForSlot(s.getId());
         LearnerGroup g = s.getGroup();
         return new SlotLoginResponse(t.accessToken(), t.refreshToken(), t.expiresIn(), new SlotProfileResponse(

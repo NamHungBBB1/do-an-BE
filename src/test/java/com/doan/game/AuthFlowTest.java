@@ -130,6 +130,8 @@ class AuthFlowTest {
     void duplicateEmailWithDifferentCaseIsRejected() throws Exception {
         String email = "trung-" + System.nanoTime() + "@test.local";
         register(email);
+        // Chỉ tài khoản ĐÃ xác minh mới "đã có chủ" — chưa xác minh thì đăng ký lại được (ca 27).
+        verify(tokenFromMail());
 
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -162,17 +164,20 @@ class AuthFlowTest {
     }
 
     // ------------------------------------------------------------------ 5
-    /** Mã đã dùng không dùng lại được: tài khoản đã xác minh thì báo 3014, không phát token lần hai. */
+    /**
+     * Mã đã dùng không dùng lại được, và câu trả lời phải GIỐNG email lạ (3012): ném 3014 "đã xác minh"
+     * trước khi kiểm mã là oracle dò email không tốn mail (rà soát 09/10, S-03).
+     */
     @Test
-    void verifyingTwiceReturnsAlreadyVerified() throws Exception {
+    void verifyingTwiceLooksLikeWrongCode() throws Exception {
         String email = "haiLan-" + System.nanoTime() + "@test.local";
         register(email);
         String otp = tokenFromMail();
 
         verify(otp);
         mvc.perform(verifyOtp(email, otp))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(3014));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(3012));
     }
 
     // ------------------------------------------------------------------ 6
@@ -665,6 +670,122 @@ class AuthFlowTest {
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu
+    // ------------------------------------------------------------------ 27 (rà soát 09/10, S-01)
+    /**
+     * Email có dòng nhưng chưa ai nhập OTP thì chưa có chủ: đăng ký lại GHI ĐÈ mật khẩu, không 3001.
+     * Trước đây kẻ đăng ký trước giữ mật khẩu, chủ hộp thư xác minh qua "gửi lại mã" là hai người cùng vào.
+     */
+    @Test
+    void registeringAgainOnUnverifiedEmailReplacesPassword() throws Exception {
+        String email = "chiem-truoc-" + System.nanoTime() + "@test.local";
+        register(email); // kẻ xấu đăng ký trước: matkhau123, không có mã
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"chuthat456\","
+                                + "\"displayName\":\"Chu That\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        verify(tokenFromMail()); // chủ hộp thư nhập mã MỚI NHẤT
+        mvc.perform(login(email, "chuthat456")).andExpect(status().isOk());
+        mvc.perform(login(email, "matkhau123"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3002));
+    }
+
+    // ------------------------------------------------------------------ 28 (S-01, Google)
+    /** Google (hộp thư đã xác nhận) chiếm dòng chưa xác minh do người lạ đăng ký: mật khẩu cũ bị gỡ. */
+    @Test
+    void googleLoginTakesOverUnverifiedPasswordAccount() throws Exception {
+        String email = "gg-chiem-" + System.nanoTime() + "@test.local";
+        register(email);
+
+        price.user = new FirebaseIdTokenDecoder.FirebaseUser(
+                "uid-" + System.nanoTime(), email, "Nguyen Google", true);
+        mvc.perform(loginWithGoogle("GOOGLE", "token-that"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
+
+        mvc.perform(login(email, "matkhau123"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3002));
+        assertThat(accountRepo.findByEmailIgnoreCase(email).orElseThrow().getEmailVerifiedAt()).isNotNull();
+    }
+
+    // ------------------------------------------------------------------ 29 (S-05)
+    /** Đổi mật khẩu sai mật khẩu cũ cũng đếm và khoá 15 phút như /login — token đánh cắp không dò được. */
+    @Test
+    void changePasswordWrongOldPasswordLocksAccountAfterFiveTries() throws Exception {
+        String email = "doi-mk-khoa-" + System.nanoTime() + "@test.local";
+        register(email);
+        verify(tokenFromMail());
+        String jwt = extractJwt(mvc.perform(login(email, "matkhau123"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(post("/api/auth/password/change")
+                            .header("Authorization", "Bearer " + jwt)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"oldPassword\":\"sai-" + i + "\",\"newPassword\":\"matkhaumoi123\"}"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value(3002));
+        }
+        // Lần 6 đã khoá — kể cả mật khẩu cũ đúng; /login cũng khoá.
+        mvc.perform(post("/api/auth/password/change")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"oldPassword\":\"matkhau123\",\"newPassword\":\"matkhaumoi123\"}"))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.code").value(3016));
+        mvc.perform(login(email, "matkhau123"))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.code").value(3016));
+    }
+
+    // ------------------------------------------------------------------ 30 (S-04)
+    /** Lượt đoán OTP trừ nguyên tử trong DB: đúng 5 lượt rồi 0, không phụ thuộc đọc-ghi của từng request. */
+    @Test
+    void otpAttemptsAreConsumedAtomically() throws Exception {
+        String email = "otp-nguyen-tu-" + System.nanoTime() + "@test.local";
+        register(email);
+        UUID accountId = accountRepo.findByEmailIgnoreCase(email).orElseThrow().getId();
+        UUID tokenId = tokenRepo
+                .findTopByAccount_IdAndPurposeOrderByCreatedAtDesc(accountId, TokenPurpose.VERIFY_EMAIL)
+                .orElseThrow().getId();
+
+        for (int i = 0; i < 5; i++) {
+            assertThat(tokenRepo.consumeAttempt(tokenId, 5)).isEqualTo(1);
+        }
+        assertThat(tokenRepo.consumeAttempt(tokenId, 5)).isZero();
+        // Mã còn sống nhưng hết lượt: gõ đúng cũng 3012.
+        mvc.perform(verifyOtp(email, tokenFromMail()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(3012));
+    }
+
+    // ------------------------------------------------------------------ 31 (S-02)
+    /** Một IP ngoài (qua nginx, X-Forwarded-For) gọi cửa gửi mail quá 5 lần trong cửa sổ → 429 / 1005. */
+    @Test
+    void sixthMailRequestFromSameIpIsRateLimited() throws Exception {
+        String ip = "203.0.113." + (System.nanoTime() % 200 + 1);
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(post("/api/auth/register")
+                            .header("X-Forwarded-For", "10.0.0.1, " + ip)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(registerJson("spam-" + System.nanoTime() + "-" + i + "@test.local")))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", "10.0.0.1, " + ip)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson("spam-cuoi-" + System.nanoTime() + "@test.local")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value(1005));
+        // Gọi nội bộ (không header, loopback) không bị ảnh hưởng.
+        register("khac-ip-" + System.nanoTime() + "@test.local");
+    }
+
     private void register(String email) throws Exception {
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
