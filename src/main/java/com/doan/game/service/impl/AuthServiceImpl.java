@@ -44,11 +44,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -86,6 +88,12 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final int MIN_PASSWORD_LENGTH = 8;
+    /** BCrypt chỉ băm 72 byte đầu; Spring Security 6.5 ném IllegalArgumentException khi dài hơn → 500. */
+    private static final int MAX_PASSWORD_BYTES = 72;
+    // Khớp độ dài cột trong entity (sinh từ ERD): vượt là SQLState 22001 → 500 thay vì 1001.
+    private static final int MAX_EMAIL_LENGTH = 160;
+    private static final int MAX_PHONE_LENGTH = 20;
+    private static final int MAX_DISPLAY_NAME_LENGTH = 80;
 
     private final AccountRepository accountRepo;
     private final CredentialRepository credentialRepo;
@@ -115,14 +123,26 @@ public class AuthServiceImpl implements AuthService {
         if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "email không đúng dạng");
         }
-        if (req.password() == null || req.password().length() < MIN_PASSWORD_LENGTH) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "mật khẩu tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
-        }
+        validatePassword(req.password(), "mật khẩu");
         if (req.displayName() == null || req.displayName().isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu tên hiển thị");
         }
-        if (accountRepo.existsByEmailIgnoreCase(email)) {
-            throw new AppException(ErrorCode.EMAIL_TAKEN);
+        if (email.length() > MAX_EMAIL_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "email tối đa " + MAX_EMAIL_LENGTH + " ký tự");
+        }
+        if (req.displayName().trim().length() > MAX_DISPLAY_NAME_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "tên hiển thị tối đa " + MAX_DISPLAY_NAME_LENGTH + " ký tự");
+        }
+        if (req.phone() != null && req.phone().trim().length() > MAX_PHONE_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "số điện thoại tối đa " + MAX_PHONE_LENGTH + " ký tự");
+        }
+        Account existing = accountRepo.findByEmailIgnoreCase(email).orElse(null);
+        if (existing != null) {
+            if (existing.getEmailVerifiedAt() != null) {
+                throw new AppException(ErrorCode.EMAIL_TAKEN);
+            }
+            return registerOverUnverified(existing, req, email);
         }
 
         Instant now = Instant.now(clock);
@@ -165,6 +185,50 @@ public class AuthServiceImpl implements AuthService {
         return AccountMapper.toResponse(a);
     }
 
+    /**
+     * Email đã có dòng nhưng chưa ai nhập được OTP → chưa có chủ (rà soát 09/10, S-01): ghi đè tên, SĐT,
+     * mật khẩu bằng dữ liệu của người đăng ký lần này và gửi OTP mới (mã cũ bị huỷ trong createOtp).
+     *
+     * Trước đây ném 3001: ai đăng ký "nháp" bằng email người khác là KHOÁ được email đó (chủ thật không
+     * đăng ký, không đăng nhập, không reset, không Google được), và nếu chủ thật xác minh qua "gửi lại mã"
+     * thì mật khẩu vẫn là của kẻ đăng ký trước — hai người cùng vào một tài khoản. Ghi đè thì kẻ xấu đăng
+     * ký lại bao nhiêu lần cũng không có mã: mã luôn về hộp thư của chủ email, và mật khẩu đang lưu luôn
+     * là của người đăng ký gần nhất.
+     */
+    private AccountResponse registerOverUnverified(Account a, RegisterRequest req, String email) {
+        Instant now = Instant.now(clock);
+        a.setPhone(trim(req.phone()));
+        a.setDisplayName(req.displayName().trim());
+        a.setFailedAttempts(0);
+        a.setLockedUntil(null);
+        accountRepo.save(a);
+
+        Credential c = credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD).orElseGet(() -> {
+            Credential n = new Credential();
+            n.setAccount(a);
+            n.setProvider(AuthProvider.PASSWORD);
+            n.setSubject(email);
+            n.setEmailAtProvider(email);
+            n.setCreatedAt(now);
+            return n;
+        });
+        c.setPasswordHash(passwordEncoder.encode(req.password()));
+        credentialRepo.save(c);
+
+        log.info("Đăng ký đè lên tài khoản chưa xác minh {}", a.getId());
+        sendVerificationMail(a, createOtp(a, TokenPurpose.VERIFY_EMAIL));
+        return AccountMapper.toResponse(a);
+    }
+
+    private static void validatePassword(String password, String label) {
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, label + " tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
+        }
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, label + " tối đa " + MAX_PASSWORD_BYTES + " byte");
+        }
+    }
+
     // ================================================================ xác minh email
     /**
      * Nhập mã OTP trong mail đăng ký. Đúng thì xác minh VÀ trả token luôn — người dùng vừa chứng
@@ -176,9 +240,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenResponse verifyEmail(VerifyEmailRequest req) {
         Account found = findAccountForOtp(req == null ? null : req.email(), TokenPurpose.VERIFY_EMAIL);
-        if (found.getEmailVerifiedAt() != null) {
-            throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
-        }
+        // Không hỏi "đã xác minh chưa" trước khi kiểm mã: ném 3014 ở đây là oracle dò email không tốn mail
+        // (rà soát 09/10, S-03). Đã xác minh thì không còn mã sống → tự ra 3012 như email lạ.
         VerificationToken checked = checkOtp(found, req.otp(), TokenPurpose.VERIFY_EMAIL);
 
         return txTemplate.execute(status -> {
@@ -220,14 +283,8 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_CREDENTIALS));
 
         if (!passwordEncoder.matches(req.password(), c.getPasswordHash())) {
-            int attempts = (a.getFailedAttempts() == null ? 0 : a.getFailedAttempts()) + 1;
-            if (attempts >= MAX_PASSWORD_ATTEMPTS) {
-                a.setFailedAttempts(0);
-                a.setLockedUntil(now.plus(PASSWORD_LOCK_DURATION));
-            } else {
-                a.setFailedAttempts(attempts);
-            }
-            accountRepo.save(a);
+            // Một câu UPDATE nguyên tử thay cho đọc → +1 → save (rà soát 09/10, S-04).
+            accountRepo.recordFailedPassword(a.getId(), MAX_PASSWORD_ATTEMPTS, now.plus(PASSWORD_LOCK_DURATION));
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
         }
 
@@ -235,11 +292,8 @@ public class AuthServiceImpl implements AuthService {
         if (a.getEmailVerifiedAt() == null) {
             throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
-        a.setFailedAttempts(0);
-        a.setLockedUntil(null);
-        accountRepo.save(a);
-        c.setLastUsedAt(now);
-        credentialRepo.save(c);
+        accountRepo.resetFailedPassword(a.getId());
+        credentialRepo.touchLastUsed(c.getId(), now);
 
         return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
     }
@@ -341,36 +395,51 @@ public class AuthServiceImpl implements AuthService {
         return AccountMapper.toResponse(a, plans, roles);
     }
 
+    /**
+     * CỐ Ý KHÔNG @Transactional (cùng bẫy với login): sai mật khẩu cũ phải đếm và khoá như /login — trước
+     * đây ai cầm token đánh cắp (sống 7 ngày) dò mật khẩu hiện tại ở đây không giới hạn (rà soát 09/10,
+     * S-05). Phần ghi (tokenVersion + hash mới) gói trong txTemplate để vẫn nguyên tử.
+     */
     @Override
-    @Transactional
     public TokenResponse changePassword(UUID accountId, ChangePasswordRequest req) {
-        if (req == null || req.newPassword() == null || req.newPassword().length() < MIN_PASSWORD_LENGTH) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED,
-                    "mật khẩu mới tối thiểu " + MIN_PASSWORD_LENGTH + " ký tự");
+        if (req == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu body");
         }
+        validatePassword(req.newPassword(), "mật khẩu mới");
         Account a = accountRepo.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+        Instant now = Instant.now(clock);
+        if (a.getLockedUntil() != null && a.getLockedUntil().isAfter(now)) {
+            throw new AppException(ErrorCode.ACCOUNT_LOCKED);
+        }
         Credential c = credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_CREDENTIALS));
 
         // Mật khẩu cũ là bằng chứng sở hữu. Bỏ kiểm này thì token đánh cắp cũng đổi được
         // mật khẩu rồi khoá chủ thật ra ngoài.
         if (req.oldPassword() == null || !passwordEncoder.matches(req.oldPassword(), c.getPasswordHash())) {
+            accountRepo.recordFailedPassword(a.getId(), MAX_PASSWORD_ATTEMPTS, now.plus(PASSWORD_LOCK_DURATION));
             throw new AppException(ErrorCode.BAD_CREDENTIALS);
         }
 
-        a.setTokenVersion(a.getTokenVersion() + 1);
-        a.setFailedAttempts(0);
-        a.setLockedUntil(null);
-        a.setMustChangePassword(false);
-        accountRepo.save(a);
+        return txTemplate.execute(status -> {
+            Account acc = accountRepo.findById(accountId)
+                    .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+            Credential cred = credentialRepo.findById(c.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_CREDENTIALS));
+            acc.setTokenVersion(acc.getTokenVersion() + 1);
+            acc.setFailedAttempts(0);
+            acc.setLockedUntil(null);
+            acc.setMustChangePassword(false);
+            accountRepo.save(acc);
 
-        c.setPasswordHash(passwordEncoder.encode(req.newPassword()));
-        c.setLastUsedAt(Instant.now(clock));
-        credentialRepo.save(c);
+            cred.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+            cred.setLastUsedAt(now);
+            credentialRepo.save(cred);
 
-        log.info("Tài khoản {} đổi mật khẩu khi đang đăng nhập — token cũ đã thu hồi", a.getId());
-        return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
+            log.info("Tài khoản {} đổi mật khẩu khi đang đăng nhập — token cũ đã thu hồi", acc.getId());
+            return tokenService.issueForAccount(acc.getId(), scopes(acc.getId()), acc.getTokenVersion());
+        });
     }
 
     // ================================================================ Google (Firebase)
@@ -430,10 +499,44 @@ public class AuthServiceImpl implements AuthService {
             credentialRepo.save(existing);
             return existing.getAccount();
         }
-        if (accountRepo.findByEmailIgnoreCase(normalizeEmail(user.email())).isPresent()) {
-            throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+        Account byEmail = accountRepo.findByEmailIgnoreCase(normalizeEmail(user.email())).orElse(null);
+        if (byEmail != null) {
+            if (byEmail.getEmailVerifiedAt() != null) {
+                throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+            }
+            return takeOverUnverifiedWithGoogle(byEmail, user);
         }
         return createGoogleAccount(user);
+    }
+
+    /**
+     * Dòng cùng email tồn tại nhưng CHƯA AI xác minh, còn Google đã xác nhận hộp thư → Google là chủ
+     * (rà soát 09/10, S-01): gỡ mật khẩu do người lạ đặt, huỷ OTP cũ, gắn Google, đánh dấu đã xác minh.
+     * Trước đây ném 3020 nên một đăng ký "nháp" bằng email người khác chặn luôn cả đường Google.
+     */
+    private Account takeOverUnverifiedWithGoogle(Account a, FirebaseIdTokenDecoder.FirebaseUser user) {
+        Instant now = Instant.now(clock);
+        credentialRepo.findByAccount_IdAndProvider(a.getId(), AuthProvider.PASSWORD).ifPresent(credentialRepo::delete);
+        tokenRepo.findByAccount_IdAndPurposeAndUsedAtIsNull(a.getId(), TokenPurpose.VERIFY_EMAIL)
+                .forEach(t -> t.setUsedAt(now));
+        a.setDisplayName(googleDisplayName(user, a.getEmail()));
+        a.setEmailVerifiedAt(now);
+        a.setFailedAttempts(0);
+        a.setLockedUntil(null);
+        accountRepo.saveAndFlush(a);
+
+        Credential c = new Credential();
+        c.setAccount(a);
+        c.setProvider(AuthProvider.GOOGLE);
+        c.setSubject(user.sub());
+        c.setEmailAtProvider(a.getEmail());
+        c.setCreatedAt(now);
+        c.setLastUsedAt(now);
+        credentialRepo.saveAndFlush(c);
+
+        grantBootstrapAdmin(a);
+        log.info("Google chiếm tài khoản chưa xác minh {}", a.getId());
+        return a;
     }
 
     /**
@@ -587,27 +690,28 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * Kiểm mã mới nhất còn sống. Sai thì tăng attempts và LƯU ngay (nơi gọi không có transaction)
-     * rồi mới ném; đủ 5 lần sai thì mã chết, kể cả lần sau gõ đúng.
+     * Kiểm mã mới nhất còn sống. Mỗi lần gọi trừ một lượt ngay trong DB (nơi gọi không có transaction)
+     * rồi mới so; hết 5 lượt thì mã chết, kể cả lần sau gõ đúng.
      * Hết hạn và sai là hai lỗi khác nhau: hết hạn thì bảo "gửi lại mã", sai thì bảo "không đúng".
      */
     private VerificationToken checkOtp(Account a, String otp, TokenPurpose purpose) {
         ErrorCode invalid = invalidTokenError(purpose);
-        VerificationToken t = tokenRepo.findTopByAccount_IdAndPurposeOrderByCreatedAtDesc(a.getId(), purpose)
-                .filter(x -> x.getUsedAt() == null)
+        // Lấy mã CÒN SỐNG (createOtp bảo đảm tối đa một), không lấy "mới nhất theo createdAt": hai mã sinh
+        // cùng mili-giây (đồng hồ đóng băng trong test, hoặc gửi lại mã rất nhanh) là hoà, có thể trúng mã đã huỷ.
+        VerificationToken t = tokenRepo.findByAccount_IdAndPurposeAndUsedAtIsNull(a.getId(), purpose).stream()
+                .max(Comparator.comparing(VerificationToken::getCreatedAt))
                 .orElseThrow(() -> new AppException(invalid));
         if (t.getExpiresAt().isBefore(Instant.now(clock))) {
             throw new AppException(purpose == TokenPurpose.RESET_PASSWORD
                     ? ErrorCode.RESET_TOKEN_EXPIRED : ErrorCode.VERIFY_TOKEN_EXPIRED);
         }
-        int attempts = t.getAttempts() == null ? 0 : t.getAttempts();
-        if (attempts >= MAX_OTP_ATTEMPTS) {
+        // Trừ lượt TRƯỚC khi so, bằng UPDATE có điều kiện attempts < max: N request song song không thể
+        // cùng "thấy 0 lần sai" (rà soát 09/10, S-04). 0 dòng = mã đã chết, kể cả lần sau gõ đúng.
+        if (tokenRepo.consumeAttempt(t.getId(), MAX_OTP_ATTEMPTS) == 0) {
             throw new AppException(invalid);
         }
         String code = otp == null ? "" : otp.trim();
         if (!OTP_PATTERN.matcher(code).matches() || !passwordEncoder.matches(code, t.getTokenHash())) {
-            t.setAttempts(attempts + 1);
-            tokenRepo.save(t);
             throw new AppException(invalid);
         }
         return t;
@@ -686,7 +790,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void sendVerificationMail(Account a, String otp) {
-        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã xác minh FinTeen: " + otp,
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã xác minh FinTeen",
                 """
                         <p>Chào %s,</p>
                         <p>Cảm ơn bạn đã tạo tài khoản FinTeen. Nhập mã dưới đây vào ứng dụng để xác minh email:</p>
@@ -697,7 +801,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void sendResetPasswordMail(Account a, String otp) {
-        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã đặt lại mật khẩu FinTeen: " + otp,
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Mã đặt lại mật khẩu FinTeen",
                 """
                         <p>Chào %s,</p>
                         <p>Có yêu cầu đặt lại mật khẩu cho tài khoản này. Nhập mã dưới đây vào ứng dụng

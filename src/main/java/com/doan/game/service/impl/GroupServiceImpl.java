@@ -182,11 +182,7 @@ public class GroupServiceImpl implements GroupService {
         group.setClosedAt(now);
         group.setOpenContext(null);
         groupRepo.save(group);
-        for (LearnerSlot slot : slotRepo.findByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE)) {
-            slot.setStatus(SlotStatus.ARCHIVED);
-            slot.setArchivedAt(now);
-            slotRepo.save(slot);
-        }
+        slotRepo.archiveActiveSlots(groupId, now, SlotStatus.ACTIVE, SlotStatus.ARCHIVED);
     }
 
     /** Chỗ trống = hạn mức − slot ACTIVE; ARCHIVED / WIPED đã trả lại chỗ (ERD mục 5). */
