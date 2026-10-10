@@ -14,7 +14,7 @@ import vn.payos.core.ClientOptions;
  * nhận {@code ObjectProvider<PayOS>} và báo lỗi rõ ràng thay vì gọi PayOS với khoá rỗng.
  *
  * Cách dùng (theo README của SDK):
- *   client.paymentRequests().create(CreatePaymentLinkRequest.builder()...build())  -> checkoutUrl
+ *   client.paymentRequests().create(CreatePaymentLinkRequest.builder()...build())  -> qrCode (FE vẽ VietQR trong app)
  *   client.webhooks().verify(body)                                                 -> WebhookData
  *   client.webhooks().confirm(url)                                                 -> đăng ký URL
  */

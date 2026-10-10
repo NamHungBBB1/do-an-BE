@@ -1,7 +1,9 @@
 package com.doan.game.repository;
 
 import com.doan.game.entity.Account;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,15 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     /** Email không phân biệt hoa thường: "A@b.vn" và "a@b.vn" là một tài khoản. */
     Optional<Account> findByEmailIgnoreCase(String email);
+
+    /**
+     * Khoá dòng tài khoản (P-02 / P-03, 10/10): tạo đơn và cấp gói cho CÙNG một tài khoản chạy tuần tự —
+     * bấm Mua hai tab không ra hai đơn PENDING, hai webhook / webhook + admin cấp không ra hai gói chồng kỳ hạn.
+     * Thứ tự khoá ở mọi đường: Transaction (lockByOrderCode) rồi mới Account — không deadlock.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from Account a where a.id = :id")
+    Optional<Account> lockById(@Param("id") UUID id);
 
     boolean existsByEmailIgnoreCase(String email);
 
