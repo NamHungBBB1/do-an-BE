@@ -241,6 +241,49 @@ class GroupCloseBulkFlowTest {
                 .andExpect(jsonPath("$.code").value(5004));
     }
 
+    // ------------------------------------------------------------------ hết gói vẫn giữ / xoá được (G-01, 10/10)
+    /**
+     * Chốt 07/10: hết hạn giữ dữ liệu cũ; WIPED là quyền xoá của phụ huynh. Trước 10/10 cửa
+     * SecurityConfig đòi SCOPE_PARENT|TEACHER cho mọi /api/slots/** nên hết cả hai gói là 403 — trả,
+     * đổi PIN, xoá đều không làm được. Giờ chỉ MỞ slot mới đòi gói.
+     */
+    @Test
+    void expiredPlanCanStillReturnChangePinAndWipe() throws Exception {
+        String jwt = registerAndVerify("hetgoi-" + System.nanoTime() + "@test.local");
+        grant(jwt, PlanKind.PARENT);
+        String groupId = openFamilyGroup(jwt);
+        openSlot(jwt, groupId, "Be cu", "123456").andExpect(status().isOk());
+        String slotId = firstSlotOf(jwt, groupId);
+
+        expirePlan(UUID.fromString(subject(jwt)), PlanKind.PARENT);
+
+        mvc.perform(slotRequest(jwt, groupId, "Be moi", "123456"))   // mở thêm: cửa scope chặn
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(post("/api/slots/" + slotId + "/pin").header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"654321\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/slots/" + slotId + "/return").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    /** G-05: nhóm đã đóng không mở thêm được (5002) thì chỗ trống phải là 0, không phải 4/40. */
+    @Test
+    void closedGroupHasZeroCapacity() throws Exception {
+        String jwt = parentToken("dongnhom-cap");
+        String groupId = openFamilyGroup(jwt);
+        mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result").value(4));
+        mvc.perform(post("/api/groups/" + groupId + "/close").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value(0));
+    }
+
     // ------------------------------------------------------------------ dựng dữ liệu
     /** Tài khoản thật + gói PARENT còn hạn: qua được cửa SCOPE_PARENT của SecurityConfig. */
     private String parentToken(String prefix) throws Exception {

@@ -7,7 +7,9 @@ import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
+import com.doan.game.repository.GameReleaseRepository;
 import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.service.LearnerDashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,8 @@ import java.util.UUID;
 public class LearnerDashboardServiceImpl implements LearnerDashboardService {
 
     private final LearnerSlotRepository slotRepo;
+    private final GameReleaseRepository releaseRepo;
+    private final ReleaseChapterRepository releaseChapterRepo;
 
     @Override
     @Transactional(readOnly = true)
@@ -47,9 +51,13 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
                 slot.getId(), slot.getDisplayName(), slot.getBadge(), groupContext,
                 group == null ? null : group.getName());
 
-        // Đợt 1: chưa có API nội dung game / lưu tiến độ → mặc định, continueChapter = 1.
+        // totalChapters = số chương của bản phát hành hiện tại (có từ 09/10); chưa phát hành → null.
+        // Tiến độ chơi chưa có API lưu → mặc định, continueChapter = 1.
+        Integer totalChapters = releaseRepo.findFirstByIsCurrentTrue()
+                .map(r -> releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(r.getId()).size())
+                .orElse(null);
         LearnerDashboardResponse.Progress progress = new LearnerDashboardResponse.Progress(
-                null, 0, List.of(), 1, null);
+                totalChapters, 0, List.of(), 1, null);
 
         // Quiz chỉ cho CLASS; FAMILY nhận null (Hưng chốt 08/10) — FE ẩn hẳn khối quiz.
         LearnerDashboardResponse.Quizzes quizzes =

@@ -502,7 +502,12 @@ public class AuthServiceImpl implements AuthService {
         Account byEmail = accountRepo.findByEmailIgnoreCase(normalizeEmail(user.email())).orElse(null);
         if (byEmail != null) {
             if (byEmail.getEmailVerifiedAt() != null) {
-                throw new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS);
+                // Cửa sổ giữa hai lần đọc: request song song vừa commit tài khoản bằng CHÍNH Google này
+                // (CI 10/10 bắt được) → tra lại Credential rồi vào tài khoản đó; chỉ 3020 khi email
+                // thật sự thuộc người khác (đăng ký mật khẩu).
+                return credentialRepo.findByProviderAndSubject(AuthProvider.GOOGLE, user.sub())
+                        .map(Credential::getAccount)
+                        .orElseThrow(() -> new AppException(ErrorCode.GOOGLE_EMAIL_EXISTS));
             }
             return takeOverUnverifiedWithGoogle(byEmail, user);
         }
