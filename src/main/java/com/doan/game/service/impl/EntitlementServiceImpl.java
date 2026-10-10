@@ -100,11 +100,6 @@ public class EntitlementServiceImpl implements EntitlementService {
         return EntitlementMapper.toResponse(entitlement);
     }
 
-    @Override
-    public void remindExpiringPlans(LocalDate today) {
-        throw new UnsupportedOperationException("chua cai dat");
-    }
-
     private static PlanKind parsePlanKind(String kind) {
         if (kind == null) {
             throw new AppException(ErrorCode.PLAN_KIND_INVALID);

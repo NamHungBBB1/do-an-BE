@@ -24,14 +24,15 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     Optional<Transaction> findByOrderCode(Long orderCode);
 
     /**
-     * Khoá hàng khi ghi nhận đã trả: webhook và returnUrl có thể cùng lúc thấy PENDING; khoá để
-     * cái đến sau phải chờ rồi thấy PAID, thay vì cả hai cùng cấp gói.
+     * Khoá hàng khi ghi nhận đã trả: webhook, GET trạng thái (FE poll) và cron có thể cùng lúc thấy PENDING;
+     * khoá để cái đến sau phải chờ rồi thấy PAID, thay vì cả hai cùng cấp gói.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Transaction t where t.orderCode = :orderCode")
     Optional<Transaction> lockByOrderCode(@Param("orderCode") Long orderCode);
 
-    List<Transaction> findByStatusAndCreatedAtBetween(TransactionStatus status, Instant from, Instant to);
+    /** Cron đối soát: mọi đơn PENDING đủ tuổi, KHÔNG có cận dưới (P-04: đơn quá 25 h từng bị bỏ quên mãi). */
+    List<Transaction> findByStatusAndCreatedAtBefore(TransactionStatus status, Instant before);
 
     Page<Transaction> findAllByOrderByCreatedAtDesc(Pageable p);
 

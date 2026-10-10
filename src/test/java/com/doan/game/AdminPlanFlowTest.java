@@ -29,6 +29,23 @@ class AdminPlanFlowTest {
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
 
+    /** P-09: trần số tháng (36) và trần giá (50 triệu) — gõ nhầm thêm số 0 là mọi người mua đều lỗi PayOS. */
+    @Test
+    void priceAndMonthsHaveCeilings() throws Exception {
+        Account admin = admin();
+        var asAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
+                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"));
+
+        mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 99000, \"months\": 1200}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4007));
+        mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 990000000}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4007));
+    }
+
     private Account admin() {
         Account a = new Account();
         a.setEmail("admin-" + System.nanoTime() + "@test.local");

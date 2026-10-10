@@ -14,8 +14,9 @@ import java.util.UUID;
  *
  * Tạo link mua mới hoặc gia hạn (giá đọc từ Plan do admin đặt; orderCode do mình sinh, Transaction
  * PENDING); xem / huỷ theo orderCode; webhook: verify chữ ký, PAID thì cấp Entitlement (gia hạn sớm
- * nối tiếp hạn cũ), trùng thì bỏ qua, controller LUÔN trả 200; returnUrl cũng chủ động hỏi lại PayOS;
- * cron quét PENDING quá hạn; admin đăng ký URL webhook, xem bảng giao dịch, đối soát một giao dịch.
+ * nối tiếp hạn cũ), trùng thì bỏ qua, controller LUÔN trả 200; GET trạng thái (FE poll sau khi hiện QR) cũng
+ * chủ động hỏi lại PayOS; cron đối soát mọi đơn PENDING; admin đăng ký URL webhook, xem bảng giao dịch, đối soát
+ * một giao dịch. Không có trang returnUrl / cancelUrl: QR hiện ngay trong app (Hưng chốt 07/10).
  *
  * Bảng phụ trách: Transaction, Entitlement (phần cấp từ thanh toán)
  */
@@ -23,7 +24,7 @@ public interface PaymentService {
 
     PaymentResponse createPayment(UUID accountId, BuyPlanRequest req);
 
-    /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (đường returnUrl). */
+    /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (FE poll tới khi PAID). */
     PaymentStatusResponse getPayment(UUID accountId, long orderCode);
 
     /** Lịch sử giao dịch của chính người gọi, mới nhất trước. */

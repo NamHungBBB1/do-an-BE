@@ -27,8 +27,8 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
      * distinct vì một tài khoản có thể còn nhiều dòng cùng loại (mua gia hạn nhiều lần).
      */
     @Query("select distinct e.kind from Entitlement e "
-            + "where e.account.id = :id and e.startsOn <= :homNay and e.expiresOn >= :homNay")
-    Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("homNay") LocalDate today);
+            + "where e.account.id = :id and e.startsOn <= :today and e.expiresOn >= :today")
+    Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("today") LocalDate today);
 
     /**
      * Lịch sử gói của một tài khoản, hạn mới nhất đứng trước; hai gói cùng hạn thì dòng tạo sau
