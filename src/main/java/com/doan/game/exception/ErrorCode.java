@@ -23,6 +23,8 @@ public enum ErrorCode {
     NOT_IMPLEMENTED(1004, "Chức năng này chưa được cài đặt", HttpStatus.NOT_IMPLEMENTED),
     /** Filter giới hạn theo IP (IpRateLimitFilter) ném cho các cửa công khai có gửi mail — rà soát 09/10. */
     TOO_MANY_REQUESTS(1005, "Thao tác quá nhiều lần, thử lại sau", HttpStatus.TOO_MANY_REQUESTS),
+    METHOD_NOT_ALLOWED(1006, "Phương thức HTTP không được hỗ trợ ở đường dẫn này", HttpStatus.METHOD_NOT_ALLOWED),
+    UNSUPPORTED_MEDIA_TYPE(1007, "Body phải là application/json", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
 
     SEED_REQUIRED(2001, "Thiếu seed — không có seed thì không so sánh được giữa các lượt chơi",
             HttpStatus.BAD_REQUEST),

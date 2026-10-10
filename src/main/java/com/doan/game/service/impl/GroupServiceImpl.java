@@ -190,6 +190,9 @@ public class GroupServiceImpl implements GroupService {
     @Transactional(readOnly = true)
     public int countFreeSlots(UUID callerId, UUID groupId) {
         LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        if (group.getClosedAt() != null) {
+            return 0;   // nhóm đã kết thúc không mở thêm được (5002) — đừng báo FE "40 chỗ trống" (G-05)
+        }
         int limit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
         return limit - (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
     }

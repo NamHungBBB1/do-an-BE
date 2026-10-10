@@ -83,6 +83,43 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ec.getCode(), "không tìm thấy " + ex.getResourcePath()));
     }
 
+    /**
+     * Bốn lỗi "người gọi sai" từng rơi xuống lưới cuối thành 500/1000 (N-04, 10/10): sai method (link cũ,
+     * L-24), body không phải JSON, tham số / path sai kiểu (UUID hỏng, ?status=abc), và endpoint còn khung.
+     * 500 là "lỗi máy chủ" — FE báo lỗi hệ thống và ops đi tìm bug không có.
+     */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethod(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        ErrorCode ec = ErrorCode.METHOD_NOT_ALLOWED;
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), ec.getMessage() + " — " + ex.getMethod()));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaType(
+            org.springframework.web.HttpMediaTypeNotSupportedException ex) {
+        ErrorCode ec = ErrorCode.UNSUPPORTED_MEDIA_TYPE;
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), ec.getMessage()));
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        ErrorCode ec = ErrorCode.VALIDATION_FAILED;
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), "tham số " + ex.getName() + " sai kiểu"));
+    }
+
+    /** Endpoint còn khung ném UnsupportedOperationException → 501/1004 đúng như README hứa, không phải 500. */
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotImplemented(UnsupportedOperationException ex) {
+        ErrorCode ec = ErrorCode.NOT_IMPLEMENTED;
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), ec.getMessage()));
+    }
+
     /** Lưới cuối. Log full stack trace, nhưng KHÔNG trả chi tiết ra ngoài. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleRest(Exception ex) {

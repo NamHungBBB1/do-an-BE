@@ -53,6 +53,20 @@ class LearnerDashboardFlowTest {
     private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
 
     @Autowired MockMvc mvc;
+
+    /**
+     * totalChapters = số chương của bản phát hành hiện tại (10/10). Các test dùng chung một H2, nên
+     * ContentFlowTest có thể đã phát hành trước → hỏi chính API nội dung thay vì đoán null hay 1.
+     */
+    private Object expectedTotalChapters() throws Exception {
+        var res = mvc.perform(get("/api/content/current")).andReturn().getResponse();
+        if (res.getStatus() != 200) {
+            return null;
+        }
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(res.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .path("result").path("chapters").size();
+    }
     @Autowired AccountRepository accountRepo;
     @Autowired EntitlementRepository entitlementRepo;
     @Autowired AuthFlowTest.MailCatcher mailCatcher;
@@ -82,7 +96,7 @@ class LearnerDashboardFlowTest {
                 .andExpect(jsonPath("$.result.learner.groupContext").value("FAMILY"))
                 .andExpect(jsonPath("$.result.learner.groupName").value("Nha demo"))
                 // Đúng mặc định đợt 1 trong bảng "Theo đợt".
-                .andExpect(jsonPath("$.result.progress.totalChapters").value(nullValue()))
+                .andExpect(jsonPath("$.result.progress.totalChapters").value(expectedTotalChapters()))
                 .andExpect(jsonPath("$.result.progress.completedChapters").value(0))
                 .andExpect(jsonPath("$.result.progress.chaptersDone").isEmpty())
                 .andExpect(jsonPath("$.result.progress.continueChapter").value(1))
