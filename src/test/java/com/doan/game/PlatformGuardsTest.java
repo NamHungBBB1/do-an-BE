@@ -63,9 +63,10 @@ class PlatformGuardsTest {
 
     @Test
     void skeletonEndpointIs501() throws Exception {
-        mvc.perform(get("/api/play/state")
-                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("typ", "SLOT"))
-                                .authorities(new SimpleGrantedAuthority("TYP_SLOT"), new SimpleGrantedAuthority("SCOPE_CHILD"))))
+        // 12/10: /api/play/state đã thành API thật (PR play) nên endpoint khung giờ là quiz.
+        mvc.perform(get("/api/quizzes/" + UUID.randomUUID() + "/results")
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))
+                                .authorities(new SimpleGrantedAuthority("TYP_ACCOUNT"))))
                 .andExpect(status().isNotImplemented())
                 .andExpect(jsonPath("$.code").value(1004));
     }

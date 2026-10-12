@@ -12,7 +12,8 @@ import java.util.UUID;
  */
 public interface PlayService {
 
-    void submitChapterBatch(UUID slotId, ChapterBatchRequest req);
+    /** Nhận lô cuối chương (Hưng 12/10): BE chấm tất cả, một @Transactional, trả tiến độ cho FE. */
+    ChapterBatchResponse submitChapterBatch(UUID slotId, ChapterBatchRequest req);
 
     RunStateResponse getRunState(UUID slotId);
 

@@ -14,5 +14,8 @@ public interface ReleaseChapterRepository extends JpaRepository<ReleaseChapter, 
 
     Optional<ReleaseChapter> findByRelease_IdAndChapter_Code(UUID releaseId, String code);
 
+    /** Lô play trỏ theo SỐ chương (chapter=1…): tìm chương của đúng bản phát hành — 7001 nếu không có. */
+    Optional<ReleaseChapter> findByRelease_IdAndChapter_ChapterNumber(UUID releaseId, Integer chapterNumber);
+
     List<ReleaseChapter> findByRelease_IdOrderByChapter_ChapterNumberAsc(UUID releaseId);
 }
