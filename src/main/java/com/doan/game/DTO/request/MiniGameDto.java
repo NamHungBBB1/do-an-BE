@@ -1,5 +1,5 @@
 package com.doan.game.DTO.request;
 
-/** Một đáp án mini-game. CÓ đúng sai — đây mới là dữ liệu đo. */
-public record MiniGameDto(String gameId, String itemId, String concept, String chosen, boolean correct) {
+/** Câu trả lời đầu tiên cho một thẻ / câu mini-game; BE chấm correct và suy concept từ JSON chương. */
+public record MiniGameDto(String gameId, String itemId, String chosen, java.time.Instant playedAt) {
 }
