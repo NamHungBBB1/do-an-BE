@@ -72,8 +72,10 @@ public class PlayServiceImpl implements PlayService {
     public ChapterBatchResponse submitChapterBatch(UUID slotId, ChapterBatchRequest req) {
         validateShape(req);
         // Slot ACTIVE: WIPED / không có → 3007, ARCHIVED → 3009 (token SLOT sống qua decoder nên
-        // chặn ở service). Gói hết hạn vẫn nhận lô.
-        var slot = slotRepo.findById(slotId)
+        // chặn ở service). Gói hết hạn vẫn nhận lô. Khoá dòng slot (FOR UPDATE): hai lô gửi trùng
+        // ĐỒNG THỜI (FE gửi lại khi timeout) tuần tự hoá theo slot, lô sau thấy chaptersDone đã
+        // có chương này rồi đi thẳng vào gửi lại vô hại thay vì đụng UNIQUE mà 500.
+        var slot = slotRepo.lockById(slotId)
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
         if (slot.getStatus() == SlotStatus.WIPED) {
             throw new AppException(ErrorCode.SLOT_NOT_FOUND);
@@ -315,27 +317,26 @@ public class PlayServiceImpl implements PlayService {
             throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
                     "game '" + m.gameId() + "' khong co dap an cho the '" + m.itemId() + "'");
         }
-        // MATCH_AND_CALCULATE ghép việc (CH03): fit/over so với weeklyLimit; chosen lạ → false.
+        // MATCH_AND_CALCULATE (CH03, CAREER_MATCH): game có THỂ có cả jobs lẫn questions — itemId
+        // là việc hay là câu hỏi đều chấm được (Kidz review 12/10: itemId câu hỏi rơi vào nhánh
+        // jobs trước thì byId null và 7002 oan).
         JsonNode jobs = game.path("jobs");
-        if (jobs.isArray() && !jobs.isEmpty()) {
-            JsonNode job = byId(jobs, m.itemId());
-            if (job == null) {
-                throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
-                        "viec '" + m.itemId() + "' khong co trong game '" + m.gameId() + "'");
-            }
-            if (!"fit".equals(m.chosen()) && !"over".equals(m.chosen())) {
-                return false;
-            }
-            boolean fits = job.path("hours").asInt() <= game.path("weeklyLimit").asInt();
-            return ("fit".equals(m.chosen())) == fits;
-        }
-        // MATCH_AND_CALCULATE tính tiền (CH03): chosen phải là option của câu, đúng = correctId.
         JsonNode questions = game.path("questions");
-        if (questions.isArray() && !questions.isEmpty()) {
+        if (isNonEmptyArray(jobs) || isNonEmptyArray(questions)) {
+            // Bước ghép việc: chosen fit/over so với weeklyLimit; chosen lạ → false, không lỗi.
+            JsonNode job = byId(jobs, m.itemId());
+            if (job != null) {
+                if (!"fit".equals(m.chosen()) && !"over".equals(m.chosen())) {
+                    return false;
+                }
+                boolean fits = job.path("hours").asInt() <= game.path("weeklyLimit").asInt();
+                return ("fit".equals(m.chosen())) == fits;
+            }
+            // Bước tính: chosen phải là option của câu, đúng = correctId.
             JsonNode question = byId(questions, m.itemId());
             if (question == null) {
                 throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
-                        "cau '" + m.itemId() + "' khong co trong game '" + m.gameId() + "'");
+                        "viec/cau '" + m.itemId() + "' khong co trong game '" + m.gameId() + "'");
             }
             if (byId(question.path("options"), m.chosen()) == null) {
                 throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
@@ -346,6 +347,10 @@ public class PlayServiceImpl implements PlayService {
         // TIMELINE (Savings Race) không chấm — FE không gửi; cơ chế lạ cũng rơi vào đây → 7002.
         throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
                 "game '" + m.gameId() + "' khong co itemId '" + m.itemId() + "' de cham");
+    }
+
+    private static boolean isNonEmptyArray(JsonNode node) {
+        return node != null && node.isArray() && !node.isEmpty();
     }
 
     /** Mã khái niệm theo CẢNH: đúng 1 phần thì lấy, nhiều / không khai → null. */

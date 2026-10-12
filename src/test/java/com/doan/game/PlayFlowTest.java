@@ -133,6 +133,45 @@ class PlayFlowTest {
         assertThat(res.getContentAsString(StandardCharsets.UTF_8)).doesNotContain("wealth");
     }
 
+    // ------------------------------------------------------------------ 1b. CAREER_MATCH
+    /** Game có CẢ jobs lẫn questions (Kidz review 12/10): itemId là việc hay câu hỏi đều chấm được — một job fit, một job over, một câu đúng, một câu sai. */
+    @Test
+    void careerMatchScoresJobsAndQuestions() throws Exception {
+        releaseVersion();
+        String child = newChild("career");
+        String body = "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + VERSION + "\","
+                + "\"choices\":[],\"miniGames\":["
+                + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"JOB_DAY\",\"chosen\":\"fit\"},"
+                + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"JOB_NIGHT\",\"chosen\":\"fit\"},"
+                + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"Q_NET\",\"chosen\":\"OPT_HIGH\"},"
+                + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"Q_PROFIT\",\"chosen\":\"OPT_DOWN\"}]}";
+
+        mvc.perform(batchRequest(child, body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        UUID slotId = UUID.fromString(subject(child));
+        var minis = miniGameResultRepo.findBySlot_IdAndChapterAndAttemptIndex(slotId, 1, 1);
+        assertThat(minis).hasSize(4);
+        assertThat(minis)
+                .anySatisfy(m -> {
+                    assertThat(m.getItemId()).isEqualTo("JOB_DAY");
+                    assertThat(m.isCorrect()).isTrue();
+                })
+                .anySatisfy(m -> {
+                    assertThat(m.getItemId()).isEqualTo("JOB_NIGHT");
+                    assertThat(m.isCorrect()).isFalse();
+                })
+                .anySatisfy(m -> {
+                    assertThat(m.getItemId()).isEqualTo("Q_NET");
+                    assertThat(m.isCorrect()).isTrue();
+                })
+                .anySatisfy(m -> {
+                    assertThat(m.getItemId()).isEqualTo("Q_PROFIT");
+                    assertThat(m.isCorrect()).isFalse();
+                });
+    }
+
     // ------------------------------------------------------------------ 2. gửi lại
     /** Gửi lại y hệt → 200 cùng result, số dòng DB không đổi (UNIQUE + kiểm chaptersDone). */
     @Test
@@ -343,7 +382,9 @@ class PlayFlowTest {
         return VERSION;
     }
 
-    /** CH01: 1 cảnh choice 2 option (deltaStats, có khoá FIQ để kiểm bỏ qua) + 1 cảnh minigame DRAG_AND_DROP 2 item. */
+    /** CH01: 1 cảnh choice 2 option (deltaStats, có khoá FIQ để kiểm bỏ qua) + 2 mini-game —
+     *  DRAG_AND_DROP 2 item (Cần/Muốn) và CAREER_MATCH có CẢ jobs lẫn questions (Kidz review 12/10).
+     *  Hình dạng đúng JSON chương 1.0.0 thật: cảnh "minigame", game có "mechanic". */
     private static String chapterOne() {
         return """
                 {"id":"chapter-1","title":"Chuong 1 cho test play","version":"1.0.0",
@@ -354,10 +395,18 @@ class PlayFlowTest {
                    {"id":"choice-1","type":"choice","knowledgeUnits":["D01.01"],"options":[
                      {"id":"opt-save","text":"Tiet kiem","deltaStats":{"SAVING":10,"HAPPINESS":5,"FIQ":99},"nextSceneId":"game-1"},
                      {"id":"opt-spend","text":"Tieu tien","deltaStats":{"SAVING":-5,"HAPPINESS":10},"nextSceneId":"game-1"}]},
-                   {"id":"game-1","type":"miniGame","knowledgeUnits":["D01.01"],"nextSceneId":"end",
-                    "game":{"id":"NEEDS_OR_WANTS_CH01","type":"DRAG_AND_DROP","items":[
+                   {"id":"game-1","type":"minigame","knowledgeUnits":["D01.01"],"nextSceneId":"game-2",
+                    "game":{"id":"NEEDS_OR_WANTS_CH01","mechanic":"DRAG_AND_DROP","items":[
                       {"id":"ITEM_MEAL","category":"NEEDS","text":"Bua an"},
                       {"id":"ITEM_UPGRADE","category":"WANTS","text":"Nang cap tai nghe"}]}},
+                   {"id":"game-2","type":"minigame","nextSceneId":"end",
+                    "game":{"id":"CAREER_MATCH_CH03","mechanic":"MATCH_AND_CALCULATE","weeklyLimit":20,
+                     "jobs":[
+                       {"id":"JOB_DAY","hours":10,"text":"Viec ngay"},
+                       {"id":"JOB_NIGHT","hours":30,"text":"Viec dem"}],
+                     "questions":[
+                       {"id":"Q_NET","options":[{"id":"OPT_HIGH"},{"id":"OPT_LOW"}],"correctId":"OPT_HIGH"},
+                       {"id":"Q_PROFIT","options":[{"id":"OPT_UP"},{"id":"OPT_DOWN"}],"correctId":"OPT_UP"}]}},
                    {"id":"end","type":"ending"}
                  ],
                  "endingRules":{"priorityOrder":["x"],"endings":[]}}

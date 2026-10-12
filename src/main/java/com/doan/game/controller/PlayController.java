@@ -22,7 +22,8 @@ import java.util.UUID;
 /**
  * Cửa vào HTTP. Tầng này MỎNG: nhận, gọi service, trả về. Không nghiệp vụ.
  *
- * Cổng /api/play/** yêu cầu SCOPE_CHILD (token SLOT) — token người lớn 403/3004. Slot lấy từ
+ * Cổng /api/play/** yêu cầu TYP_SLOT (token SLOT — SecurityConfig chặn theo typ, không theo
+ * scope CHILD): token người lớn 403/3004. Slot lấy từ
  * sub của token, FE không gửi slotId / learnerId. Gói hết hạn vẫn nhận lô (Hưng 03/10).
  */
 @RestController
