@@ -2,7 +2,9 @@ package com.doan.game.repository;
 
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.enums.SlotStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Modifying;
@@ -26,6 +28,16 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
 
     /** Sinh mã slot: kiểm TRƯỚC khi chèn — chèn rồi bắt lỗi thì session Hibernate hỏng (xem openSlot). */
     boolean existsByCode(String code);
+
+    /**
+     * Khoá dòng slot (SELECT ... FOR UPDATE) khi nhận lô chơi: FE gửi lại khi timeout trong lúc lô
+     * đầu còn đang xử lý → hai request cùng thấy chaptersDone chưa có chương này rồi cùng chèn,
+     * lô sau đụng UNIQUE thành 500. Khoá theo slot để tuần tự hoá. Mẫu có sẵn:
+     * LearnerGroupRepository.lockById (Kidz góp ý review 12/10).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from LearnerSlot s where s.id = :id")
+    Optional<LearnerSlot> lockById(@Param("id") UUID id);
 
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);

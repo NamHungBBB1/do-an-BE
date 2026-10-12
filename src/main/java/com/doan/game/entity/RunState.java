@@ -10,7 +10,8 @@ import lombok.Setter;
 /**
  * Trạng thái bền của một người học: đã xong chương nào và năm chỉ số ẩn cộng dồn suốt cả lượt.
  * 08/10 (Hưng chốt): BE TỰ TÍNH từ ChoiceEvent theo bản phát hành đã đóng băng (ReleaseChapter),
- * không tin số tổng do máy khách gửi lên. Ràng buộc: CHECK: 5 chỉ số trong 0..100
+ * không tin số tổng do máy khách gửi lên. 12/10: thêm attemptIndex = lần chơi hiện tại. Ràng buộc:
+ * CHECK: 5 chỉ số trong 0..100
  */
 @Entity
 @Table(name = "run_state")
@@ -48,4 +49,7 @@ public class RunState {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @Column(name = "attempt_index")
+    private Integer attemptIndex;
 }

@@ -1,5 +1,5 @@
 package com.doan.game.DTO.request;
 
-/** Một lựa chọn trong đoạn thoại. KHÔNG có đúng sai. */
-public record ChoiceDto(String sceneId, String choiceId, String effects) {
+/** Lựa chọn cuối cùng có hiệu lực của một nhóm lựa chọn (choiceGroup, mặc định = cảnh). */
+public record ChoiceDto(String sceneId, String optionId, java.time.Instant chosenAt) {
 }

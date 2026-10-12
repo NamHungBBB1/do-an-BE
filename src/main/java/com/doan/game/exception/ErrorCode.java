@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
  *   3xxx  xác thực / slot của trẻ
  *   4xxx  thanh toán và gói
  *   5xxx  nhóm học
+ *   6xxx  nội dung game (Studio)
+ *   7xxx  chơi game (lưu tiến độ)
  * Thêm nhóm mới thì cấp dải mới, ĐỪNG chen số vào giữa dải cũ —
  * FE có thể đã bắt theo mã.
  */
@@ -87,7 +89,14 @@ public enum ErrorCode {
             HttpStatus.CONFLICT),
 
     // 6xxx — nội dung game (Studio): bản phát hành đóng băng theo phiên bản, không ghi đè.
-    RELEASE_VERSION_TAKEN(6001, "Phiên bản này đã phát hành rồi — tăng số phiên bản", HttpStatus.CONFLICT);
+    RELEASE_VERSION_TAKEN(6001, "Phiên bản này đã phát hành rồi — tăng số phiên bản", HttpStatus.CONFLICT),
+
+    // 7xxx — chơi game, lưu tiến độ (Hưng chốt 12/10).
+    RELEASE_CHAPTER_NOT_FOUND(7001, "Bản phát hành không có chương này", HttpStatus.NOT_FOUND),
+    SCENE_ITEM_NOT_IN_CHAPTER(7002, "Lô trỏ vào cảnh / lựa chọn / mini-game không có trong chương của bản này",
+            HttpStatus.BAD_REQUEST),
+    CHAPTER_NOT_UNLOCKED(7003, "Chưa tới lượt chương này hoặc attemptIndex không khớp",
+            HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;

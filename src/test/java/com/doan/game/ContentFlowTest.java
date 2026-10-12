@@ -2,6 +2,11 @@ package com.doan.game;
 
 import com.doan.game.entity.Account;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.ChapterDraftRepository;
+import com.doan.game.repository.ChapterRepository;
+import com.doan.game.repository.GameReleaseRepository;
+import com.doan.game.repository.ReleaseChapterRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -36,6 +41,24 @@ class ContentFlowTest {
 
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
+    @Autowired ReleaseChapterRepository releaseChapterRepo;
+    @Autowired GameReleaseRepository releaseRepo;
+    @Autowired ChapterDraftRepository draftRepo;
+    @Autowired ChapterRepository chapterRepo;
+
+    /**
+     * Mọi class test dùng chung một H2 (jdbc:h2:mem:doan, DB_CLOSE_DELAY=-1) và surefire chạy class theo
+     * thứ tự filesystem — Linux khác Windows. Trên CI (PR #26, 12/10) PlayFlowTest chạy trước và đã phát
+     * hành 1.0.2, làm luồng này (mong "chưa phát hành" → 404, danh sách 2 bản) hỏng. Xoá sạch nội dung
+     * trước khi chạy để luồng luôn bắt đầu từ trống, không phụ thuộc thứ tự. Thứ tự xoá theo khoá ngoại.
+     */
+    @BeforeEach
+    void wipeContent() {
+        releaseChapterRepo.deleteAll();
+        releaseRepo.deleteAll();
+        draftRepo.deleteAll();
+        chapterRepo.deleteAll();
+    }
 
     /** Chương tối giản theo đúng khung FE (chapterNV2GameData): scenes[] với next trỏ nhau, ảnh dạng placeholder. */
     private static String chapter(String title, String nextOfFirst) {
