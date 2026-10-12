@@ -1,5 +1,6 @@
 package com.doan.game.service;
 
+import com.doan.game.repository.AccountRepository;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.Transaction;
@@ -27,10 +28,14 @@ import java.time.LocalDate;
 public class EntitlementFactory {
 
     private final EntitlementRepository entitlementRepo;
+    private final AccountRepository accountRepo;
     private final Clock clock;
 
     public Entitlement create(Account account, PlanKind kind, int months, EntitlementSource source,
                               Transaction transaction, Account grantedBy, String reason) {
+        // Khoá tài khoản trước khi đọc hạn cũ (P-03): hai lần cấp song song không còn cùng thấy một
+        // expiresOn rồi cùng nối tiếp → hai gói chồng kỳ hạn.
+        accountRepo.lockById(account.getId());
         LocalDate today = LocalDate.now(clock);
         LocalDate startDate = entitlementRepo
                 .findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), kind)

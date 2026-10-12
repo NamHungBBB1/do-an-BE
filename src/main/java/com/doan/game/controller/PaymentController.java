@@ -67,7 +67,7 @@ public class PaymentController {
         try {
             paymentService.handleWebhook(body);
         } catch (Exception e) {
-            log.error("Xử lý webhook PayOS lỗi — vẫn trả 200: {}", e.toString());
+            log.error("Xử lý webhook PayOS lỗi — vẫn trả 200", e);
         }
         return ApiResponse.ok();
     }

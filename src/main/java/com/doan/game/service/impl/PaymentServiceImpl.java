@@ -47,6 +47,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.time.Duration;
+import com.doan.game.enums.Role;
+import com.doan.game.repository.AccountRoleRepository;
+import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -56,9 +60,11 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Ruột thật đầu tiên của BE (02/10). Ba quy tắc giữ cho đúng:
  *  1. Trạng thái giao dịch chỉ đi tới: PENDING -> PAID hoặc PENDING -> FAILED, không bao giờ lùi.
- *  2. Ghi nhận PAID là idempotent: webhook về hai lần, hay webhook và returnUrl cùng lúc, chỉ cấp gói
- *     một lần (khoá hàng + Entitlement.transactionId UNIQUE).
+ *  2. Ghi nhận PAID là idempotent: webhook về hai lần, hay webhook và GET trạng thái (FE poll) cùng lúc,
+ *     chỉ cấp gói một lần (khoá hàng + Entitlement.transactionId UNIQUE).
  *  3. Ngày gói tính theo giờ Việt Nam qua Clock; gia hạn nối tiếp từ ngày sau hạn cũ.
+ *  4. Tiền đã về thì không bao giờ chỉ nằm trong log (P-01, 10/10): lệch tiền → đơn đánh dấu needsReview + note
+ *     cho admin đối soát; trả sau khi đơn đã FAILED (huỷ / hết hạn) → vẫn cấp gói, ghi note (Hưng chốt 09/10 "tự cấp gói").
  */
 @Service
 @RequiredArgsConstructor
@@ -68,6 +74,10 @@ public class PaymentServiceImpl implements PaymentService {
     private static final DateTimeFormatter PAYOS_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     public static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DMY_HM = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
+    /** Link / QR PayOS sống 24 h; cron đối soát mọi đơn PENDING đã quá SWEEP_MIN_AGE (đủ để webhook kịp về). */
+    static final Duration LINK_TTL = Duration.ofHours(24);
+    static final Duration REUSE_MARGIN = Duration.ofMinutes(1);
+    static final Duration SWEEP_MIN_AGE = Duration.ofMinutes(2);
 
     private final TransactionRepository transactionRepo;
     private final EntitlementRepository entitlementRepo;
@@ -81,26 +91,36 @@ public class PaymentServiceImpl implements PaymentService {
     private final Clock clock;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher events;
+    private final AccountRoleRepository accountRoleRepo;
+    /** Cron đối soát mỗi đơn trong giao dịch riêng (P-06): một đơn hỏng không kéo cả lô rollback. */
+    private final TransactionTemplate txTemplate;
 
     // ------------------------------------------------------------------ tạo link
     @Override
     @Transactional
     public PaymentResponse createPayment(UUID accountId, BuyPlanRequest req) {
         PlanKind kind = PlanServiceImpl.parseKind(req.kind());
-        long price = planRepo.findByKind(kind).map(Plan::getPrice)
+        // Khoá tài khoản (P-02): hai request Mua cùng lúc xếp hàng, request sau thấy đơn request trước vừa tạo.
+        Account account = accountRepo.lockById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
+        // "Admin là admin, không mua gói" (Hưng chốt 08/10, P-08).
+        if (accountRoleRepo.existsByAccount_IdAndRole(accountId, Role.ADMIN)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "tài khoản admin không mua gói");
+        }
+        Plan plan = planRepo.findByKind(kind)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));
-        // Idempotent: còn đơn chờ cùng gói, cùng giá, QR còn hạn ít nhất 1 phút thì trả lại đúng đơn đó.
-        // Bấm Mua hai lần hay tải lại trang không sinh đơn rác, và không có hai QR để lỡ trả hai lần.
-        // ponytail: hai request cùng lúc vẫn có thể tạo hai đơn; khoá dòng account nếu gặp thật.
+        long price = plan.getPrice();
+        int months = plan.getMonths() == null ? PlanServiceImpl.DEFAULT_MONTHS : plan.getMonths();
+        // Idempotent: còn đơn chờ cùng gói, cùng giá, cùng số tháng, QR còn hạn ít nhất 1 phút thì trả lại
+        // đúng đơn đó. Bấm Mua hai lần hay tải lại trang không sinh đơn rác, không có hai QR để lỡ trả hai lần.
         Optional<Transaction> open = transactionRepo
                 .findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
-                        accountId, kind, TransactionStatus.PENDING, Instant.now(clock).plus(1, ChronoUnit.MINUTES))
-                .filter(t -> t.getQrCode() != null && t.getAmount() == price);
+                        accountId, kind, TransactionStatus.PENDING, Instant.now(clock).plus(REUSE_MARGIN))
+                .filter(t -> t.getQrCode() != null && t.getAmount() == price
+                        && t.getMonths() != null && t.getMonths() == months);
         if (open.isPresent()) {
             return toPaymentResponse(open.get());
         }
-        Account account = accountRepo.findById(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
         PayOS client = client();
 
         Transaction tx = new Transaction();
@@ -109,12 +129,13 @@ public class PaymentServiceImpl implements PaymentService {
         tx.setKind(kind);
         tx.setPurpose(hasActivePlan(accountId, kind) ? TransactionPurpose.RENEW : TransactionPurpose.NEW);
         tx.setAmount(price);
+        tx.setMonths(months);   // đơn giữ cả giá lẫn số tháng lúc mua (P-05): admin đổi gói sau đó không ảnh hưởng
         tx.setStatus(TransactionStatus.PENDING);
         tx.setCreatedAt(Instant.now(clock));
         // Lưu trước khi gọi PayOS: webhook chỉ tin orderCode đã có trong bảng.
         tx = transactionRepo.saveAndFlush(tx);
 
-        Instant expiresAt = Instant.now(clock).plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        Instant expiresAt = Instant.now(clock).plus(LINK_TTL).truncatedTo(ChronoUnit.SECONDS);
         CreatePaymentLinkRequest data = CreatePaymentLinkRequest.builder()
                 .orderCode(tx.getOrderCode())
                 .amount(price)
@@ -205,8 +226,13 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
         if (!Objects.equals(data.getAmount(), tx.getAmount())) {
+            // Tiền đã về nhưng lệch: không cấp gói, nhưng cũng không để chuyện này chỉ nằm trong log (P-01).
+            // Đơn vẫn PENDING, đánh dấu cho admin lọc needsReview rồi đối soát tay.
             log.warn("Webhook PayOS orderCode {}: số tiền {} khác giao dịch {} — KHÔNG cấp gói, cần đối soát tay",
                     data.getOrderCode(), data.getAmount(), tx.getAmount());
+            tx.setNeedsReview(true);
+            tx.setNote("PayOS báo nhận " + data.getAmount() + " đ, khác đơn " + tx.getAmount() + " đ ("
+                    + data.getTransactionDateTime() + ") — chưa cấp gói, cần đối soát");
             return;
         }
         markPaid(tx, parsePayosTime(data.getTransactionDateTime()));
@@ -225,22 +251,33 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     // ------------------------------------------------------------------ cron
-    /** Quét giao dịch PENDING từ 2 phút tới 25 giờ tuổi: đủ cũ để webhook đã kịp về, đủ mới để link còn ý nghĩa. */
+    /**
+     * Đối soát mọi đơn PENDING đã quá 2 phút tuổi (đủ để webhook kịp về), KHÔNG có cận trên (P-04: máy chủ
+     * tắt đúng giờ 24→25 h làm đơn bị bỏ quên mãi). Mỗi đơn một giao dịch riêng có khoá hàng (P-06): GET / webhook
+     * vừa cấp xong thì cron thấy PAID và bỏ qua; một đơn lỗi không kéo cả lô rollback.
+     */
     @Override
     @Scheduled(fixedDelayString = "${app.payos.sweep-ms:120000}", initialDelayString = "${app.payos.sweep-ms:120000}")
-    @Transactional
     public void sweepPendingTransactions() {
         if (payOS.getIfAvailable() == null) {
             return;
         }
-        Instant now = Instant.now(clock);
-        List<Transaction> pending = transactionRepo.findByStatusAndCreatedAtBetween(
-                TransactionStatus.PENDING, now.minus(25, ChronoUnit.HOURS), now.minus(2, ChronoUnit.MINUTES));
-        for (Transaction tx : pending) {
-            reconcileWithPayOS(tx);
+        List<Long> orderCodes = txTemplate.execute(status -> transactionRepo
+                .findByStatusAndCreatedAtBefore(TransactionStatus.PENDING, Instant.now(clock).minus(SWEEP_MIN_AGE))
+                .stream().map(Transaction::getOrderCode).toList());
+        int done = 0;
+        for (Long orderCode : orderCodes == null ? List.<Long>of() : orderCodes) {
+            try {
+                txTemplate.executeWithoutResult(status -> transactionRepo.lockByOrderCode(orderCode)
+                        .filter(t -> t.getStatus() == TransactionStatus.PENDING)
+                        .ifPresent(this::reconcileWithPayOS));
+                done++;
+            } catch (RuntimeException e) {
+                log.error("Đối soát đơn {} lỗi — bỏ qua, lần sau quét lại", orderCode, e);
+            }
         }
-        if (!pending.isEmpty()) {
-            log.info("Đối soát {} giao dịch PENDING với PayOS", pending.size());
+        if (done > 0) {
+            log.info("Đối soát {} giao dịch PENDING với PayOS", done);
         }
     }
 
@@ -292,8 +329,10 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
         if (tx.getStatus() == TransactionStatus.FAILED) {
-            log.warn("Giao dịch {} đã FAILED nhưng PayOS báo PAID — không tự cấp gói, cần đối soát tay", tx.getOrderCode());
-            return;
+            // Tiền về sau khi đơn đã huỷ / hết hạn: khách đã trả thì cấp gói (Hưng chốt 09/10 "tự cấp gói"),
+            // ghi note để admin thấy đây là đơn trả muộn. Ngoại lệ duy nhất của luật "trạng thái không lùi".
+            log.warn("Giao dịch {} đã FAILED nhưng PayOS báo PAID — cấp gói theo luật trả muộn", tx.getOrderCode());
+            tx.setNote("Tiền về sau khi đơn đã FAILED (huỷ / hết hạn) — tự cấp gói theo luật 09/10");
         }
         tx.setStatus(TransactionStatus.PAID);
         tx.setPaidAt(paidAt);
@@ -304,11 +343,12 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * N đọc từ Plan lúc cấp (dòng Plan không có đường xoá; orElse chỉ để webhook không bao giờ ném).
+     * Số tháng lấy từ ĐƠN (ghi lúc mua, P-05); đơn cũ chưa có cột thì đọc Plan (orElse chỉ để webhook không bao giờ ném).
      * Ngày startsOn / expiresOn do EntitlementFactory tính, dùng chung với admin cấp tay.
      */
     private Entitlement buildEntitlementFrom(Transaction tx) {
-        int months = planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
+        int months = tx.getMonths() != null ? tx.getMonths()
+                : planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
         return entitlementFactory.create(tx.getAccount(), tx.getKind(), months,
                 EntitlementSource.PAYMENT, tx, null, null);
     }
@@ -391,7 +431,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
-                tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getStatus().name(),
-                tx.getCreatedAt(), tx.getPaidAt());
+                tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote());
     }
 }

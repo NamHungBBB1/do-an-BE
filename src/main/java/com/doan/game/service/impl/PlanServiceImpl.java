@@ -29,6 +29,8 @@ public class PlanServiceImpl implements PlanService {
     private final PlanRepository planRepo;
     private final AccountRepository accountRepo;
     private final Clock clock;
+    /** Trần nghiệp vụ cho giá một gói (P-09): gõ nhầm thêm số 0 là mọi người mua đều 4004 từ PayOS. */
+    static final long MAX_PRICE_VND = 50_000_000L;
 
     @Override
     @Transactional(readOnly = true)
@@ -46,8 +48,12 @@ public class PlanServiceImpl implements PlanService {
         if (req == null || req.price() <= 0) {
             throw new AppException(ErrorCode.PLAN_PRICE_INVALID);
         }
-        if (req.months() != null && req.months() <= 0) {
-            throw new AppException(ErrorCode.PLAN_PRICE_INVALID, "months phải > 0");
+        if (req.price() > MAX_PRICE_VND) {
+            throw new AppException(ErrorCode.PLAN_PRICE_INVALID, "price tối đa " + MAX_PRICE_VND + " đ");
+        }
+        if (req.months() != null && (req.months() <= 0 || req.months() > EntitlementServiceImpl.MAX_GRANT_MONTHS)) {
+            throw new AppException(ErrorCode.PLAN_PRICE_INVALID,
+                    "months phải từ 1 đến " + EntitlementServiceImpl.MAX_GRANT_MONTHS);
         }
         Plan plan = planRepo.findByKind(k).orElseGet(() -> {
             Plan p = new Plan();

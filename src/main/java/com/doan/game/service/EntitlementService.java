@@ -18,6 +18,5 @@ public interface EntitlementService {
 
     EntitlementResponse grantPlan(UUID adminId, GrantPlanRequest req);
 
-    void remindExpiringPlans(java.time.LocalDate today);
 
 }
