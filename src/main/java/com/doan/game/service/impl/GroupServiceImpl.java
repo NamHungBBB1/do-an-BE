@@ -18,6 +18,7 @@ import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
+import com.doan.game.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class GroupServiceImpl implements GroupService {
     private final LearnerSlotRepository slotRepo;
     private final AccountRepository accountRepo;
     private final EntitlementService entitlementService;
+    private final ReportService reportService;
     private final Clock clock;
 
     /**
@@ -160,8 +162,9 @@ public class GroupServiceImpl implements GroupService {
      * Kết thúc nhóm. Đóng lần hai thì 5002 (đã đóng — ghi vào PR hỏi lại nếu Hưng muốn idempotent).
      *
      * ERD mục 4: "đông cứng báo cáo nhóm, lưu trữ nhóm và các slot, trả lại hạn mức, không xoá gì".
-     * Báo cáo hiện là khung, nên ghi rõ trong PR: báo cáo dựng sau từ dữ liệu tới closedAt — sau
-     * khi đóng, slot đã ARCHIVED nên dữ liệu không thay đổi nữa. openContext = NULL trả chỗ cho
+     * Đông cứng (ReportService.freezeOnClose, 12/10) chạy TRƯỚC khi lưu trữ và CÙNG transaction:
+     * một lỗi ở đóng băng thì cả closeGroup rollback; và summary.active = số slot đang ACTIVE đúng
+     * lúc đóng, không phải 0 sau khi mọi slot đã ARCHIVED. openContext = NULL trả chỗ cho
      * UNIQUE(ownerId, openContext) để mở nhóm mới. Hưng chốt 07/10: không có API khôi phục.
      */
     @Override
@@ -182,6 +185,7 @@ public class GroupServiceImpl implements GroupService {
         group.setClosedAt(now);
         group.setOpenContext(null);
         groupRepo.save(group);
+        reportService.freezeOnClose(groupId);
         slotRepo.archiveActiveSlots(groupId, now, SlotStatus.ACTIVE, SlotStatus.ARCHIVED);
     }
 

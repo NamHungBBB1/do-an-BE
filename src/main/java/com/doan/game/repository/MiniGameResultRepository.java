@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,15 @@ public interface MiniGameResultRepository extends JpaRepository<MiniGameResult, 
             + "where m.slot.id = :slotId and m.attemptIndex = :attemptIndex group by m.chapter")
     List<Object[]> maxReceivedAtByChapter(@Param("slotId") UUID slotId,
                                            @Param("attemptIndex") int attemptIndex);
+
+    /** Báo cáo người lớn: lastActiveAt của slot = receivedAt lớn nhất; chưa chơi → null. */
+    @Query("select max(m.receivedAt) from MiniGameResult m where m.slot.id = :slotId")
+    Instant maxReceivedAtBySlot(@Param("slotId") UUID slotId);
+
+    /** Báo cáo nhóm: lastActiveAt từng slot của cả nhóm — hai câu gộp thay vì N+1 (≤ 40 slot). */
+    @Query("select m.slot.id, max(m.receivedAt) from MiniGameResult m "
+            + "where m.slot.group.id = :groupId group by m.slot.id")
+    List<Object[]> lastActiveAtBySlotInGroup(@Param("groupId") UUID groupId);
 
     long countBySlot_IdAndChapterAndAttemptIndex(UUID slotId, Integer chapter, int attemptIndex);
 
