@@ -17,13 +17,13 @@ public record GroupReportResponse(GroupInfo group, Instant frozenAt, String form
     public record GroupInfo(UUID id, String name, String context, Integer slotLimit,
                             Instant openedAt, Instant closedAt) {}
 
-    /** averageScore = trung bình score trên mọi lượt nộp, null khi chưa có. */
+    /** averageScore = trung bình score trên mọi lượt nộp (số lẻ → Double), null khi chưa có. */
     public record Summary(int learners, int active, int activeLast7Days, int chaptersCompleted,
                           Integer totalChapters, int quizAssigned, int quizSubmitted,
-                          Integer averageScore) {}
+                          Double averageScore) {}
 
     public record ReportRow(UUID slotId, String code, String displayName, String status,
                             List<Integer> chaptersDone, int completedChapters, int attemptIndex,
                             Instant lastActiveAt, SlotReportResponse.Indicators indicators,
-                            int quizAssigned, int quizSubmitted, Integer averageScore) {}
+                            int quizAssigned, int quizSubmitted, Double averageScore) {}
 }

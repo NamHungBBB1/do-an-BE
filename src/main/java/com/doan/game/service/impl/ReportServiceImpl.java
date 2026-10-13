@@ -80,7 +80,7 @@ public class ReportServiceImpl implements ReportService {
      */
     record RowFigures(List<Integer> chaptersDone, int completedChapters, int attemptIndex,
                       Instant lastActiveAt, SlotReportResponse.Indicators indicators,
-                      int quizAssigned, int quizSubmitted, Integer averageScore) {
+                      int quizAssigned, int quizSubmitted, Double averageScore) {
     }
 
     // ------------------------------------------------------------------ slot report
@@ -224,7 +224,10 @@ public class ReportServiceImpl implements ReportService {
             }
         }
         List<GroupReportResponse.ReportRow> rows = new ArrayList<>();
-        for (LearnerSlot slot : slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId())) {
+        // Sort như liveResponse (Kidz review 13/10): thứ tự dòng LUÔN ACTIVE → ARCHIVED → WIPED
+        // theo status SỐNG, kể cả nhóm đóng — WIPED sau khi đóng vẫn phải xuống cuối.
+        for (LearnerSlot slot : byStatusThenCreatedAt(
+                slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId()))) {
             RowFigures fig = bySlot.get(slot.getId());
             if (fig != null) {
                 rows.add(liveIdentityRow(slot, fig));
@@ -239,9 +242,8 @@ public class ReportServiceImpl implements ReportService {
         Map<UUID, Instant> lastActive = lastActiveInGroup(group.getId());
         Map<UUID, RunState> runs = runsInGroup(group.getId());
 
-        List<LearnerSlot> slots = new ArrayList<>(slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId()));
-        // ACTIVE trước, ARCHIVED, WIPED sau; trong nhóm theo createdAt — sort stable giữ thứ tự đầu vào.
-        slots.sort(Comparator.comparingInt(s -> statusRank(s.getStatus())));
+        List<LearnerSlot> slots = byStatusThenCreatedAt(
+                slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId()));
 
         List<GroupReportResponse.ReportRow> rows = new ArrayList<>(slots.size());
         for (LearnerSlot slot : slots) {
@@ -339,9 +341,12 @@ public class ReportServiceImpl implements ReportService {
                 .orElse(null);
     }
 
-    /** activeLast7Days: lastActiveAt từ đầu ngày VN của (hôm nay − 7) tới giờ — cùng luật "7 ngày" như gói. */
+    /**
+     * activeLast7Days: 7 ngày gần nhất TÍNH CẢ HÔM NAY — cutoff = đầu ngày VN của (hôm nay − 6),
+     * không phải − 7 (Kidz review 13/10: −7 thành ra 8 ngày). Đúng lúc đóng băng rồi không đổi.
+     */
     private int countActiveLast7Days(List<LearnerSlot> slots, Map<UUID, Instant> lastActive) {
-        Instant cutoff = LocalDate.now(clock).minusDays(7).atStartOfDay(ClockConfig.VN).toInstant();
+        Instant cutoff = LocalDate.now(clock).minusDays(6).atStartOfDay(ClockConfig.VN).toInstant();
         int n = 0;
         for (LearnerSlot slot : slots) {
             Instant at = lastActive.get(slot.getId());
@@ -376,6 +381,13 @@ public class ReportServiceImpl implements ReportService {
             return 0;
         }
         return status == SlotStatus.ARCHIVED ? 1 : 2;
+    }
+
+    /** ACTIVE trước, ARCHIVED, WIPED sau; trong nhóm theo createdAt — sort stable giữ thứ tự đầu vào. */
+    private static List<LearnerSlot> byStatusThenCreatedAt(List<LearnerSlot> slots) {
+        List<LearnerSlot> out = new ArrayList<>(slots);
+        out.sort(Comparator.comparingInt(s -> statusRank(s.getStatus())));
+        return out;
     }
 
     private void requireOwner(UUID callerId, LearnerGroup group) {

@@ -228,7 +228,7 @@ class ReportFlowTest {
     }
 
     // ------------------------------------------------------------------ 6. đóng băng
-    /** Đóng nhóm → frozenAt + report-v1; sửa RunState trực tiếp thì số KHÔNG đổi; danh tính / status đọc sống. */
+    /** Đóng nhóm → frozenAt + report-v1; sửa RunState trực tiếp thì số KHÔNG đổi; WIPED xuống cuối; danh tính / status đọc sống. */
     @Test
     void closingGroupFreezesNumbers() throws Exception {
         releaseVersion();
@@ -240,41 +240,59 @@ class ReportFlowTest {
         String slotId = extractId(slotBody);
         String code = extractSlotCode(slotBody);
         seedRun(slotId, "[1]", 60, 1);
+        // Slot thứ hai bị xoá TRƯỚC khi đóng — dòng WIPED phải xuống cuối dù đổi trạng thái giữa chừng.
+        String slot2Body = mvc.perform(slotRequest(parent, groupId, "Be Xoa2", "123456"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String slot2Id = extractId(slot2Body);
+        mvc.perform(delete("/api/slots/" + slot2Id)
+                        .header("Authorization", "Bearer " + parent))
+                .andExpect(status().isOk());
 
-        // TRƯỚC khi đóng: nhóm sống, frozenAt null, summary tính từ RunState.
+        // TRƯỚC khi đóng: nhóm sống, frozenAt null, ACTIVE trước WIPED.
         mvc.perform(groupReport(parent, groupId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.frozenAt").value(nullValue()))
                 .andExpect(jsonPath("$.result.formulaVersion").value(nullValue()))
-                .andExpect(jsonPath("$.result.summary.learners").value(1))
+                .andExpect(jsonPath("$.result.summary.learners").value(2))
                 .andExpect(jsonPath("$.result.summary.active").value(1))
                 .andExpect(jsonPath("$.result.summary.chaptersCompleted").value(1))
+                .andExpect(jsonPath("$.result.rows.length()").value(2))
                 .andExpect(jsonPath("$.result.rows[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.result.rows[0].code").value(code))
-                .andExpect(jsonPath("$.result.rows[0].indicators.saving").value(60));
+                .andExpect(jsonPath("$.result.rows[0].indicators.saving").value(60))
+                .andExpect(jsonPath("$.result.rows[1].status").value("WIPED"))
+                .andExpect(jsonPath("$.result.rows[1].code").value(nullValue()));
 
         mvc.perform(post("/api/groups/" + groupId + "/close")
                         .header("Authorization", "Bearer " + parent))
                 .andExpect(status().isOk());
 
-        // SAU khi đóng: bản đóng băng, số giữ nguyên, code / status đọc SỐNG (slot đã ARCHIVED).
+        // SAU khi đóng: bản đóng băng, số giữ nguyên, code / status đọc SỐNG; summary.active vẫn 1
+        // (đóng băng chạy TRƯỚC archiveActiveSlots); WIPED vẫn xuống cuối.
         mvc.perform(groupReport(parent, groupId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.frozenAt").value(notNullValue()))
                 .andExpect(jsonPath("$.result.formulaVersion").value("report-v1"))
                 .andExpect(jsonPath("$.result.group.closedAt").value(notNullValue()))
-                .andExpect(jsonPath("$.result.summary.learners").value(1))
+                .andExpect(jsonPath("$.result.summary.learners").value(2))
+                .andExpect(jsonPath("$.result.summary.active").value(1))
                 .andExpect(jsonPath("$.result.summary.chaptersCompleted").value(1))
+                .andExpect(jsonPath("$.result.rows.length()").value(2))
                 .andExpect(jsonPath("$.result.rows[0].status").value("ARCHIVED"))
                 .andExpect(jsonPath("$.result.rows[0].code").value(code))
                 .andExpect(jsonPath("$.result.rows[0].chaptersDone[0]").value(1))
-                .andExpect(jsonPath("$.result.rows[0].indicators.saving").value(60));
+                .andExpect(jsonPath("$.result.rows[0].indicators.saving").value(60))
+                .andExpect(jsonPath("$.result.rows[1].status").value("WIPED"))
+                .andExpect(jsonPath("$.result.rows[1].code").value(nullValue()))
+                .andExpect(jsonPath("$.result.rows[1].displayName").value(nullValue()))
+                .andExpect(jsonPath("$.result.rows[1].indicators").value(nullValue()));
 
         // Sửa RunState trực tiếp (slot ARCHIVED không gửi lô được) → báo cáo đã đóng KHÔNG đổi.
         mutateRun(slotId, "[1,2]", 99);
         mvc.perform(groupReport(parent, groupId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.summary.learners").value(1))
+                .andExpect(jsonPath("$.result.summary.learners").value(2))
                 .andExpect(jsonPath("$.result.summary.chaptersCompleted").value(1))
                 .andExpect(jsonPath("$.result.rows[0].chaptersDone.length()").value(1))
                 .andExpect(jsonPath("$.result.rows[0].indicators.saving").value(60));
