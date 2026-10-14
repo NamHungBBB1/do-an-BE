@@ -4,6 +4,7 @@ import com.doan.game.entity.RunState;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,4 +13,7 @@ public interface RunStateRepository extends JpaRepository<RunState, UUID> {
 
     /** Một slot đúng một dòng RunState (UNIQUE slot_id) — trỏ nhanh từ token SLOT. */
     Optional<RunState> findBySlot_Id(UUID slotId);
+
+    /** Báo cáo nhóm: RunState của mọi slot trong nhóm (≤ 40 dòng) — một câu thay vì N+1. */
+    List<RunState> findBySlot_Group_Id(UUID groupId);
 }
