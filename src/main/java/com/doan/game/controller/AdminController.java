@@ -6,6 +6,7 @@ import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
+import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
 import com.doan.game.enums.TransactionStatus;
@@ -75,6 +76,14 @@ public class AdminController {
     @GetMapping("/roles")
     public ApiResponse<List<AccountResponse>> listInternalAccounts() {
         return ApiResponse.ok(adminService.listInternalAccounts());
+    }
+
+    /** Sổ cấp / thu vai: mới nhất trước, lọc theo subjectId nếu có; không trả tổng, FE lật trang tới khi rỗng. */
+    @GetMapping("/roles/log")
+    public ApiResponse<List<RoleGrantLogResponse>> listRoleLog(@RequestParam(required = false) UUID subjectId,
+                                                              @RequestParam(defaultValue = "0") int page,
+                                                              @RequestParam(defaultValue = "50") int size) {
+        return ApiResponse.ok(adminService.listRoleLog(subjectId, page, size));
     }
 
     // ---- tra tài khoản (tối 15/10) ----

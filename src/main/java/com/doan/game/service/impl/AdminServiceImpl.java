@@ -2,6 +2,7 @@ package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
@@ -17,6 +18,8 @@ import com.doan.game.service.AdminService;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +38,7 @@ import java.util.UUID;
 
 /**
  * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do (PR A, 15/10); tra tài khoản theo email
- * cho màn cấp vai (tối 15/10); danh sách ai đang giữ vai nội bộ (16/10).
+ * cho màn cấp vai (tối 15/10); danh sách ai đang giữ vai nội bộ và sổ cấp / thu (16/10).
  *
  * Chỉ bốn vai cấp tay được: ADMIN và ba vai Studio. PARENT / TEACHER suy từ gói còn hạn, CHILD là
  * slot, GUEST không có tài khoản — gửi lên là 1001. Decoder đọc AccountRole mỗi request nên cấp
@@ -123,6 +126,19 @@ public class AdminServiceImpl implements AdminService {
             entitlementService.activePlans(a.getId()).forEach(k -> plans.add(k.name()));
             return AccountMapper.toResponse(a, plans, rolesById.get(a.getId()));
         }).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size) {
+        // Cùng cách kẹp trang với giao dịch: page < 0 → 0, size 1..100; không trả tổng, FE lật tới khi rỗng.
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        List<RoleGrantLog> rows = subjectId == null
+                ? roleGrantLogRepo.findAllByOrderByCreatedAtDesc(pageable)
+                : roleGrantLogRepo.findByTarget_IdOrderByCreatedAtDesc(subjectId, pageable);
+        return rows.stream().map(l -> new RoleGrantLogResponse(l.getId(), l.getActor().getId(), l.getActor().getEmail(),
+                l.getTarget().getId(), l.getTarget().getEmail(), l.getRole(), l.isGranted(), l.getReason(),
+                l.getCreatedAt())).toList();
     }
 
     // ---- phụ trợ ----
