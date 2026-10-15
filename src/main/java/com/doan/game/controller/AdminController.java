@@ -2,6 +2,7 @@ package com.doan.game.controller;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
+import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
@@ -21,7 +22,7 @@ import java.util.UUID;
 
 /**
  * Luồng admin. Cả /api/admin/** đã khoá SCOPE_ADMIN trong SecurityConfig, nên ở đây không kiểm lại.
- * Có ruột (02/10) phần giá gói và giao dịch; vai nội bộ (AdminService) từ 15/10 (PR A).
+ * Có ruột (02/10) phần giá gói và giao dịch; vai nội bộ + tra tài khoản (AdminService) từ 15/10.
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -68,5 +69,12 @@ public class AdminController {
     public ApiResponse<RoleListResponse> revokeRole(@AuthenticationPrincipal Jwt jwt,
                                                     @RequestBody GrantRoleRequest req) {
         return ApiResponse.ok(adminService.revokeRole(UUID.fromString(jwt.getSubject()), req));
+    }
+
+    // ---- tra tài khoản (tối 15/10) ----
+    /** Tìm đúng một tài khoản theo email để lấy id cho màn cấp vai; cùng dạng với GET /api/auth/me. */
+    @GetMapping("/accounts")
+    public ApiResponse<AccountResponse> findAccount(@RequestParam(required = false) String email) {
+        return ApiResponse.ok(adminService.findAccount(email));
     }
 }

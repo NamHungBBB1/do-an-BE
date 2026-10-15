@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Vai nội bộ (PR A, 15/10) qua HTTP thật (MockMvc + H2): admin cấp GAME_EDITOR → /auth/me của người đó
  * thấy vai ngay; thu → mất; sổ role_grant_log đủ hai dòng (cấp rồi thu); dữ liệu sai bị 1001 / 1003;
- * người thường 403. JWT giả bằng spring-security-test như AdminPlanFlowTest, nên không cần AuthService.
+ * người thường 403. Tra tài khoản theo email (tối 15/10) cho màn cấp vai. JWT giả bằng spring-security-test như
+ * AdminPlanFlowTest, nên không cần AuthService.
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true")
 @AutoConfigureMockMvc
@@ -142,6 +144,44 @@ class AdminRoleFlowTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
         assertTrue(accountRoleRepo.findByAccount_Id(lan.getId()).isEmpty());
+    }
+
+    @Test
+    void findsAccountByEmailForRoleScreen() throws Exception {
+        Account admin = account("admin");
+        Account lan = account("lan");
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+
+        // Hoa thường lẫn lộn, khoảng trắng hai đầu vẫn ra đúng một người; chưa có vai, chưa có gói.
+        mvc.perform(get("/api/admin/accounts").with(asAdmin)
+                        .param("email", "  " + lan.getEmail().toUpperCase(Locale.ROOT) + " "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.id").value(lan.getId().toString()))
+                .andExpect(jsonPath("$.result.email").value(lan.getEmail()))
+                .andExpect(jsonPath("$.result.roles").isEmpty())
+                .andExpect(jsonPath("$.result.plans").isEmpty());
+
+        // Cấp vai xong tra lại thấy ngay: màn cấp vai dùng chính API này để hiện vai hiện có.
+        mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(lan.getId(), "GAME_REVIEWER", "duyet noi dung")))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/accounts").with(asAdmin).param("email", lan.getEmail()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.roles[0]").value("GAME_REVIEWER"));
+
+        mvc.perform(get("/api/admin/accounts").with(asAdmin).param("email", "khong-co@test.local"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(1003));
+        mvc.perform(get("/api/admin/accounts").with(asAdmin).param("email", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(get("/api/admin/accounts").with(asAdmin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(get("/api/admin/accounts").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT"))
+                        .param("email", lan.getEmail()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
     }
 
     // ---- phụ trợ ----

@@ -18,4 +18,7 @@ public interface AdminService {
     /** Thu một vai nội bộ; không giữ vai đó → 1003; admin tự thu ADMIN của mình → 1001. */
     RoleListResponse revokeRole(UUID actorId, GrantRoleRequest req);
 
+    /** Tìm đúng một tài khoản theo email (không phân biệt hoa thường) để lấy id khi cấp vai; không có → 1003. */
+    AccountResponse findAccount(String email);
+
 }
