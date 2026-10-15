@@ -72,7 +72,7 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
 | `PlanService` **(có ruột)** | Plan | Bảng giá công khai; admin đặt giá và số tháng từng gói (chưa có dòng thì chưa bán được gói đó) |
-| `AdminService` **(có ruột 15/10)** | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ (`ADMIN`, `GAME_EDITOR`, `GAME_REVIEWER`, `GAME_MANAGER`): cấp trùng là lặp vô hại, mỗi thay đổi ghi `RoleGrantLog` kèm lý do bắt buộc, admin không tự thu `ADMIN` của mình. `AdminController` có ruột giá gói, giao dịch và vai |
+| `AdminService` **(có ruột 15/10)** | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ (`ADMIN`, `GAME_EDITOR`, `GAME_REVIEWER`, `GAME_MANAGER`): cấp trùng là lặp vô hại, mỗi thay đổi ghi `RoleGrantLog` kèm lý do bắt buộc, admin không tự thu `ADMIN` của mình; `findAccount(email)` tra tài khoản cho màn cấp vai, trả cùng dạng `/api/auth/me`. `AdminController` có ruột giá gói, giao dịch và vai |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
 ---
@@ -166,7 +166,8 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
   thành khoá ngoại tới `GameRelease` chưa làm — kế hoạch `build/studio-giai-doan-2-huong-dan-2026-10-12.md`.
 - **Thêm giá trị vào một enum đã có cột trên production** (như `Role` 15/10): `ddl-auto=update` KHÔNG sửa CHECK
   constraint Postgres đã tạo (`account_role_role_check` vẫn 5 giá trị cũ) → INSERT giá trị mới hỏng 500 dù test H2
-  xanh. Phải chạy SQL tay một lần, mẫu `ops/finteen-deploy/alter-role-check-20261015.sql`.
+  xanh. Phải chạy SQL tay một lần, mẫu `ops/finteen-deploy/alter-role-check-20261015.sql` (đã chạy trên production
+  15/10 17:59, pg_dump trước).
 
 
 ## Quy ước tên và gói (04/10/2026)

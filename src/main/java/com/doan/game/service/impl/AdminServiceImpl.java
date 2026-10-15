@@ -1,6 +1,7 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
+import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
@@ -11,7 +12,9 @@ import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.RoleGrantLogRepository;
+import com.doan.game.mapper.AccountMapper;
 import com.doan.game.service.AdminService;
+import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,13 +23,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do (PR A, 15/10).
+ * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do (PR A, 15/10); tra tài khoản theo email
+ * cho màn cấp vai (tối 15/10).
  *
  * Chỉ bốn vai cấp tay được: ADMIN và ba vai Studio. PARENT / TEACHER suy từ gói còn hạn, CHILD là
  * slot, GUEST không có tài khoản — gửi lên là 1001. Decoder đọc AccountRole mỗi request nên cấp
@@ -45,6 +50,7 @@ public class AdminServiceImpl implements AdminService {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final RoleGrantLogRepository roleGrantLogRepo;
+    private final EntitlementService entitlementService;
     private final Clock clock;
 
     @Override
@@ -79,6 +85,21 @@ public class AdminServiceImpl implements AdminService {
         accountRoleRepo.delete(existing);
         writeLog(actorId, target, role, false, req.reason(), Instant.now(clock));
         return roles(target.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AccountResponse findAccount(String email) {
+        if (email == null || email.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "cần email");
+        }
+        String e = email.trim();
+        Account a = accountRepo.findByEmailIgnoreCase(e)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + e));
+        // Cùng khuôn với GET /api/auth/me (AuthServiceImpl.getMe) để màn admin đọc đúng một dạng.
+        Set<String> plans = new HashSet<>();
+        entitlementService.activePlans(a.getId()).forEach(k -> plans.add(k.name()));
+        return AccountMapper.toResponse(a, plans, roles(a.getId()).roles());
     }
 
     // ---- phụ trợ ----
