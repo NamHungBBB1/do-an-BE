@@ -1,9 +1,11 @@
 package com.doan.game.controller;
 
+import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
+import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
 import com.doan.game.enums.TransactionStatus;
 import com.doan.game.service.AdminService;
@@ -19,7 +21,7 @@ import java.util.UUID;
 
 /**
  * Luồng admin. Cả /api/admin/** đã khoá SCOPE_ADMIN trong SecurityConfig, nên ở đây không kiểm lại.
- * Có ruột (02/10) phần giá gói và giao dịch; phần vai (AdminService) còn là khung.
+ * Có ruột (02/10) phần giá gói và giao dịch; vai nội bộ (AdminService) từ 15/10 (PR A).
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -53,14 +55,18 @@ public class AdminController {
         return ApiResponse.ok(paymentService.reconcile(orderCode));
     }
 
-    // ---- vai nội bộ: khung, chưa cài đặt ----
+    // ---- vai nội bộ (PR A, 15/10) ----
+    /** Cấp ADMIN / GAME_EDITOR / GAME_REVIEWER / GAME_MANAGER, bắt buộc có reason; đã có thì lặp vô hại. */
     @PostMapping("/roles/grant")
-    public void grantRole() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<RoleListResponse> grantRole(@AuthenticationPrincipal Jwt jwt,
+                                                   @RequestBody GrantRoleRequest req) {
+        return ApiResponse.ok(adminService.grantRole(UUID.fromString(jwt.getSubject()), req));
     }
 
+    /** Thu một vai; không giữ vai đó → 1003; không tự thu ADMIN của chính mình → 1001. */
     @PostMapping("/roles/revoke")
-    public void revokeRole() {
-        throw new UnsupportedOperationException("chua cai dat");
+    public ApiResponse<RoleListResponse> revokeRole(@AuthenticationPrincipal Jwt jwt,
+                                                    @RequestBody GrantRoleRequest req) {
+        return ApiResponse.ok(adminService.revokeRole(UUID.fromString(jwt.getSubject()), req));
     }
 }

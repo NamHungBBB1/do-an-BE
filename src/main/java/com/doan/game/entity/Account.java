@@ -9,7 +9,7 @@ import lombok.Setter;
 
 /**
  * Một người lớn. Không còn cột gói hay cờ admin: Parent / Teacher suy ra từ Entitlement còn hạn;
- * vai nội bộ (ADMIN, sau này EDITOR / REVIEWER / MANAGER) nằm ở AccountRole.
+ * vai nội bộ (ADMIN, GAME_EDITOR / GAME_REVIEWER / GAME_MANAGER) nằm ở AccountRole.
  */
 @Entity
 @Table(name = "account")

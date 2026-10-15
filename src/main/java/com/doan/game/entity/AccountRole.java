@@ -9,9 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Vai nội bộ do admin cấp. Hiện chỉ ADMIN; Studio sẽ thêm GAME_EDITOR, GAME_REVIEWER, GAME_MANAGER
- * mà không phải đổi Account. Mỗi lần cấp / thu ghi vào RoleGrantLog kèm lý do. Ràng buộc:
- * UNIQUE(accountId, role)
+ * Vai nội bộ do admin cấp qua /api/admin/roles (15/10): ADMIN và ba vai Studio GAME_EDITOR,
+ * GAME_REVIEWER, GAME_MANAGER, không phải đổi Account. Mỗi lần cấp / thu ghi vào RoleGrantLog kèm
+ * lý do. Ràng buộc: UNIQUE(accountId, role)
  */
 @Entity
 @Table(name = "account_role", uniqueConstraints = {

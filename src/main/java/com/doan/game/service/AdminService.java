@@ -12,8 +12,10 @@ import java.util.UUID;
  */
 public interface AdminService {
 
-    void grantRole(UUID actorId, GrantRoleRequest req);
+    /** Cấp một vai nội bộ cho subjectId; đã có thì lặp vô hại. Trả danh sách vai hiện có của người đó. */
+    RoleListResponse grantRole(UUID actorId, GrantRoleRequest req);
 
-    void revokeRole(UUID actorId, GrantRoleRequest req);
+    /** Thu một vai nội bộ; không giữ vai đó → 1003; admin tự thu ADMIN của mình → 1001. */
+    RoleListResponse revokeRole(UUID actorId, GrantRoleRequest req);
 
 }

@@ -28,8 +28,9 @@ Nền là `entity` — ánh xạ 1–1 với **21 thực thể** của ERD bản
 - **Mọi thao tác cần gói đều gọi `EntitlementService.activePlans(accountId)`**, không tin scope trong JWT:
   gói có thể hết hạn giữa phiên.
 - Admin cấp được gói **không cần thanh toán** (`Entitlement.source = ADMIN`, ghi `grantedById`).
-- Vai nội bộ (`ADMIN`, sau này `GAME_EDITOR` / `GAME_REVIEWER` / `GAME_MANAGER`) lưu ở `AccountRole`,
-  mỗi lần cấp / thu ghi `RoleGrantLog` kèm lý do.
+- Vai nội bộ (`ADMIN`, và từ 15/10 `GAME_EDITOR` / `GAME_REVIEWER` / `GAME_MANAGER`) lưu ở `AccountRole`,
+  cấp / thu qua `POST /api/admin/roles/grant|revoke`, mỗi lần ghi `RoleGrantLog` kèm lý do. Decoder đọc bảng này
+  mỗi request nên vai có hiệu lực ngay.
 - **Child / Student không có tài khoản**: slot là danh tính. Child hay Student suy từ `context` của nhóm
   (`FAMILY` / `CLASS`). Một trẻ ở cả nhà lẫn lớp có hai slot riêng, dữ liệu tự tách.
 - Mỗi tài khoản **tối đa một nhóm đang mở cho mỗi context**: `LearnerGroup.openContext` = `context` khi
@@ -71,7 +72,7 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
 | `PlanService` **(có ruột)** | Plan | Bảng giá công khai; admin đặt giá và số tháng từng gói (chưa có dòng thì chưa bán được gói đó) |
-| `AdminService` | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ, kèm sổ ghi (khung). `AdminController` đã có ruột phần giá gói và giao dịch |
+| `AdminService` **(có ruột 15/10)** | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ (`ADMIN`, `GAME_EDITOR`, `GAME_REVIEWER`, `GAME_MANAGER`): cấp trùng là lặp vô hại, mỗi thay đổi ghi `RoleGrantLog` kèm lý do bắt buộc, admin không tự thu `ADMIN` của mình. `AdminController` có ruột giá gói, giao dịch và vai |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
 ---
@@ -160,9 +161,12 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 
 - **Question** chưa sửa: cần `concept` (để QuizAnswer cập nhật ConceptMastery) và `retiredAt` (câu đã dùng
   không xoá cứng). Hưng bảo để sau.
-- **Studio** (Chapter, ChapterDraft, ContentReview, GameRelease, ReleaseChapter, VoiceClip) và ba vai
-  Game Editor / Reviewer / Manager: làm sau khi chốt xong role cơ bản. `buildVersion` lúc đó thành khoá
-  ngoại tới `GameRelease`.
+- **Studio**: ba vai Game Editor / Reviewer / Manager đã vào `Role` + `/api/admin/roles` (15/10, PR A);
+  vòng đời nháp theo vai (PR B), phát hành theo duyệt (PR C), ContentReview / VoiceClip và `buildVersion`
+  thành khoá ngoại tới `GameRelease` chưa làm — kế hoạch `build/studio-giai-doan-2-huong-dan-2026-10-12.md`.
+- **Thêm giá trị vào một enum đã có cột trên production** (như `Role` 15/10): `ddl-auto=update` KHÔNG sửa CHECK
+  constraint Postgres đã tạo (`account_role_role_check` vẫn 5 giá trị cũ) → INSERT giá trị mới hỏng 500 dù test H2
+  xanh. Phải chạy SQL tay một lần, mẫu `ops/finteen-deploy/alter-role-check-20261015.sql`.
 
 
 ## Quy ước tên và gói (04/10/2026)
