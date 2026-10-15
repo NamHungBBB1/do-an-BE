@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -15,4 +16,7 @@ public interface AccountRoleRepository extends JpaRepository<AccountRole, UUID> 
     List<AccountRole> findByAccount_Id(UUID accountId);
 
     boolean existsByAccount_IdAndRole(UUID accountId, Role role);
+
+    /** Dòng cụ thể để thu vai (AdminServiceImpl.revokeRole, 15/10). */
+    Optional<AccountRole> findByAccount_IdAndRole(UUID accountId, Role role);
 }
