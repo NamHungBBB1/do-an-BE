@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Vai nội bộ (PR A, 15/10) qua HTTP thật (MockMvc + H2): admin cấp GAME_EDITOR → /auth/me của người đó
  * thấy vai ngay; thu → mất; sổ role_grant_log đủ hai dòng (cấp rồi thu); dữ liệu sai bị 1001 / 1003;
- * người thường 403. Tra tài khoản theo email (tối 15/10) cho màn cấp vai; danh sách ai đang giữ vai (16/10).
+ * người thường 403. Tra tài khoản theo email (tối 15/10) cho màn cấp vai; danh sách ai đang giữ vai và sổ cấp / thu (16/10).
  * JWT giả bằng spring-security-test như
  * AdminPlanFlowTest, nên không cần AuthService.
  */
@@ -224,6 +224,42 @@ class AdminRoleFlowTest {
         assertTrue(ids.indexOf(lan.getId().toString()) < ids.indexOf(nam.getId().toString()));
 
         mvc.perform(get("/api/admin/roles").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    @Test
+    void roleLogShowsWhoDidWhatNewestFirst() throws Exception {
+        Account admin = account("admin");
+        Account lan = account("lan");
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+        mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(lan.getId(), "GAME_EDITOR", "soan chuong 5")))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/admin/roles/revoke").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(lan.getId(), "GAME_EDITOR", "xong viec")))
+                .andExpect(status().isOk());
+
+        // Lọc theo người: đúng 2 dòng, mới nhất trước, đủ ai làm / với ai / vai / cấp hay thu / lý do.
+        mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("subjectId", lan.getId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(2))
+                .andExpect(jsonPath("$.result[0].granted").value(false))
+                .andExpect(jsonPath("$.result[0].reason").value("xong viec"))
+                .andExpect(jsonPath("$.result[0].role").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result[0].actorEmail").value(admin.getEmail()))
+                .andExpect(jsonPath("$.result[0].targetEmail").value(lan.getEmail()))
+                .andExpect(jsonPath("$.result[1].granted").value(true))
+                .andExpect(jsonPath("$.result[1].reason").value("soan chuong 5"));
+        // Không lọc: DB test dùng chung nên không đếm tổng; chỉ kiểm size=0 bị kẹp về 1.
+        mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("size", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(1));
+        // subjectId không phải UUID → 1001; người thường → 403.
+        mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("subjectId", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(get("/api/admin/roles/log").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
     }

@@ -25,4 +25,7 @@ public interface AdminService {
     /** Mọi tài khoản đang giữ ít nhất một vai nội bộ, xếp theo email, mỗi người kèm đủ vai và gói đang có. */
     List<AccountResponse> listInternalAccounts();
 
+    /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100, không trả tổng. */
+    List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
+
 }
