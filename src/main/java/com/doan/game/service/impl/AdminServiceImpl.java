@@ -22,16 +22,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Cấp và thu vai nội bộ (AccountRole), kèm sổ ghi bắt buộc có lý do (PR A, 15/10); tra tài khoản theo email
- * cho màn cấp vai (tối 15/10).
+ * cho màn cấp vai (tối 15/10); danh sách ai đang giữ vai nội bộ (16/10).
  *
  * Chỉ bốn vai cấp tay được: ADMIN và ba vai Studio. PARENT / TEACHER suy từ gói còn hạn, CHILD là
  * slot, GUEST không có tài khoản — gửi lên là 1001. Decoder đọc AccountRole mỗi request nên cấp
@@ -100,6 +104,25 @@ public class AdminServiceImpl implements AdminService {
         Set<String> plans = new HashSet<>();
         entitlementService.activePlans(a.getId()).forEach(k -> plans.add(k.name()));
         return AccountMapper.toResponse(a, plans, roles(a.getId()).roles());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AccountResponse> listInternalAccounts() {
+        // Một truy vấn lấy cả vai lẫn tài khoản (join fetch) rồi gom theo người. Nhân sự nội bộ chỉ vài người
+        // nên tra gói từng người là đủ rẻ; không phân trang.
+        Map<UUID, Account> accounts = new LinkedHashMap<>();
+        Map<UUID, List<String>> rolesById = new HashMap<>();
+        for (AccountRole r : accountRoleRepo.findAllWithAccountOrderByEmail()) {
+            UUID id = r.getAccount().getId();
+            accounts.putIfAbsent(id, r.getAccount());
+            rolesById.computeIfAbsent(id, k -> new ArrayList<>()).add(r.getRole().name());
+        }
+        return accounts.values().stream().map(a -> {
+            Set<String> plans = new HashSet<>();
+            entitlementService.activePlans(a.getId()).forEach(k -> plans.add(k.name()));
+            return AccountMapper.toResponse(a, plans, rolesById.get(a.getId()));
+        }).toList();
     }
 
     // ---- phụ trợ ----

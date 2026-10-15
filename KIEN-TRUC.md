@@ -72,7 +72,7 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
 | `PlanService` **(có ruột)** | Plan | Bảng giá công khai; admin đặt giá và số tháng từng gói (chưa có dòng thì chưa bán được gói đó) |
-| `AdminService` **(có ruột 15/10)** | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ (`ADMIN`, `GAME_EDITOR`, `GAME_REVIEWER`, `GAME_MANAGER`): cấp trùng là lặp vô hại, mỗi thay đổi ghi `RoleGrantLog` kèm lý do bắt buộc, admin không tự thu `ADMIN` của mình; `findAccount(email)` tra tài khoản cho màn cấp vai, trả cùng dạng `/api/auth/me`. `AdminController` có ruột giá gói, giao dịch và vai |
+| `AdminService` **(có ruột 15/10)** | AccountRole, RoleGrantLog | Cấp và thu vai nội bộ (`ADMIN`, `GAME_EDITOR`, `GAME_REVIEWER`, `GAME_MANAGER`): cấp trùng là lặp vô hại, mỗi thay đổi ghi `RoleGrantLog` kèm lý do bắt buộc, admin không tự thu `ADMIN` của mình; `findAccount(email)` tra tài khoản cho màn cấp vai, trả cùng dạng `/api/auth/me`; `listInternalAccounts()` liệt kê ai đang giữ vai nội bộ (một truy vấn join fetch, không phân trang). `AdminController` có ruột giá gói, giao dịch và vai |
 | `LearnerModelService` | ConceptMastery, DailySummary | Knowledge tracing, phân cụm lớp, tổng kết mỗi đêm qua AI provider, bản theo luật khi AI lỗi |
 
 ---

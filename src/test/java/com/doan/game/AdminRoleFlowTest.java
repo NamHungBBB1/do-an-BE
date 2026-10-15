@@ -7,6 +7,8 @@ import com.doan.game.enums.Role;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.RoleGrantLogRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -17,13 +19,18 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,7 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Vai nội bộ (PR A, 15/10) qua HTTP thật (MockMvc + H2): admin cấp GAME_EDITOR → /auth/me của người đó
  * thấy vai ngay; thu → mất; sổ role_grant_log đủ hai dòng (cấp rồi thu); dữ liệu sai bị 1001 / 1003;
- * người thường 403. Tra tài khoản theo email (tối 15/10) cho màn cấp vai. JWT giả bằng spring-security-test như
+ * người thường 403. Tra tài khoản theo email (tối 15/10) cho màn cấp vai; danh sách ai đang giữ vai (16/10).
+ * JWT giả bằng spring-security-test như
  * AdminPlanFlowTest, nên không cần AuthService.
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true")
@@ -180,6 +188,42 @@ class AdminRoleFlowTest {
                 .andExpect(jsonPath("$.code").value(1001));
         mvc.perform(get("/api/admin/accounts").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT"))
                         .param("email", lan.getEmail()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    @Test
+    void listsInternalAccountsWithAllTheirRoles() throws Exception {
+        Account admin = account("admin");
+        Account lan = account("lan");
+        Account nam = account("nam");
+        Account ngoai = account("ngoai");   // không vai → không có mặt trong danh sách
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+        for (String[] g : new String[][]{{"GAME_REVIEWER", "lan"}, {"GAME_EDITOR", "lan"}, {"GAME_MANAGER", "nam"}}) {
+            UUID id = g[1].equals("lan") ? lan.getId() : nam.getId();
+            mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                            .content(body(id, g[0], "phan vai")))
+                    .andExpect(status().isOk());
+        }
+
+        String json = mvc.perform(get("/api/admin/roles").with(asAdmin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode rows = new ObjectMapper().readTree(json).get("result");
+        Map<String, List<String>> rolesById = new LinkedHashMap<>();
+        for (JsonNode row : rows) {
+            List<String> roles = new ArrayList<>();
+            row.get("roles").forEach(r -> roles.add(r.asText()));
+            rolesById.put(row.get("id").asText(), roles);
+        }
+        // DB test dùng chung với các lớp khác nên không đếm tổng; chỉ kiểm đúng người, đủ vai, xếp theo email.
+        assertEquals(List.of("GAME_EDITOR", "GAME_REVIEWER"), rolesById.get(lan.getId().toString()));
+        assertEquals(List.of("GAME_MANAGER"), rolesById.get(nam.getId().toString()));
+        assertFalse(rolesById.containsKey(ngoai.getId().toString()));
+        List<String> ids = new ArrayList<>(rolesById.keySet());
+        assertTrue(ids.indexOf(lan.getId().toString()) < ids.indexOf(nam.getId().toString()));
+
+        mvc.perform(get("/api/admin/roles").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
     }

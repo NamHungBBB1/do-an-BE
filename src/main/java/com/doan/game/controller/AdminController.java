@@ -71,6 +71,12 @@ public class AdminController {
         return ApiResponse.ok(adminService.revokeRole(UUID.fromString(jwt.getSubject()), req));
     }
 
+    /** Ai đang giữ vai nội bộ: mỗi tài khoản một dòng kèm đủ vai và gói; danh sách nhỏ nên không phân trang. */
+    @GetMapping("/roles")
+    public ApiResponse<List<AccountResponse>> listInternalAccounts() {
+        return ApiResponse.ok(adminService.listInternalAccounts());
+    }
+
     // ---- tra tài khoản (tối 15/10) ----
     /** Tìm đúng một tài khoản theo email để lấy id cho màn cấp vai; cùng dạng với GET /api/auth/me. */
     @GetMapping("/accounts")
