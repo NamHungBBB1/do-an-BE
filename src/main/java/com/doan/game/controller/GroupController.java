@@ -1,6 +1,7 @@
 package com.doan.game.controller;
 
 import com.doan.game.DTO.request.CreateGroupRequest;
+import com.doan.game.DTO.request.PostTestRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.LearnerGroupResponse;
 import com.doan.game.service.GroupService;
@@ -68,6 +69,17 @@ public class GroupController {
     @PostMapping("/{id}/close")
     public ApiResponse<Void> closeGroup(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         groupService.closeGroup(currentAccountId(jwt), id);
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 16/10 (quiz.md v2): bật / tắt hậu trắc cho lớp, body {enabled}. Chỉ chủ nhóm CLASS đang mở; bật cần
+     * gói TEACHER còn hạn. KHUNG — service còn ném "chưa cài đặt" (501 / 1004) cho tới khi Thanh điền.
+     */
+    @PostMapping("/{id}/post-test")
+    public ApiResponse<Void> setPostTest(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                         @RequestBody PostTestRequest req) {
+        groupService.setPostTest(currentAccountId(jwt), id, req.enabled());
         return ApiResponse.ok();
     }
 

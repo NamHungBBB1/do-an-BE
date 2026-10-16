@@ -28,6 +28,7 @@ public final class LearnerGroupMapper {
                 source.getSlotLimit() == null ? 0 : source.getSlotLimit(),
                 slotUsed,
                 source.getConsentConfirmedAt() != null,
-                source.getClosedAt());
+                source.getClosedAt(),
+                source.getPostTestEnabledAt() != null);   // 16/10 quiz v2: cờ hậu trắc của lớp
     }
 }

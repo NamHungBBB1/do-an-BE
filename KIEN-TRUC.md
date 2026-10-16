@@ -64,10 +64,10 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 |---|---|---|
 | `AuthService` | Account, Credential, VerificationToken | Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập, quên / đặt lại mật khẩu |
 | `EntitlementService` | Entitlement | Gói đang giữ (`activePlans`), admin cấp gói, nhắc sắp hết hạn |
-| `GroupService` | LearnerGroup | Mở nhóm gia đình / lớp, xác nhận đồng ý phụ huynh, kết thúc nhóm, đếm chỗ trống |
+| `GroupService` | LearnerGroup | Mở nhóm gia đình / lớp, xác nhận đồng ý phụ huynh, kết thúc nhóm, đếm chỗ trống; bật / tắt hậu trắc cho lớp (`setPostTest`, khung 16/10) |
 | `SlotService` | LearnerSlot | Mở slot (một hoặc nhiều), trả, xoá sạch, đổi PIN, trẻ đăng nhập |
 | `PlayService` | ChoiceEvent, MiniGameResult, RunState | Nhận lô một chương, chống ghi trùng |
-| `QuizService` | Question, Quiz, QuizResult, QuizAnswer | Soạn quiz từ kho, phát cho lớp, chấm, kết quả từng em |
+| `QuizService` | Question, Quiz, QuizResult, QuizAnswer | Quiz hai kiểu (quiz.md v2, 16/10): nhập kho, giáo viên soạn đề CLASS_TEST từ kho chung; hậu trắc POST_TEST BE tự tạo theo chương cho lớp bật cờ; chấm, kết quả từng em. Khung trên `feat/quiz`, Thanh điền ruột |
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
@@ -159,8 +159,10 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 
 ## Chưa vào khung, cố ý
 
-- **Question** chưa sửa: cần `concept` (để QuizAnswer cập nhật ConceptMastery) và `retiredAt` (câu đã dùng
-  không xoá cứng). Hưng bảo để sau.
+- **Question** đã sửa 16/10 (nhánh `feat/quiz`): `externalId` UNIQUE, `concept`, `retiredAt`, `chapter` (câu hậu trắc
+  của chương N, NULL = kho chung); `Quiz` thêm `kind` (enum `QuizKind`) + `chapter` + UNIQUE(group_id, kind, chapter);
+  `LearnerGroup` thêm `postTestEnabledAt`. Cột mới đều NULL. Sau deploy kiểm `pg_constraint` của `quiz` có UNIQUE chưa
+  (`ddl-auto=update` không chắc thêm unique vào bảng đã có) → thiếu thì ALTER tay như CHECK 15/10.
 - **Studio**: ba vai Game Editor / Reviewer / Manager đã vào `Role` + `/api/admin/roles` (15/10, PR A);
   vòng đời nháp theo vai (PR B), phát hành theo duyệt (PR C), ContentReview / VoiceClip và `buildVersion`
   thành khoá ngoại tới `GameRelease` chưa làm — kế hoạch `build/studio-giai-doan-2-huong-dan-2026-10-12.md`.

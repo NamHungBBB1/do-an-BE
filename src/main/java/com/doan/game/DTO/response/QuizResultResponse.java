@@ -1,5 +1,5 @@
 package com.doan.game.DTO.response;
 
-/** Kết quả một em; attempted = false là chưa làm (không có dòng QuizResult). */
-public record QuizResultResponse(java.util.UUID slotId, boolean attempted, int score, int totalQuestions) {
+/** Một dòng kết quả lớp: mọi slot ACTIVE + slot không còn ACTIVE nhưng đã nộp (WIPED → code, displayName null). attempted = false là chưa nộp (score, submittedAt null). */
+public record QuizResultResponse(java.util.UUID slotId, String code, String displayName, String status, boolean attempted, Integer score, int totalQuestions, java.time.Instant submittedAt) {
 }

@@ -55,4 +55,7 @@ public class LearnerGroup {
 
     @Column(name = "closed_at")
     private Instant closedAt;
+
+    @Column(name = "post_test_enabled_at")
+    private Instant postTestEnabledAt;
 }

@@ -211,6 +211,12 @@ public class GroupServiceImpl implements GroupService {
         return group;
     }
 
+    /** 16/10 quiz v2 — KHUNG, Thanh điền ruột (xem GroupService). */
+    @Override
+    public void setPostTest(UUID callerId, UUID groupId, boolean enabled) {
+        throw new UnsupportedOperationException("chua cai dat");
+    }
+
     private static LearningContext parseContext(String context) {
         if (context == null || context.isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "context: bắt buộc (FAMILY hoặc CLASS)");

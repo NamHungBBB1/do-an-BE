@@ -39,4 +39,11 @@ public interface GroupService {
     /** Chỗ trống = slotLimit − số slot ACTIVE, chỉ chủ nhóm (3004). */
     int countFreeSlots(UUID callerId, UUID groupId);
 
+    /**
+     * 16/10 (quiz.md v2, Hưng chốt): giáo viên bật / tắt hậu trắc cho LỚP — postTestEnabledAt = now hoặc NULL.
+     * Chỉ nhóm CLASS đang mở (8008) của người gọi (3004); bật cần gói TEACHER còn hạn (3005), tắt chỉ cần
+     * là chủ nhóm. Bật thì mọi em thấy bài hậu trắc của mỗi chương đã xong (QuizService tự tạo đề). KHUNG.
+     */
+    void setPostTest(UUID callerId, UUID groupId, boolean enabled);
+
 }
