@@ -96,7 +96,22 @@ public enum ErrorCode {
     SCENE_ITEM_NOT_IN_CHAPTER(7002, "Lô trỏ vào cảnh / lựa chọn / mini-game không có trong chương của bản này",
             HttpStatus.BAD_REQUEST),
     CHAPTER_NOT_UNLOCKED(7003, "Chưa tới lượt chương này hoặc attemptIndex không khớp",
-            HttpStatus.CONFLICT);
+            HttpStatus.CONFLICT),
+
+    // 8xxx — quiz hai kiểu (quiz.md v2, Hưng chốt 16/10).
+    QUIZ_NOT_FOUND(8001, "Không có đề này, hoặc đề chưa phát hành / không thuộc lớp của bạn",
+            HttpStatus.NOT_FOUND),
+    QUIZ_IMMUTABLE(8002, "Đề đã phát hành hoặc là đề hậu trắc — không sửa, xoá hay phát lại được",
+            HttpStatus.CONFLICT),
+    QUIZ_NOT_SUBMITTED(8003, "Em này chưa nộp bài", HttpStatus.NOT_FOUND),
+    QUIZ_DUE_PASSED(8004, "Đã quá hạn nộp", HttpStatus.GONE),
+    QUIZ_ALREADY_SUBMITTED(8005, "Đã nộp bài rồi — mỗi em chỉ nộp một lần",
+            HttpStatus.CONFLICT),
+    QUIZ_ANSWER_MISMATCH(8006, "Câu trả lời không khớp đề (câu lạ, trùng hoặc sai lựa chọn)",
+            HttpStatus.BAD_REQUEST),
+    QUESTION_INVALID(8007, "Câu hỏi không có trong kho, đã rút, hoặc là câu hậu trắc",
+            HttpStatus.BAD_REQUEST),
+    GROUP_NOT_CLASS_OR_CLOSED(8008, "Chỉ lớp đang mở mới có quiz / hậu trắc", HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;

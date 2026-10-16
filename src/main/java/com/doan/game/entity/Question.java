@@ -8,9 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một câu hỏi trong kho dùng chung để người dùng gói Edu chọn. Trước 25/09 không hề tồn tại:
- * Quiz.questionIds trỏ vào hư không. Cột standard ghi câu hỏi đo theo khung nào, source ghi nó lấy
- * từ đâu — để nghiên cứu nói được rằng câu hỏi không do nhóm tự nghĩ ra.
+ * Kho câu hỏi dùng chung (nhập từ pool công khai, upsert theo externalId, giáo viên chỉ chọn) cộng
+ * bộ hậu trắc cố định của từng chương (chapter = N; NULL = kho chung). Câu rút khỏi kho chỉ đặt
+ * retiredAt, không xoá, để đề cũ còn nguyên. Đáp án không bao giờ xuống trẻ.
  */
 @Entity
 @Table(name = "question")
@@ -43,4 +43,16 @@ public class Question {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "external_id", length = 80, unique = true)
+    private String externalId;
+
+    @Column(name = "concept", length = 40)
+    private String concept;
+
+    @Column(name = "retired_at")
+    private Instant retiredAt;
+
+    @Column(name = "chapter")
+    private Integer chapter;
 }

@@ -8,6 +8,8 @@ import com.doan.game.entity.GroupReport;
 import com.doan.game.entity.GroupReportRow;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
+import com.doan.game.entity.Quiz;
+import com.doan.game.entity.QuizResult;
 import com.doan.game.entity.RunState;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
@@ -21,10 +23,13 @@ import com.doan.game.repository.GroupReportRowRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.MiniGameResultRepository;
+import com.doan.game.repository.QuizRepository;
+import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.ReportService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +56,9 @@ import java.util.UUID;
  * xoá một em sau khi đóng vẫn ra "Đã xoá" mà số không mất.
  *
  * Đợt 1: learner / progress / indicators / achievements có dữ liệu; concepts / chapters rỗng,
- * quizzes null (FAMILY) hoặc object rỗng (CLASS), dailySummary null — FE dựng giao diện một lần.
+ * dailySummary null — FE dựng giao diện một lần. Đợt 3 (quiz.md v2, 16/10): khối quizzes (slot) và
+ * quizAssigned / quizSubmitted / averageScore (dòng + summary nhóm) lấy số THẬT từ QuizResult —
+ * nhóm đóng băng vẫn đọc giá trị đóng băng, không tính lại.
  */
 @Service
 @RequiredArgsConstructor
@@ -70,6 +77,8 @@ public class ReportServiceImpl implements ReportService {
     private final AchievementRepository achievementRepo;
     private final GroupReportRepository groupReportRepo;
     private final GroupReportRowRepository groupReportRowRepo;
+    private final QuizRepository quizRepo;
+    private final QuizResultRepository quizResultRepo;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -124,10 +133,21 @@ public class ReportServiceImpl implements ReportService {
                 slot.getCreatedAt(), slot.getArchivedAt(), slot.getWipedAt(), lastActiveAt);
 
         // Quiz chỉ cho lớp; FAMILY nhận null — FE ẩn hẳn khối quiz (Hưng chốt, cùng dashboard).
-        SlotReportResponse.Quizzes quizzes =
-                group.getContext() == LearningContext.CLASS
-                        ? new SlotReportResponse.Quizzes(0, 0, List.of())
-                        : null;
+        // Đợt 3 (quiz.md v2): assigned = số đề đã publish của lớp; results = bài của em, mới nhất
+        // trước (chưa nộp thì không có dòng, FE hiện "chưa nộp").
+        SlotReportResponse.Quizzes quizzes = null;
+        if (group.getContext() == LearningContext.CLASS) {
+            List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
+            List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
+            for (QuizResult r : myResults) {
+                resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
+                        r.getQuiz().getTitle(), r.getScore(), questionCount(r.getQuiz()),
+                        r.getSubmittedAt()));
+            }
+            quizzes = new SlotReportResponse.Quizzes(
+                    (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
+                    myResults.size(), resultRows);
+        }
 
         return new SlotReportResponse(learner, progress, indicatorsOf(run),
                 List.copyOf(achievements), List.of(), List.of(), quizzes, null);
@@ -174,10 +194,15 @@ public class ReportServiceImpl implements ReportService {
         List<LearnerSlot> slots = slotRepo.findByGroup_IdOrderByCreatedAtAsc(groupId);
         Map<UUID, Instant> lastActive = lastActiveInGroup(groupId);
         Map<UUID, RunState> runs = runsInGroup(groupId);
+        // Đợt 3 (quiz.md v2): số quiz đóng băng cùng lúc như mọi số — sống ở đây, đọc lại từ frozen.
+        Map<UUID, QuizSlotFigures> quizBySlot = quizSlotFigures(groupId);
+        int quizAssigned = (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(groupId);
+        Object[] quizTotals = firstRow(quizResultRepo.statsInGroup(groupId));
 
         List<RowFigures> figures = new ArrayList<>(slots.size());
         for (LearnerSlot slot : slots) {
-            figures.add(figuresOf(runs.get(slot.getId()), lastActive.get(slot.getId())));
+            figures.add(figuresOf(runs.get(slot.getId()), lastActive.get(slot.getId()),
+                    quizAssigned, quizBySlot.get(slot.getId())));
         }
         GroupReportResponse.Summary summary = new GroupReportResponse.Summary(
                 slots.size(),
@@ -185,7 +210,9 @@ public class ReportServiceImpl implements ReportService {
                 countActiveLast7Days(slots, lastActive),
                 sumCompleted(figures),
                 currentTotalChapters(),
-                0, 0, null);
+                quizAssigned,
+                quizSubmittedOf(quizTotals),
+                quizAverageOf(quizTotals));
 
         GroupReport report = new GroupReport();
         report.setGroup(group);
@@ -241,6 +268,9 @@ public class ReportServiceImpl implements ReportService {
     private GroupReportResponse liveResponse(LearnerGroup group, GroupReportResponse.GroupInfo info) {
         Map<UUID, Instant> lastActive = lastActiveInGroup(group.getId());
         Map<UUID, RunState> runs = runsInGroup(group.getId());
+        Map<UUID, QuizSlotFigures> quizBySlot = quizSlotFigures(group.getId());
+        int quizAssigned = (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId());
+        Object[] quizTotals = firstRow(quizResultRepo.statsInGroup(group.getId()));
 
         List<LearnerSlot> slots = byStatusThenCreatedAt(
                 slotRepo.findByGroup_IdOrderByCreatedAtAsc(group.getId()));
@@ -248,7 +278,8 @@ public class ReportServiceImpl implements ReportService {
         List<GroupReportResponse.ReportRow> rows = new ArrayList<>(slots.size());
         for (LearnerSlot slot : slots) {
             rows.add(liveIdentityRow(slot,
-                    figuresOf(runs.get(slot.getId()), lastActive.get(slot.getId()))));
+                    figuresOf(runs.get(slot.getId()), lastActive.get(slot.getId()),
+                            quizAssigned, quizBySlot.get(slot.getId()))));
         }
         GroupReportResponse.Summary summary = new GroupReportResponse.Summary(
                 slots.size(),
@@ -256,7 +287,9 @@ public class ReportServiceImpl implements ReportService {
                 countActiveLast7Days(slots, lastActive),
                 rows.stream().mapToInt(GroupReportResponse.ReportRow::completedChapters).sum(),
                 currentTotalChapters(),
-                0, 0, null);
+                quizAssigned,
+                quizSubmittedOf(quizTotals),
+                quizAverageOf(quizTotals));
         return new GroupReportResponse(info, null, null, summary, rows);
     }
 
@@ -293,11 +326,57 @@ public class ReportServiceImpl implements ReportService {
                 run.getWealth(), run.getSaving(), run.getHappiness(), run.getRisk(), run.getGoal());
     }
 
-    private RowFigures figuresOf(RunState run, Instant lastActiveAt) {
+    private RowFigures figuresOf(RunState run, Instant lastActiveAt, int quizAssigned,
+                                 QuizSlotFigures quiz) {
         List<Integer> done = run == null ? List.of() : parseChapters(run.getChaptersDone());
         return new RowFigures(done, done.size(),
                 run == null || run.getAttemptIndex() == null ? 1 : run.getAttemptIndex(),
-                lastActiveAt, indicatorsOf(run), 0, 0, null);
+                lastActiveAt, indicatorsOf(run), quizAssigned,
+                quiz == null ? 0 : quiz.submitted(), quiz == null ? null : quiz.averageScore());
+    }
+
+    /** Số quiz của MỘT dòng trong báo cáo nhóm — null = em chưa nộp bài nào (assigned tính riêng). */
+    private record QuizSlotFigures(int submitted, Double averageScore) {}
+
+    /** Kết quả gộp statsBySlotInGroup: slotId → nộp / trung bình điểm của slot đó. */
+    private Map<UUID, QuizSlotFigures> quizSlotFigures(UUID groupId) {
+        Map<UUID, QuizSlotFigures> out = new HashMap<>();
+        for (Object[] row : quizResultRepo.statsBySlotInGroup(groupId)) {
+            out.put((UUID) row[0],
+                    new QuizSlotFigures(((Number) row[1]).intValue(), avgOf(row[2])));
+        }
+        return out;
+    }
+
+    private static int quizSubmittedOf(Object[] totals) {
+        return totals == null || totals[0] == null ? 0 : ((Number) totals[0]).intValue();
+    }
+
+    /** Trả về dòng duy nhất của statsInGroup ([số bài, trung bình]); không có lượt nộp nào → null. */
+    private static Object[] firstRow(List<Object[]> rows) {
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private static Double quizAverageOf(Object[] totals) {
+        return totals == null ? null : avgOf(totals[1]);
+    }
+
+    /** avg() ra Double / BigDecimal tùy H2 hay Postgres — Number là chung được cho cả hai. */
+    private static Double avgOf(Object value) {
+        return value == null ? null : ((Number) value).doubleValue();
+    }
+
+    /** Số câu của đề = độ dài questionIds (JSON text) — cùng nội dung với quiz.questionCount. */
+    private Integer questionCount(Quiz quiz) {
+        if (quiz.getQuestionIds() == null || quiz.getQuestionIds().isBlank()) {
+            return 0;
+        }
+        try {
+            return objectMapper.readValue(quiz.getQuestionIds(),
+                    new TypeReference<List<UUID>>() { }).size();
+        } catch (JsonProcessingException e) {
+            throw new AppException(ErrorCode.UNCATEGORIZED, "questionIds hong trong quiz");
+        }
     }
 
     // ------------------------------------------------------------------ truy vấn gộp
