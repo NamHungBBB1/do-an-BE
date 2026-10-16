@@ -633,7 +633,8 @@ public class QuizServiceImpl implements QuizService {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "questionIds: tối đa 100 câu");
         }
         if (new HashSet<>(ids).size() != ids.size()) {
-            throw new AppException(ErrorCode.QUIZ_ANSWER_MISMATCH, "questionIds: có câu trùng");
+            // Trùng câu là lỗi của NGƯỜI RA ĐỀ (quiz.md ghi 8007) — 8006 là lỗi học sinh nộp bài.
+            throw new AppException(ErrorCode.QUESTION_INVALID, "questionIds: có câu trùng");
         }
         return ids;
     }

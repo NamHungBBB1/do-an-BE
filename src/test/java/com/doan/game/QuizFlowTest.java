@@ -206,6 +206,12 @@ class QuizFlowTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(8007));
 
+        // 8007: câu trùng trong questionIds là lỗi người ra đề, không phải 8006 (lỗi nộp bài).
+        mvc.perform(create(room.teacher(), room.groupId(),
+                        List.of(ids.get(0), ids.get(0)), "De trung cau"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(8007));
+
         // 1001: dueAt phải sau thời điểm hiện tại (đồng hồ test 03:00 02/10).
         mvc.perform(post("/api/quizzes").header("Authorization", "Bearer " + room.teacher())
                         .contentType(MediaType.APPLICATION_JSON)
