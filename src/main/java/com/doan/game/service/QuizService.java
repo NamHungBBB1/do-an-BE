@@ -14,7 +14,11 @@ public interface QuizService {
 
     ImportQuestionsResponse importQuestions(java.util.List<ImportQuestionDto> questions);
 
-    java.util.List<QuestionResponse> listQuestions(String standard, String concept, String pool, String q);
+    /**
+     * listQuestions cần biết ai gọi (SCOPE_TEACHER gói còn hạn, hoặc ADMIN) — thêm callerId so với
+     * chữ ký sinh sẵn; service tự kiểm, không tin vai trong JWT.
+     */
+    java.util.List<QuestionResponse> listQuestions(UUID callerId, String standard, String concept, String pool, String q);
 
     QuizResponse createQuiz(UUID callerId, CreateQuizRequest req);
 

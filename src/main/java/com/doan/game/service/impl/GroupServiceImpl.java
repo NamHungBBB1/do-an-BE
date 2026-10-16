@@ -211,10 +211,30 @@ public class GroupServiceImpl implements GroupService {
         return group;
     }
 
-    /** 16/10 quiz v2 — KHUNG, Thanh điền ruột (xem GroupService). */
+    /**
+     * 16/10 (quiz.md v2): bật / tắt hậu trắc cho lớp, idempotent. Chỉ chủ nhóm CLASS đang mở
+     * (FAMILY hoặc đã đóng → 8008, không phải chủ → 3004); BẬT thêm cần gói TEACHER còn hạn (3005),
+     * TẮT chỉ cần chủ nhóm — gói hết hạn vẫn tắt được. Giữ mốc bật lần đầu như confirmConsent.
+     */
     @Override
+    @Transactional
     public void setPostTest(UUID callerId, UUID groupId, boolean enabled) {
-        throw new UnsupportedOperationException("chua cai dat");
+        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        if (group.getContext() != LearningContext.CLASS || group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_NOT_CLASS_OR_CLOSED);
+        }
+        if (enabled) {
+            if (!entitlementService.activePlans(callerId).contains(PlanKind.TEACHER)) {
+                throw new AppException(ErrorCode.PLAN_REQUIRED);
+            }
+            if (group.getPostTestEnabledAt() == null) {
+                group.setPostTestEnabledAt(Instant.now(clock));
+                groupRepo.save(group);
+            }
+        } else if (group.getPostTestEnabledAt() != null) {
+            group.setPostTestEnabledAt(null);
+            groupRepo.save(group);
+        }
     }
 
     private static LearningContext parseContext(String context) {
