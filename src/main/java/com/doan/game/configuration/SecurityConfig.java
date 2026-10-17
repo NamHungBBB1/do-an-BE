@@ -73,6 +73,10 @@ public class SecurityConfig {
                 // Nội dung game CÔNG KHAI (Hưng chốt 08/10): kịch bản không bí mật, thứ thu tiền là
                 // báo cáo và chỉ số. Chỉ GET; đường ghi nằm ở /api/studio.
                 .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
+                // 17/10 (quiz.md, Hưng chốt cách 1): kho câu hỏi trong Studio mở cho BỐN vai nội bộ; ai được ghi
+                // thì service kiểm (Editor / Manager / Admin), Reviewer chỉ đọc. Phải đứng TRƯỚC /api/studio/**.
+                .requestMatchers("/api/studio/questions/**").hasAnyAuthority("SCOPE_ADMIN", "SCOPE_GAME_EDITOR",
+                        "SCOPE_GAME_REVIEWER", "SCOPE_GAME_MANAGER")
                 // Việc của admin: cấp / thu vai, cấp gói không thanh toán, đăng ký URL webhook PayOS,
                 // Studio giai đoạn 1 (lưu nháp + phát hành nội dung game).
                 .requestMatchers("/api/admin/**", "/api/entitlements/grant", "/api/studio/**",

@@ -111,7 +111,9 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST),
     QUESTION_INVALID(8007, "Câu hỏi không có trong kho, đã rút, hoặc là câu hậu trắc",
             HttpStatus.BAD_REQUEST),
-    GROUP_NOT_CLASS_OR_CLOSED(8008, "Chỉ lớp đang mở mới có quiz / hậu trắc", HttpStatus.CONFLICT);
+    GROUP_NOT_CLASS_OR_CLOSED(8008, "Chỉ lớp đang mở mới có quiz / hậu trắc", HttpStatus.CONFLICT),
+    QUESTION_IN_USE(8009, "Câu đã nằm trong đề đã phát hành — không sửa nội dung được, hãy rút rồi tạo câu mới thay thế",
+            HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;

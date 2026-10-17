@@ -31,6 +31,7 @@ public final class QuizMapper {
     public static QuestionResponse toResponse(Question source, java.util.List<String> options) {
         return new QuestionResponse(source.getId(), source.getExternalId(), source.getPool(),
                 source.getStem(), options, source.getCorrectIndex(), source.getStandard(),
-                source.getConcept(), source.getSource(), source.getChapter());
+                source.getConcept(), source.getSource(), source.getChapter(), source.getRetiredAt(),
+                source.getReplaces() == null ? null : source.getReplaces().getId());   // 17/10 Studio kho
     }
 }
