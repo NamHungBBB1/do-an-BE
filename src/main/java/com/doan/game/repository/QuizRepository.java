@@ -19,4 +19,7 @@ public interface QuizRepository extends JpaRepository<Quiz, UUID> {
 
     /** Đề đã publish của lớp — "assigned" trong báo cáo / kết quả (cả hậu trắc lẫn đề giáo viên). */
     long countByGroup_IdAndPublishedAtIsNotNull(UUID groupId);
+
+    /** 17/10 (Studio kho câu hỏi): câu đã nằm trong đề đã phát thì khoá nội dung (8009). questionIds là JSON text, tìm chuỗi id. */
+    boolean existsByPublishedAtIsNotNullAndQuestionIdsContaining(String questionId);
 }
