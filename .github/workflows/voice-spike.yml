@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - run: pip install -q vieneu==3.4.0
+      - run: pip install -q vieneu==3.4.0 onnxruntime==1.24.4 huggingface_hub==0.36.0  # pin = bản chạy được trên máy Hưng; onnxruntime mới chặn external data qua symlink cache HF
       - run: python voice-spike/ops/voice/render_voice.py plan --only CH01
       - run: /usr/bin/time -v python voice-spike/ops/voice/render_voice.py render --only CH01
       - name: rerun must render 0 (hash cache)
