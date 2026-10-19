@@ -1,0 +1,35 @@
+{
+ "engine": "vieneu",
+ "model": "pnnbao-ump/VieNeu-TTS-v3-Turbo",
+ "modelVersion": "v3-turbo-2026-10",
+ "note": "SPIKE phương án B: bỏ giọng nhân bản (mẫu người thật không đưa lên repo công khai); ME bị bỏ qua.",
+ "profiles": {
+  "adam": {
+   "kind": "preset",
+   "preset": "Adam",
+   "label": "Nam · Nam Bộ · tự nhiên (đã duyệt 03/09, phương án giọng nam)"
+  },
+  "pham-tuyen": {
+   "kind": "preset",
+   "preset": "Phạm Tuyên",
+   "label": "Nam · Bắc · tự nhiên (đã duyệt 03/09)"
+  },
+  "ngoc-huyen": {
+   "kind": "preset",
+   "preset": "Ngọc Huyền",
+   "label": "Nữ · Bắc · tự nhiên (đã duyệt 03/09)"
+  },
+  "thuc-doan": {
+   "kind": "preset",
+   "preset": "Thục Đoan",
+   "label": "Nữ · Nam Bộ · kể chuyện (đã duyệt 03/09)"
+  }
+ },
+ "characters": {
+  "AN": "adam",
+  "MINH": "pham-tuyen",
+  "CO_LINH": "ngoc-huyen",
+  "TU_VAN": "pham-tuyen"
+ },
+ "defaultProfile": null
+}

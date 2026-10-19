@@ -1,0 +1,31 @@
+# SPIKE phương án B giọng đọc (thiet-ke-giong-doc-2026-10-17.md §4): runner GitHub sinh giọng CH01 bằng đúng
+# render_voice.py của A, kết quả đưa lên artifact (chưa đẩy Pages, chưa callback BE). Nhánh nháp, xoá sau khi đo.
+name: voice-spike
+on:
+  push:
+    branches: [spike/voice-b]
+  workflow_dispatch:
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -q vieneu==3.4.0
+      - run: python voice-spike/ops/voice/render_voice.py plan --only CH01
+      - run: /usr/bin/time -v python voice-spike/ops/voice/render_voice.py render --only CH01
+      - name: rerun must render 0 (hash cache)
+        run: python voice-spike/ops/voice/render_voice.py render --only CH01 | tee rerun.log && grep -q "sinh mới 0 tệp" rerun.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-b-spike
+          path: |
+            voice-spike/build/finteen-assets-dist
+            voice-spike/build/content/CH01.json
+            voice-spike/ops/voice/clips.json

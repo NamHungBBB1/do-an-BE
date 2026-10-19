@@ -1,0 +1,613 @@
+{
+ "id": "CH01_V2",
+ "title": "Tiền đầu tiên",
+ "version": "2.0",
+ "initialStats": {
+  "SAVING": 50,
+  "HAPPINESS": 50,
+  "RISK": 30,
+  "GOAL": 50,
+  "WEALTH": 0,
+  "FIQ": 0
+ },
+ "initialMoney": 500000,
+ "metadata": {
+  "chapterId": "CH01",
+  "targetAge": 14,
+  "goalDescription": "Giữ tối thiểu 300.000đ để đóng phí lớp vẽ vào ngày 28, cân nhắc nhu cầu giải trí hợp lý.",
+  "coreKnowledgeUnits": [
+   "D01.02",
+   "D01.03",
+   "D01.04",
+   "D01.05"
+  ],
+  "allKnowledgeUnits": [
+   "D01.01",
+   "D01.02",
+   "D01.03",
+   "D01.04",
+   "D01.05",
+   "D01.06",
+   "D08.03",
+   "D08.04"
+  ]
+ },
+ "sprites": {
+  "AN": {
+   "an-neutral.png": "{{ASSET_BASE}}/a/0a682fdb48cd1e63fb70.webp",
+   "an-thinking.png": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+   "an-relieved.png": "{{ASSET_BASE}}/a/03bb9fd19d9b95f3ff18.webp",
+   "an-worried-money.png": "{{ASSET_BASE}}/a/347a0bb21e3df8211d89.webp"
+  },
+  "ME": {
+   "me-neutral.png": "{{ASSET_BASE}}/a/2013ab284e4d4471e0b6.webp",
+   "me-explaining.png": "{{ASSET_BASE}}/a/6ce7797a226c8a3e7429.webp",
+   "me-concerned.png": "{{ASSET_BASE}}/a/6b4f6bc6639af25a0684.webp"
+  },
+  "MINH": {
+   "minh-neutral.png": "{{ASSET_BASE}}/a/cc43c4b0856249e64f39.webp",
+   "minh-inviting.png": "{{ASSET_BASE}}/a/a440c21f4baec7ffbc88.webp"
+  }
+ },
+ "scenes": [
+  {
+   "id": "CH01_SC01_A",
+   "type": "scene",
+   "title": "An nhận phong bì tiền",
+   "background": "{{ASSET_BASE}}/a/e8681f0a51460f44f1f1.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/e8681f0a51460f44f1f1.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "inspect": {
+    "id": "INSPECT_SC01_ENVELOPE",
+    "buttonText": "Mở phong bì",
+    "popupImage": "{{ASSET_BASE}}/a/07352b1b98ed1681c8c9.webp",
+    "dataText": "Bạn nhận được 500.000đ. Bên cạnh phong bì là lịch đóng học phí lớp vẽ vào ngày 28.",
+    "autoNextSceneOnClose": true,
+    "knowledgeUnits": [
+     "D01.01",
+     "D01.04"
+    ]
+   },
+   "nextSceneId": "CH01_SC01_B1",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC01_B1",
+   "type": "dialogue",
+   "title": "Mẹ giải thích",
+   "background": "{{ASSET_BASE}}/a/d1066164641305deb6cb.webp",
+   "backgroundId": "BG01",
+   "characters": [
+    {
+     "id": "ME",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/6ce7797a226c8a3e7429.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Mẹ",
+   "speakerId": "ME",
+   "text": "Con được tự quyết số tiền này. Nhưng nhớ nhé, con phải đóng tiền học vẽ vào ngày 28; tiền này đã bao gồm tiền tiêu vặt của con rồi nhé!",
+   "nextSceneId": "CH01_SC01_B2",
+   "knowledgeUnits": [
+    "D01.01",
+    "D01.02",
+    "D01.04"
+   ]
+  },
+  {
+   "id": "CH01_SC01_B2",
+   "type": "dialogue",
+   "title": "An nhận ra ràng buộc",
+   "background": "{{ASSET_BASE}}/a/d1066164641305deb6cb.webp",
+   "backgroundId": "BG01",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Vậy mình không thể coi toàn bộ 500.000đ đều là tiền tự do thích mua gì thì mua.",
+   "nextSceneId": "CH01_SC01_B3",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC01_B3",
+   "type": "dialogue",
+   "title": "Minh gửi tin nhắn rủ",
+   "background": "{{ASSET_BASE}}/a/d1066164641305deb6cb.webp",
+   "backgroundId": "BG01",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/a440c21f4baec7ffbc88.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Minh (Tin nhắn)",
+   "speakerId": "MINH",
+   "text": "Tai nghe đang giảm giá còn 250.000đ nè An ơi! Nhóm mình mua chung để tối nay leo rank nhé!",
+   "nextSceneId": "CH01_SC02_A",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_A",
+   "type": "scene",
+   "title": "Đắn đo tại cửa hàng tai nghe",
+   "background": "{{ASSET_BASE}}/a/86375b0223710d6fb773.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/86375b0223710d6fb773.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH01_SC02_B1",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_B1",
+   "type": "dialogue",
+   "title": "Minh rủ mua ngay",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/a440c21f4baec7ffbc88.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Mua hôm nay cho kịp chơi tối nay đi! Mua online có 7 đô nghe còn rẻ hơn nữa kìa!",
+   "nextSceneId": "CH01_SC02_B2",
+   "knowledgeUnits": [
+    "D01.03",
+    "D01.05",
+    "D01.06",
+    "D08.03",
+    "D08.04"
+   ]
+  },
+  {
+   "id": "CH01_SC02_B2",
+   "type": "dialogue",
+   "title": "An tính toán",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "worried-money",
+     "src": "{{ASSET_BASE}}/a/347a0bb21e3df8211d89.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "7 USD nhân 25.000đ cộng 25.000đ phí ship là 200.000đ. Rẻ hơn mà mua xong thì mình vẫn còn đủ 300.000đ đóng tiền học vẽ. Nhưng sau đó mình sẽ không còn một khoản tiết kiệm đáng kể.",
+   "nextSceneId": "CH01_SC02_B3",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_B3",
+   "type": "dialogue",
+   "title": "Mẹ khuyên",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "ME",
+     "expression": "neutral",
+     "src": "{{ASSET_BASE}}/a/2013ab284e4d4471e0b6.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Mẹ (Tin nhắn)",
+   "speakerId": "ME",
+   "text": "Con hãy so với mục tiêu dài hạn, thời gian chờ và điều kiện mua thực tế nữa nhé.",
+   "nextSceneId": "CH01_SC02_CHOICE",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_CHOICE",
+   "type": "choice",
+   "title": "Chọn hành động",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Mình phải lựa chọn...",
+   "options": [
+    {
+     "id": "CH01_SC02_CHOICE_A",
+     "text": "A. Mua ngay ở cửa hàng với giá 250.000đ",
+     "label": "A. Mua ngay ở cửa hàng với giá 250.000đ",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [
+      {
+       "eventId": "EV_CH01_BUY_HEADPHONE_NOW",
+       "amount": -250000,
+       "description": "Thanh toán mua tai nghe tại cửa hàng"
+      }
+     ],
+     "deltaStats": {
+      "SAVING": -25,
+      "HAPPINESS": 5,
+      "RISK": 0,
+      "GOAL": -6
+     },
+     "evidenceScores": {
+      "I": 0,
+      "C": 0,
+      "P": 0
+     },
+     "flag": "goal_gap",
+     "nextSceneId": "CH01_SC02_CHOICE_A_1"
+    },
+    {
+     "id": "CH01_SC02_CHOICE_B",
+     "text": "B. Chờ một tuần và giữ tiền cho lớp vẽ",
+     "label": "B. Chờ một tuần và giữ tiền cho lớp vẽ",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "SAVING": 5,
+      "HAPPINESS": -2,
+      "RISK": 0,
+      "GOAL": 6
+     },
+     "evidenceScores": {
+      "I": 1,
+      "C": 1,
+      "P": 2
+     },
+     "flag": "goal_protected",
+     "nextSceneId": "CH01_SC02_CHOICE_B_1"
+    },
+    {
+     "id": "CH01_SC02_CHOICE_C",
+     "text": "C. So tổng giá rồi hoãn mua vì 200.000đ không còn tiền tiết kiệm",
+     "label": "C. So tổng giá rồi hoãn mua vì 200.000đ không còn tiền tiết kiệm",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "SAVING": 5,
+      "HAPPINESS": -2,
+      "RISK": 0,
+      "GOAL": 6
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "goal_protected",
+     "nextSceneId": "CH01_SC02_CHOICE_C_1"
+    }
+   ],
+   "knowledgeUnits": [
+    "D01.03",
+    "D01.05",
+    "D01.06",
+    "D08.03",
+    "D08.04"
+   ]
+  },
+  {
+   "id": "CH01_SC02_CHOICE_A_1",
+   "type": "dialogue",
+   "title": "Minh vui",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/a440c21f4baec7ffbc88.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Tuyệt quá! Tối nay tha hồ chiến game nhé!",
+   "nextSceneId": "CH01_SC02_CHOICE_A_2",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_CHOICE_A_2",
+   "type": "dialogue",
+   "title": "An lo",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "worried-money",
+     "src": "{{ASSET_BASE}}/a/347a0bb21e3df8211d89.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Tiền trong ví chỉ còn 250.000đ... Thiếu mất 50.000đ mới đủ đóng tiền học vẽ rồi.",
+   "nextSceneId": "CH01_SC03_A",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_CHOICE_B_1",
+   "type": "dialogue",
+   "title": "An quyết định chờ",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Tai nghe cũ của mình vẫn xài tạm được. Mình giữ tiền đóng tiền học vẽ trước.",
+   "nextSceneId": "CH01_SC02_CHOICE_B_2",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_CHOICE_B_2",
+   "type": "dialogue",
+   "title": "Minh đồng ý chờ",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "neutral",
+     "src": "{{ASSET_BASE}}/a/cc43c4b0856249e64f39.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Cũng được, vậy tối nay cứ dùng tai nghe cũ leo rank tạm vậy!",
+   "nextSceneId": "CH01_SC03_A",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC02_CHOICE_C_1",
+   "type": "dialogue",
+   "title": "An tính chi tiết",
+   "background": "{{ASSET_BASE}}/a/c28a63bcd595c42794eb.webp",
+   "backgroundId": "BG02",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Giá ngoại tệ đổi ra + phí ship là 200.000đ. Trừ 300.000đ tiền học ra mình vừa đủ 200.000đ. Nhưng mà mình muốn để dành nên mình chưa mua đợt này.",
+   "nextSceneId": "CH01_SC03_A",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC03_A",
+   "type": "scene",
+   "title": "Ghi chép và chốt ưu tiên",
+   "background": "{{ASSET_BASE}}/a/1c60ee195e8de32e94e6.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/1c60ee195e8de32e94e6.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH01_SC03_B1",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC03_B1",
+   "type": "dialogue",
+   "title": "An ghi chép",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG01B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Mua hay chờ thì mình đều phải chấp nhận bỏ qua một lựa chọn khác. Cần ghi rõ điều mình đánh đổi là gì.",
+   "nextSceneId": "CH01_SC03_B2",
+   "knowledgeUnits": [
+    "D01.02",
+    "D01.03",
+    "D01.04",
+    "D01.05",
+    "D08.03",
+    "D08.04"
+   ]
+  },
+  {
+   "id": "CH01_SC03_B2",
+   "type": "dialogue",
+   "title": "Mẹ khuyên suy ngẫm",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG01B",
+   "characters": [
+    {
+     "id": "ME",
+     "expression": "neutral",
+     "src": "{{ASSET_BASE}}/a/2013ab284e4d4471e0b6.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Mẹ",
+   "speakerId": "ME",
+   "text": "Con có thể thay đổi kế hoạch nếu muốn, nhưng phải tính rõ số tiền thiếu và thời hạn mới có thi hành được không nhé.",
+   "nextSceneId": "CH01_SC03_MINIGAME",
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH01_SC03_MINIGAME",
+   "type": "minigame",
+   "title": "Kiểm tra nhu cầu và suy ngẫm",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG01B",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "game": {
+    "id": "NEEDS_OR_WANTS_CH01",
+    "title": "Needs or Wants Mini-Game",
+    "mechanic": "DRAG_AND_DROP",
+    "timeLimitSeconds": 0,
+    "passScore": 5,
+    "items": [
+     {
+      "id": "ITEM_MEAL",
+      "label": "Bữa ăn hàng ngày",
+      "image": "{{ASSET_BASE}}/a/67d6a48e4ac8092dc5a0.webp",
+      "category": "NEEDS",
+      "explanation": "Chi phí ăn uống đáp ứng nhu cầu sinh hoạt thiết yếu."
+     },
+     {
+      "id": "ITEM_BUS_TICKET",
+      "label": "Vé xe bus đi học",
+      "image": "{{ASSET_BASE}}/a/975f86e0e84bbcef8ea1.webp",
+      "category": "NEEDS",
+      "explanation": "Phương tiện di chuyển bắt buộc để đi học."
+     },
+     {
+      "id": "ITEM_ART_CLASS",
+      "label": "Phí lớp vẽ đã đăng ký",
+      "image": "{{ASSET_BASE}}/a/2ef009f8eb77e81dcf31.webp",
+      "category": "NEEDS",
+      "explanation": "Nghĩa vụ tài chính cam kết vào ngày 28."
+     },
+     {
+      "id": "ITEM_REPLACEMENT_HEADPHONES",
+      "label": "Tai nghe thay thế khi bị hỏng",
+      "image": "{{ASSET_BASE}}/a/a56a413bea53393a439d.webp",
+      "category": "NEEDS",
+      "explanation": "Nhu cầu cần thiết khi thiết bị cũ đã hỏng không thể dùng học tập."
+     },
+     {
+      "id": "ITEM_UPGRADE_HEADPHONES",
+      "label": "Tai nghe xịn nâng cấp",
+      "image": "{{ASSET_BASE}}/a/76c5b8dab2faa51a132c.webp",
+      "category": "WANTS",
+      "explanation": "Mong muốn nâng cấp khi tai nghe cũ vẫn đang hoạt động tốt."
+     },
+     {
+      "id": "ITEM_DESK_DECORATION",
+      "label": "Tượng mèo trang trí góc học tập",
+      "image": "{{ASSET_BASE}}/a/13675dd55aed3a1bcbba.webp",
+      "category": "WANTS",
+      "explanation": "Món đồ trang trí giải trí, không bắt buộc cho học tập."
+     }
+    ]
+   },
+   "nextSceneId": "CH01_ENDING",
+   "onPassSceneId": "CH01_ENDING",
+   "onFailSceneId": "CH01_SC03_MINIGAME",
+   "knowledgeUnits": [
+    "D01.02",
+    "D01.03",
+    "D01.04",
+    "D01.05",
+    "D08.03",
+    "D08.04"
+   ]
+  },
+  {
+   "id": "CH01_ENDING",
+   "type": "ending",
+   "title": "Kết thúc chương 1",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG01B",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": null,
+   "knowledgeUnits": []
+  }
+ ],
+ "endingRules": {
+  "priorityOrder": [
+   "A_GOAL_ACHIEVED",
+   "B_BALANCED",
+   "C_RECOVERY"
+  ],
+  "endings": [
+   {
+    "id": "A_GOAL_ACHIEVED",
+    "title": "Ending A: Goal Achieved",
+    "condition": "money >= 500000 && miniGameScore >= 5",
+    "storyText": "An vui vẻ đánh dấu lên lịch ngày 28: 'Mình còn nhiều tiền tiết kiệm sau khi đóng tiền lớp vẽ. Tuyệt vời! Đây là lựa chọn thông minh!'",
+    "characterSprite": "{{ASSET_BASE}}/a/03bb9fd19d9b95f3ff18.webp",
+    "position": "LEFT",
+    "backgroundId": "BG01B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   },
+   {
+    "id": "B_BALANCED",
+    "title": "Ending B: Balanced",
+    "condition": "(money >= 300000 && money <= 500000 && miniGameScore >= 5) || (money > 500000 && miniGameScore <= 4)",
+    "storyText": "An ghi lại kế hoạch tài chính: 'Mình có đủ tiền lớp vẽ nhưng cần cải thiện kỹ năng phân loại chi tiêu. Hãy tiếp tục cố gắng!'",
+    "characterSprite": "{{ASSET_BASE}}/a/b37de3b8b35345efaffe.webp",
+    "position": "LEFT",
+    "backgroundId": "BG01B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   },
+   {
+    "id": "C_RECOVERY",
+    "title": "Ending C: Recovery",
+    "condition": "DEFAULT_FALLBACK",
+    "storyText": "An nhìn số tiền còn lại trong ví lo lắng: 'Mình chưa đủ tiền cho lớp học vẽ hoặc cần cải thiện cách quản lý chi tiêu. Lần sau sẽ tốt hơn!'",
+    "characterSprite": "{{ASSET_BASE}}/a/347a0bb21e3df8211d89.webp",
+    "position": "LEFT",
+    "backgroundId": "BG01B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   }
+  ]
+ }
+}
