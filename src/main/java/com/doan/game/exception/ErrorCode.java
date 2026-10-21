@@ -90,6 +90,9 @@ public enum ErrorCode {
 
     // 6xxx — nội dung game (Studio): bản phát hành đóng băng theo phiên bản, không ghi đè.
     RELEASE_VERSION_TAKEN(6001, "Phiên bản này đã phát hành rồi — tăng số phiên bản", HttpStatus.CONFLICT),
+    // 21/10 PR B: duyệt hai người (NIST AC-5) — người sửa nháp không tự duyệt, kể cả ADMIN.
+    SELF_REVIEW_FORBIDDEN(6002, "Không được duyệt bản nháp do chính mình sửa", HttpStatus.FORBIDDEN),
+    DRAFT_STATE_CONFLICT(6003, "Bản nháp đang ở trạng thái không cho thao tác này", HttpStatus.CONFLICT),
 
     // 7xxx — chơi game, lưu tiến độ (Hưng chốt 12/10).
     RELEASE_CHAPTER_NOT_FOUND(7001, "Bản phát hành không có chương này", HttpStatus.NOT_FOUND),
