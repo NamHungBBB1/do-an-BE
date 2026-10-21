@@ -166,8 +166,12 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
   đọc): `ddl-auto=update` CÓ thêm UNIQUE (group_id, kind, chapter), CHECK `quiz_kind_check` đủ hai giá trị, UNIQUE
   `external_id`, đủ 6 cột mới — không phải ALTER tay.
 - **Studio**: ba vai Game Editor / Reviewer / Manager đã vào `Role` + `/api/admin/roles` (15/10, PR A);
-  vòng đời nháp theo vai (PR B), phát hành theo duyệt (PR C), ContentReview / VoiceClip và `buildVersion`
-  thành khoá ngoại tới `GameRelease` chưa làm — kế hoạch `build/studio-giai-doan-2-huong-dan-2026-10-12.md`.
+  vòng đời nháp theo vai (PR B, 21/10, `ContentService`): Editor / ADMIN lưu và gửi duyệt kèm `changeClass`, Reviewer /
+  ADMIN duyệt hoặc trả về (người lưu nháp cuối không tự duyệt, 6002), nháp SUBMITTED khoá lưu (6003), sửa nháp đã duyệt
+  về DRAFT; publish / setCurrent chỉ Manager / ADMIN; vai tra `AccountRole`. Chưa làm: phát hành CHỈ gom nháp đã duyệt
+  (PR C), ContentReview / VoiceClip và `buildVersion` thành khoá ngoại tới `GameRelease` — kế hoạch
+  `build/studio-giai-doan-2-huong-dan-2026-10-12.md`. `ChapterDraft.changeClass` là enum mới trên cột mới: Hibernate
+  tạo CHECK đủ 3 giá trị khi thêm cột; CHECK `chapter_draft_status_check` trên production đã đủ 4 giá trị (kiểm 21/10).
 - **Thêm giá trị vào một enum đã có cột trên production** (như `Role` 15/10): `ddl-auto=update` KHÔNG sửa CHECK
   constraint Postgres đã tạo (`account_role_role_check` vẫn 5 giá trị cũ) → INSERT giá trị mới hỏng 500 dù test H2
   xanh. Phải chạy SQL tay một lần, mẫu `ops/finteen-deploy/alter-role-check-20261015.sql` (đã chạy trên production

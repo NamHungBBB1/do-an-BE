@@ -1,7 +1,10 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.CreateReleaseRequest;
+import com.doan.game.DTO.request.ReviewDraftRequest;
+import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
+import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Chapter;
@@ -9,9 +12,11 @@ import com.doan.game.entity.ChapterDraft;
 import com.doan.game.entity.GameRelease;
 import com.doan.game.entity.ReleaseChapter;
 import com.doan.game.enums.DraftStatus;
+import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.ChapterDraftRepository;
 import com.doan.game.repository.ChapterRepository;
 import com.doan.game.repository.GameReleaseRepository;
@@ -32,6 +37,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
@@ -66,19 +72,22 @@ public class ContentServiceImpl implements ContentService {
     private final GameReleaseRepository releaseRepo;
     private final ReleaseChapterRepository releaseChapterRepo;
     private final AccountRepository accountRepo;
+    private final AccountRoleRepository accountRoleRepo;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final String assetBase;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
-                              AccountRepository accountRepo, ObjectMapper objectMapper, Clock clock,
+                              AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
+                              ObjectMapper objectMapper, Clock clock,
                               @Value("${app.assets.base-url}") String assetBase) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
         this.releaseRepo = releaseRepo;
         this.releaseChapterRepo = releaseChapterRepo;
         this.accountRepo = accountRepo;
+        this.accountRoleRepo = accountRoleRepo;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
@@ -111,15 +120,16 @@ public class ContentServiceImpl implements ContentService {
         return chapterOf(requireCurrent(), code);
     }
 
-    // ------------------------------------------------------------------ ghi (admin, giai đoạn 1)
+    // ------------------------------------------------------------------ ghi (Studio, theo vai — PR B 21/10)
     @Override
     @Transactional
-    public ChapterSummaryResponse saveDraft(UUID editorId, String code, JsonNode content) {
+    public ChapterSummaryResponse saveDraft(UUID callerId, String code, JsonNode content) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_EDITOR);
         int number = parseChapterNumber(code);
         String json = validateAndNormalize(content);
         Instant now = Instant.now(clock);
-        Account editor = accountRepo.findById(editorId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + editorId));
+        Account editor = accountRepo.findById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
 
         Chapter chapter = chapterRepo.findByCode(code).orElseGet(() -> {
             Chapter c = new Chapter();
@@ -131,8 +141,9 @@ public class ContentServiceImpl implements ContentService {
         chapter.setTitle(content.path("title").asText(chapter.getTitle() == null ? code : chapter.getTitle()));
         Chapter saved = chapterRepo.save(chapter);
 
-        // Giai đoạn 1: một bản nháp sống mỗi chương, lưu đè. Nháp đã vào bản phát hành vẫn giữ nguyên ở
-        // ReleaseChapter (đóng băng), nên đè nháp không đụng tới thứ trẻ đang chơi.
+        // Một bản nháp sống mỗi chương, lưu đè. Nháp đã vào bản phát hành vẫn giữ nguyên ở ReleaseChapter
+        // (đóng băng), nên đè nháp không đụng tới thứ trẻ đang chơi. Đang chờ duyệt thì khoá: Reviewer phải
+        // duyệt đúng thứ đã gửi. Sửa nháp REJECTED / APPROVED thì về DRAFT — phiếu duyệt cũ hết giá trị.
         ChapterDraft draft = draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(saved.getId()).orElseGet(() -> {
             ChapterDraft d = new ChapterDraft();
             d.setChapter(saved);
@@ -140,19 +151,23 @@ public class ContentServiceImpl implements ContentService {
             d.setRevision(0);
             return d;
         });
+        if (draft.getStatus() == DraftStatus.SUBMITTED) {
+            throw new AppException(ErrorCode.DRAFT_STATE_CONFLICT, code + " đang chờ duyệt — rút lại rồi mới sửa");
+        }
         draft.setContent(json);
         draft.setStatus(DraftStatus.DRAFT);
         draft.setEditor(editor);
         draft.setRevision(draft.getRevision() + 1);
         draft.setUpdatedAt(now);
         draftRepo.save(draft);
-        log.info("Lưu nháp chương {} (revision {}) bởi {}", code, draft.getRevision(), editorId);
+        log.info("Lưu nháp chương {} (revision {}) bởi {}", code, draft.getRevision(), callerId);
         return new ChapterSummaryResponse(saved.getCode(), saved.getChapterNumber(), saved.getTitle());
     }
 
     @Override
     @Transactional
     public ReleaseSummaryResponse publish(UUID adminId, CreateReleaseRequest req) {
+        requireAnyRole(adminId, Role.ADMIN, Role.GAME_MANAGER);
         String version = req == null || req.version() == null ? "" : req.version().trim();
         if (!SEMVER.matcher(version).matches()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "version: dạng MAJOR.MINOR.PATCH, vd 1.0.1");
@@ -196,6 +211,7 @@ public class ContentServiceImpl implements ContentService {
     @Override
     @Transactional
     public ReleaseSummaryResponse setCurrent(UUID adminId, String version) {
+        requireAnyRole(adminId, Role.ADMIN, Role.GAME_MANAGER);
         GameRelease release = releaseRepo.findByVersion(version)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
         moveCurrentPointer(release);
@@ -203,7 +219,116 @@ public class ContentServiceImpl implements ContentService {
         return toSummary(release);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<DraftSummaryResponse> listDrafts() {
+        // ponytail: một truy vấn mỗi chương (8 chương); gộp thành một query nếu số chương lớn lên.
+        List<DraftSummaryResponse> out = new ArrayList<>();
+        for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
+            draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(c.getId()).ifPresent(d -> out.add(toDraftSummary(d)));
+        }
+        return out;
+    }
+
+    @Override
+    @Transactional
+    public DraftSummaryResponse submitDraft(UUID callerId, String code, SubmitDraftRequest req) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_EDITOR);
+        ChapterDraft draft = requireDraft(code);
+        requireStatus(draft, DraftStatus.DRAFT, "chỉ gửi duyệt được nháp DRAFT (bị trả về thì sửa trước)");
+        if (req == null || req.changeClass() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "changeClass: PATCH, MINOR hoặc MAJOR");
+        }
+        draft.setChangeClass(req.changeClass());
+        if (req.note() != null && !req.note().isBlank()) {
+            draft.setChangeNote(req.note().trim());
+        }
+        draft.setStatus(DraftStatus.SUBMITTED);
+        draft.setSubmittedAt(Instant.now(clock));
+        log.info("Gửi duyệt {} (revision {}, {}) bởi {}", code, draft.getRevision(), req.changeClass(), callerId);
+        return toDraftSummary(draftRepo.save(draft));
+    }
+
+    @Override
+    @Transactional
+    public DraftSummaryResponse withdrawDraft(UUID callerId, String code) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_EDITOR);
+        ChapterDraft draft = requireDraft(code);
+        requireStatus(draft, DraftStatus.SUBMITTED, "chỉ rút được nháp đang chờ duyệt");
+        if (draft.getEditor() == null || !draft.getEditor().getId().equals(callerId)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "chỉ người sửa nháp mới rút lại được");
+        }
+        draft.setStatus(DraftStatus.DRAFT);
+        return toDraftSummary(draftRepo.save(draft));
+    }
+
+    @Override
+    @Transactional
+    public DraftSummaryResponse reviewDraft(UUID callerId, String code, ReviewDraftRequest req) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_REVIEWER);
+        ChapterDraft draft = requireDraft(code);
+        requireStatus(draft, DraftStatus.SUBMITTED, "chỉ duyệt được nháp đang chờ duyệt");
+        if (req == null || req.pass() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "pass: true (duyệt) hoặc false (trả về)");
+        }
+        String note = req.note() == null || req.note().isBlank() ? null : req.note().trim();
+        if (!req.pass() && note == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "note: trả về phải ghi lý do");
+        }
+        // Duyệt hai người: so với người lưu nháp cuối cùng, kể cả khi người duyệt là ADMIN.
+        if (draft.getEditor() != null && draft.getEditor().getId().equals(callerId)) {
+            throw new AppException(ErrorCode.SELF_REVIEW_FORBIDDEN, code);
+        }
+        Account reviewer = accountRepo.findById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
+        if (req.changeClass() != null) {
+            draft.setChangeClass(req.changeClass());
+        }
+        draft.setStatus(req.pass() ? DraftStatus.APPROVED : DraftStatus.REJECTED);
+        draft.setReviewer(reviewer);
+        draft.setReviewNote(note);
+        draft.setReviewedAt(Instant.now(clock));
+        draft.setReviewedRevision(draft.getRevision());
+        log.info("Duyệt {} (revision {}) → {} bởi {}", code, draft.getRevision(), draft.getStatus(), callerId);
+        return toDraftSummary(draftRepo.save(draft));
+    }
+
     // ------------------------------------------------------------------ lõi
+    /** Vai tra DB (AccountRole), không tin JWT — cùng cách QuestionBankServiceImpl. */
+    private void requireAnyRole(UUID callerId, Role... roles) {
+        for (Role r : roles) {
+            if (accountRoleRepo.existsByAccount_IdAndRole(callerId, r)) {
+                return;
+            }
+        }
+        throw new AppException(ErrorCode.FORBIDDEN, "cần một trong các vai " + Arrays.toString(roles));
+    }
+
+    private ChapterDraft requireDraft(String code) {
+        Chapter chapter = chapterRepo.findByCode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có chương " + code));
+        return draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(chapter.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chương " + code + " chưa có nháp"));
+    }
+
+    private static void requireStatus(ChapterDraft draft, DraftStatus expected, String message) {
+        if (draft.getStatus() != expected) {
+            throw new AppException(ErrorCode.DRAFT_STATE_CONFLICT, message + " (đang " + draft.getStatus() + ")");
+        }
+    }
+
+    private static DraftSummaryResponse toDraftSummary(ChapterDraft d) {
+        Chapter c = d.getChapter();
+        Account editor = d.getEditor();
+        Account reviewer = d.getReviewer();
+        return new DraftSummaryResponse(c.getCode(), c.getChapterNumber(), c.getTitle(), d.getStatus(),
+                d.getChangeClass(), d.getRevision(), d.getChangeNote(),
+                editor == null ? null : editor.getId(), editor == null ? null : editor.getDisplayName(),
+                d.getSubmittedAt(),
+                reviewer == null ? null : reviewer.getId(), reviewer == null ? null : reviewer.getDisplayName(),
+                d.getReviewNote(), d.getReviewedAt(), d.getReviewedRevision(), d.getUpdatedAt());
+    }
+
     private GameRelease requireCurrent() {
         return releaseRepo.findFirstByIsCurrentTrue()
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chưa phát hành bản nào"));

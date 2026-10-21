@@ -73,4 +73,14 @@ public class ChapterDraft {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "change_class")
+    private ChangeClass changeClass;
+
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    @Column(name = "reviewed_revision")
+    private Integer reviewedRevision;
 }

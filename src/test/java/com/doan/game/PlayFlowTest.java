@@ -2,10 +2,13 @@ package com.doan.game;
 
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Account;
+import com.doan.game.entity.AccountRole;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.Role;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.ChoiceEventRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.MiniGameResultRepository;
@@ -72,6 +75,7 @@ class PlayFlowTest {
 
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
+    @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired EntitlementRepository entitlementRepo;
     @Autowired ChoiceEventRepository choiceEventRepo;
     @Autowired MiniGameResultRepository miniGameResultRepo;
@@ -462,6 +466,11 @@ class PlayFlowTest {
         a.setDisplayName("Admin Play");
         a.setCreatedAt(Instant.now());
         a = accountRepo.save(a);
+        AccountRole role = new AccountRole();  // PR B: service tra vai trong DB, không tin JWT
+        role.setAccount(a);
+        role.setRole(Role.ADMIN);
+        role.setGrantedAt(Instant.now());
+        accountRoleRepo.save(role);
         String id = a.getId().toString();
         return jwt().jwt(j -> j.subject(id)).authorities(new SimpleGrantedAuthority("SCOPE_ADMIN"));
     }

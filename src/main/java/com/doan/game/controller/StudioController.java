@@ -1,8 +1,11 @@
 package com.doan.game.controller;
 
 import com.doan.game.DTO.request.CreateReleaseRequest;
+import com.doan.game.DTO.request.ReviewDraftRequest;
+import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
+import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
 import com.doan.game.service.ContentService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,9 +24,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Studio, giai đoạn 1 (09/10): ADMIN lưu nháp và phát hành (SecurityConfig: /api/studio/** → SCOPE_ADMIN).
- * Vai Editor / Reviewer / Manager và bước duyệt thêm ở giai đoạn sau, trên cùng bảng ChapterDraft.
- * Tầng này MỎNG: nhận, gọi service, trả về.
+ * Studio (PR B, 21/10): cổng mở cho ADMIN và ba vai Editor / Reviewer / Manager; ai làm được việc gì thì service
+ * tra AccountRole trong DB. Tầng này MỎNG: nhận, gọi service, trả về.
  */
 @RestController
 @RequestMapping("/api/studio")
@@ -38,6 +40,29 @@ public class StudioController {
                                                          @PathVariable String code,
                                                          @RequestBody JsonNode content) {
         return ApiResponse.ok(contentService.saveDraft(currentAccountId(jwt), code.trim().toUpperCase(), content));
+    }
+
+    /** Trạng thái nháp mới nhất của mọi chương (không kèm nội dung). */
+    @GetMapping("/chapters")
+    public ApiResponse<List<DraftSummaryResponse>> listDrafts() {
+        return ApiResponse.ok(contentService.listDrafts());
+    }
+
+    @PostMapping("/chapters/{code}/submit")
+    public ApiResponse<DraftSummaryResponse> submit(@AuthenticationPrincipal Jwt jwt, @PathVariable String code,
+                                                    @RequestBody SubmitDraftRequest req) {
+        return ApiResponse.ok(contentService.submitDraft(currentAccountId(jwt), code.trim().toUpperCase(), req));
+    }
+
+    @PostMapping("/chapters/{code}/withdraw")
+    public ApiResponse<DraftSummaryResponse> withdraw(@AuthenticationPrincipal Jwt jwt, @PathVariable String code) {
+        return ApiResponse.ok(contentService.withdrawDraft(currentAccountId(jwt), code.trim().toUpperCase()));
+    }
+
+    @PostMapping("/chapters/{code}/review")
+    public ApiResponse<DraftSummaryResponse> review(@AuthenticationPrincipal Jwt jwt, @PathVariable String code,
+                                                    @RequestBody ReviewDraftRequest req) {
+        return ApiResponse.ok(contentService.reviewDraft(currentAccountId(jwt), code.trim().toUpperCase(), req));
     }
 
     @GetMapping("/releases")
