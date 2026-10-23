@@ -6,6 +6,7 @@ import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
 import com.doan.game.DTO.response.DraftContentResponse;
+import com.doan.game.DTO.response.DraftSavedResponse;
 import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
@@ -68,9 +69,6 @@ public class ContentServiceImpl implements ContentService {
     private static final Logger log = LoggerFactory.getLogger(ContentServiceImpl.class);
     static final String ASSET_PLACEHOLDER = "{{ASSET_BASE}}";
     private static final Pattern CODE = Pattern.compile("^CH(\\d{1,2})$");
-    /** Các trường trỏ sang cảnh khác, theo đúng data FE (nextSceneId, onPass/onFail, if/else, option.nextSceneId). */
-    private static final String[] SCENE_REFS = {
-            "nextSceneId", "onPassSceneId", "onFailSceneId", "ifTrueSceneId", "ifFalseSceneId"};
     /** JSON một chương FE hiện ~20–35 KB; chặn 2 MB để không ai nhét ảnh base64 vào DB. */
     private static final int MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 
@@ -81,13 +79,14 @@ public class ContentServiceImpl implements ContentService {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final ObjectMapper objectMapper;
+    private final ContentSchema contentSchema;
     private final Clock clock;
     private final String assetBase;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                               AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
-                              ObjectMapper objectMapper, Clock clock,
+                              ObjectMapper objectMapper, ContentSchema contentSchema, Clock clock,
                               @Value("${app.assets.base-url}") String assetBase) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
@@ -96,6 +95,7 @@ public class ContentServiceImpl implements ContentService {
         this.accountRepo = accountRepo;
         this.accountRoleRepo = accountRoleRepo;
         this.objectMapper = objectMapper;
+        this.contentSchema = contentSchema;
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
     }
@@ -133,10 +133,11 @@ public class ContentServiceImpl implements ContentService {
     // ------------------------------------------------------------------ ghi (Studio, theo vai — PR B 21/10)
     @Override
     @Transactional
-    public ChapterSummaryResponse saveDraft(UUID callerId, String code, JsonNode content) {
+    public DraftSavedResponse saveDraft(UUID callerId, String code, JsonNode content) {
         requireAnyRole(callerId, Role.ADMIN, Role.GAME_EDITOR);
         int number = parseChapterNumber(code);
-        String json = validateAndNormalize(content);
+        Normalized normalized = validateAndNormalize(content);
+        String json = normalized.json();
         Instant now = Instant.now(clock);
         Account editor = accountRepo.findById(callerId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
@@ -172,7 +173,12 @@ public class ContentServiceImpl implements ContentService {
         draft.setUpdatedAt(now);
         draftRepo.save(draft);
         log.info("Lưu nháp chương {} (revision {}) bởi {}", code, draft.getRevision(), callerId);
-        return new ChapterSummaryResponse(saved.getCode(), saved.getChapterNumber(), saved.getTitle());
+        return new DraftSavedResponse(saved.getCode(), saved.getChapterNumber(), saved.getTitle(), normalized.warnings());
+    }
+
+    @Override
+    public JsonNode sceneSchema() {
+        return contentSchema.schema();
     }
 
     @Override
@@ -556,36 +562,12 @@ public class ContentServiceImpl implements ContentService {
      * onFail, ifTrue / ifFalse, options[].nextSceneId) trỏ tới cảnh có thật. Đây chính là ràng buộc "next trỏ
      * phong-ngủ không tồn tại" trong bài CMS 08/10. Phần còn lại giữ nguyên, không đoán.
      */
-    String validateAndNormalize(JsonNode root) {
-        if (root == null || !root.isObject()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "content: phải là JSON object của một chương");
-        }
-        JsonNode scenes = root.path("scenes");
-        if (!scenes.isArray() || scenes.isEmpty()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "scenes: phải là mảng không rỗng");
-        }
-        Set<String> ids = new HashSet<>();
-        for (JsonNode s : scenes) {
-            String id = s.path("id").asText(null);
-            if (id == null || id.isBlank()) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "scenes[]: mỗi cảnh phải có id");
-            }
-            if (!ids.add(id)) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "scenes: id trùng " + id);
-            }
-        }
-        for (JsonNode s : scenes) {
-            String id = s.path("id").asText();
-            for (String ref : SCENE_REFS) {
-                requireScene(ids, s.get(ref), id + "." + ref);
-            }
-            JsonNode options = s.path("options");
-            if (options.isArray()) {
-                for (JsonNode o : options) {
-                    requireScene(ids, o.get("nextSceneId"), id + ".options[].nextSceneId");
-                }
-            }
-        }
+    record Normalized(String json, List<String> warnings) {
+    }
+
+    Normalized validateAndNormalize(JsonNode root) {
+        // Bộ khuôn (24/10, K1): loại cảnh, trường bắt buộc, link cảnh, lựa chọn, chỉ số, điều kiện, mini-game kind.
+        List<String> warnings = contentSchema.validate(root);
         String json;
         try {
             json = objectMapper.writeValueAsString(root);
@@ -598,16 +580,7 @@ public class ContentServiceImpl implements ContentService {
         if (json.getBytes(StandardCharsets.UTF_8).length > MAX_CONTENT_BYTES) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: quá 2 MB — ảnh / giọng để ở kho file");
         }
-        return json;
-    }
-
-    private static void requireScene(Set<String> ids, JsonNode ref, String where) {
-        if (ref == null || ref.isNull()) {
-            return;
-        }
-        if (!ref.isTextual() || !ids.contains(ref.asText())) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, where + ": cảnh '" + ref.asText() + "' không tồn tại");
-        }
+        return new Normalized(json, warnings);
     }
 
     static String sha256(String s) {

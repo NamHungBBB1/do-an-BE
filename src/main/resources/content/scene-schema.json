@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "note": "Bộ khuôn nội dung game — BE quyết khung (Hưng 24/10). Spec build/spec-bo-khuon-noi-dung-2026-10-24.md. Studio dựng form từ đây; BE kiểm nháp theo đây; FE game chọn khung theo type / game.kind, không theo id.",
+  "stats": [
+    { "key": "SAVING", "label": "Tiết kiệm", "initial": 50 },
+    { "key": "HAPPINESS", "label": "Hạnh phúc", "initial": 50 },
+    { "key": "RISK", "label": "Rủi ro", "initial": 30 },
+    { "key": "GOAL", "label": "Mục tiêu", "initial": 50 },
+    { "key": "WEALTH", "label": "Tài sản", "initial": 0 }
+  ],
+  "variables": ["money", "miniGameScore", "SAVING", "HAPPINESS", "RISK", "GOAL", "WEALTH", "flag:*"],
+  "conditionOps": ["==", "!=", ">", ">=", "<", "<="],
+  "conditionExample": { "all": [ { "var": "money", "op": ">=", "value": 500000 }, { "any": [ { "var": "miniGameScore", "op": ">=", "value": 5 }, { "var": "flag:goal_gap", "op": "==", "value": true } ] } ] },
+  "positions": ["left", "center", "right"],
+  "commonSceneFields": {
+    "id": { "type": "string", "required": true, "label": "Mã cảnh" },
+    "title": { "type": "string", "label": "Tiêu đề" },
+    "background": { "type": "image", "label": "Ảnh nền" },
+    "characters": { "type": "characters", "label": "Nhân vật trên cảnh" },
+    "speaker": { "type": "string", "label": "Tên người nói (hiển thị)" },
+    "speakerId": { "type": "string", "label": "Mã nhân vật nói (gắn giọng)" },
+    "knowledgeUnits": { "type": "array", "label": "Mã khái niệm" },
+    "voice": { "type": "string", "label": "Giọng (trống = theo nhân vật, off = tắt)" },
+    "spokenText": { "type": "string", "label": "Chữ để đọc (giọng)" },
+    "setFlags": { "type": "flags", "label": "Bật / tắt cờ khi vào cảnh {tên: true|false}" }
+  },
+  "sceneTypes": {
+    "dialogue": {
+      "label": "Thoại",
+      "fields": {
+        "text": { "type": "string", "required": true, "label": "Lời thoại" },
+        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+      }
+    },
+    "inspect": {
+      "label": "Bấm để xem",
+      "aliases": ["scene"],
+      "fields": {
+        "text": { "type": "string", "label": "Chữ" },
+        "sceneArt": { "type": "image", "label": "Ảnh minh hoạ" },
+        "inspect": { "type": "inspect", "label": "Vật bấm để xem" },
+        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+      }
+    },
+    "choice": {
+      "label": "Lựa chọn",
+      "fields": {
+        "text": { "type": "string", "label": "Câu hỏi / lời dẫn" },
+        "prompt": { "type": "string", "label": "Gợi ý" },
+        "choiceGroup": { "type": "string", "label": "Nhóm lựa chọn" },
+        "options": { "type": "options", "required": true, "minItems": 2, "label": "Các lựa chọn" }
+      }
+    },
+    "minigame": {
+      "label": "Mini-game",
+      "fields": {
+        "game": { "type": "game", "required": true, "label": "Mini-game" },
+        "onPassSceneId": { "type": "sceneRef", "label": "Đạt thì sang" },
+        "onFailSceneId": { "type": "sceneRef", "label": "Chưa đạt thì sang" },
+        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+      }
+    },
+    "conditional": {
+      "label": "Rẽ nhánh theo điều kiện",
+      "fields": {
+        "condition": { "type": "condition", "required": true, "label": "Điều kiện" },
+        "ifTrueSceneId": { "type": "sceneRef", "required": true, "label": "Đúng thì sang" },
+        "ifFalseSceneId": { "type": "sceneRef", "required": true, "label": "Sai thì sang" }
+      }
+    },
+    "reflection": {
+      "label": "Tự suy ngẫm",
+      "aliases": ["activity"],
+      "fields": {
+        "prompt": { "type": "string", "label": "Câu hỏi suy ngẫm" },
+        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+      }
+    },
+    "summary": {
+      "label": "Tổng kết",
+      "fields": { "text": { "type": "string", "label": "Chữ" }, "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" } }
+    },
+    "cutscene": {
+      "label": "Cảnh chuyển",
+      "fields": { "text": { "type": "string", "label": "Chữ" }, "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" } }
+    },
+    "ending": {
+      "label": "Kết chương",
+      "fields": { "text": { "type": "string", "label": "Chữ" } }
+    }
+  },
+  "optionFields": {
+    "id": { "type": "string", "required": true, "label": "Mã lựa chọn" },
+    "text": { "type": "string", "requiredOneOf": ["text", "label"], "label": "Chữ lựa chọn" },
+    "nextSceneId": { "type": "sceneRef", "label": "Chọn xong sang" },
+    "condition": { "type": "condition", "label": "Điều kiện mở" },
+    "deltaStats": { "type": "stats", "label": "Cộng / trừ chỉ số" },
+    "moneyEvents": { "type": "array", "label": "Thay đổi tiền" },
+    "setFlags": { "type": "flags", "label": "Bật / tắt cờ {tên: true|false}" },
+    "evidenceScores": { "type": "object", "label": "Điểm bằng chứng I / C / P" }
+  },
+  "minigameKinds": {
+    "NEED_WANT": { "phase": "A", "label": "Phân loại Cần / Muốn", "frame": "NeedWantMiniGame", "legacyIds": ["NEEDS_OR_WANTS_CH01"], "graded": true },
+    "BUDGET_BUILDER": { "phase": "A", "label": "Chia tiền vào phong bì", "frame": "BudgetBuilderMiniGame", "legacyIds": ["BUDGET_BUILDER_CH02"], "graded": true },
+    "SAVINGS_RACE": { "phase": "A", "label": "Đua tiết kiệm (mô phỏng)", "frame": "SavingsRaceMiniGame", "legacyIds": ["SAVINGS_RACE_CH02"], "graded": false },
+    "CAREER_MATCH": { "phase": "A", "label": "Ghép việc làm thêm + tính giờ", "frame": "CareerMatchMiniGame", "legacyIds": ["CAREER_MATCH_CH03"], "graded": true },
+    "SMART_SHOPPING": { "phase": "A", "label": "Mua sắm thông minh", "frame": "SmartShoppingMiniGame", "legacyIds": ["SMART_SHOPPING_CH04"], "graded": false },
+    "COMPOUND_TIMELINE": { "phase": "A", "label": "Dòng thời gian lãi kép", "frame": "CompoundTimelineMiniGame", "legacyIds": ["COMPOUND_TIMELINE_CH05"], "graded": false },
+    "LOAN_DETECTIVE": { "phase": "A", "label": "Thám tử khoản vay", "frame": "LoanDetectiveMiniGame", "legacyIds": ["LOAN_OFFERS_CH06", "LOAN_REPAYMENT_CH06"], "graded": false },
+    "SCAM_OR_SAFE": { "phase": "A", "label": "Bảo hiểm và lừa đảo", "frame": "ScamOrSafeMiniGame", "legacyIds": ["INSURANCE_DESK_CH07", "SCAM_OR_SAFE_CH07"], "graded": false },
+    "FUTURE_PLAN": { "phase": "A", "label": "Kế hoạch tương lai", "frame": "FuturePlanMiniGame", "legacyIds": ["PORTFOLIO_CH08", "CLAIM_REVIEW_CH08", "LIFE_PLAN_CH08"], "graded": false }
+  },
+  "stepKinds": {
+    "SORT": { "phase": "B", "label": "Phân loại thẻ vào nhóm" },
+    "ALLOCATE": { "phase": "B", "label": "Chia vào ô" },
+    "MULTIPLE_CHOICE": { "phase": "B", "label": "Chọn một đáp án" },
+    "MULTI_SELECT": { "phase": "B", "label": "Chọn mọi đáp án đúng" },
+    "NUMERIC": { "phase": "B", "label": "Nhập số" },
+    "THRESHOLD_CLASSIFY": { "phase": "B", "label": "Xếp theo ngưỡng" },
+    "SIMULATION": { "phase": "B", "label": "Mô phỏng (không vào điểm)" },
+    "INFO": { "phase": "B", "label": "Xem thông tin" }
+  }
+}
