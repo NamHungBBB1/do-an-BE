@@ -1,5 +1,10 @@
 package com.doan.game;
 
+import java.util.Map;
+import com.doan.game.repository.ChapterRepository;
+import com.doan.game.repository.ChapterDraftRepository;
+import com.doan.game.repository.GameReleaseRepository;
+import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
@@ -80,12 +85,17 @@ class QuizFlowTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /** Bản của test này — ContentFlow 1.0.0/1.0.1, Play 1.0.2, Report 1.0.3 nên 1.0.4 luôn trống. */
-    private static final String VERSION = "1.0.4";
+    /** Số hiệu BE tính khi phát hành (PR C 23/10) — một lần mỗi class, xem ContentTestSupport. */
+    private static String version;
 
     /** Hạn nộp mặc định của đề test — 1 ngày sau đồng hồ đóng băng (tương lai, chưa overdue). */
     private static final String DUE_FUTURE = "2026-10-03T03:00:00Z";
 
     @Autowired MockMvc mvc;
+    @Autowired ReleaseChapterRepository releaseChapterRepo;
+    @Autowired GameReleaseRepository releaseRepo;
+    @Autowired ChapterDraftRepository draftRepo;
+    @Autowired ChapterRepository chapterRepo;
     @Autowired AccountRepository accountRepo;
     @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired EntitlementRepository entitlementRepo;
@@ -556,30 +566,11 @@ class QuizFlowTest {
     // ------------------------------------------------------------------ dựng dữ liệu
     /** Bản "1.0.4" của test này, idempotent: 2 chương tối giản (CH01, CH02) — chỉ để lô chơi "xong chương" chạy được. */
     private String releaseVersion() throws Exception {
-        var cur = mvc.perform(get("/api/content/current")).andReturn().getResponse();
-        if (cur.getStatus() == 200
-                && cur.getContentAsString(StandardCharsets.UTF_8).contains("\"version\":\"" + VERSION + "\"")) {
-            return VERSION;
+        if (version == null) {
+            version = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(
+                    releaseChapterRepo, releaseRepo, draftRepo, chapterRepo), Map.of("CH01", minimalChapter(1), "CH02", minimalChapter(2)), "quiz flow test");
         }
-        var asAdmin = admin();
-        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content(minimalChapter(1)))
-                .andExpect(status().isOk());
-        mvc.perform(put("/api/studio/chapters/CH02/draft").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content(minimalChapter(2))
-                )
-                .andExpect(status().isOk());
-        var pub = mvc.perform(post("/api/studio/releases").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"version\":\"" + VERSION + "\",\"note\":\"quiz flow test\"}"))
-                .andReturn().getResponse();
-        if (pub.getStatus() == 409) {
-            mvc.perform(post("/api/studio/releases/" + VERSION + "/current").with(asAdmin))
-                    .andExpect(status().isOk());
-        } else {
-            assertThat(pub.getStatus()).as(pub.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(200);
-        }
-        return VERSION;
+        return version;
     }
 
     /** Chương N tối giản — không cảnh choice / minigame, lô rỗng vẫn ghi chaptersDone được. */
@@ -697,7 +688,7 @@ class QuizFlowTest {
         mvc.perform(post("/api/play/chapter").header("Authorization", "Bearer " + child)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"chapter\":" + chapter + ",\"attemptIndex\":1,\"releaseVersion\":\""
-                                + VERSION + "\",\"choices\":[],\"miniGames\":[]}"))
+                                + version + "\",\"choices\":[],\"miniGames\":[]}"))
                 .andExpect(status().isOk());
     }
 

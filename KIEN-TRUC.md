@@ -168,10 +168,16 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 - **Studio**: ba vai Game Editor / Reviewer / Manager đã vào `Role` + `/api/admin/roles` (15/10, PR A);
   vòng đời nháp theo vai (PR B, 21/10, `ContentService`): Editor / ADMIN lưu và gửi duyệt kèm `changeClass`, Reviewer /
   ADMIN duyệt hoặc trả về (người lưu nháp cuối không tự duyệt, 6002), nháp SUBMITTED khoá lưu (6003), sửa nháp đã duyệt
-  về DRAFT; publish / setCurrent chỉ Manager / ADMIN; vai tra `AccountRole`. Chưa làm: phát hành CHỈ gom nháp đã duyệt
-  (PR C), ContentReview / VoiceClip và `buildVersion` thành khoá ngoại tới `GameRelease` — kế hoạch
-  `build/studio-giai-doan-2-huong-dan-2026-10-12.md`. `ChapterDraft.changeClass` là enum mới trên cột mới: Hibernate
-  tạo CHECK đủ 3 giá trị khi thêm cột; CHECK `chapter_draft_status_check` trên production đã đủ 4 giá trị (kiểm 21/10).
+  về DRAFT; publish / setCurrent chỉ Manager / ADMIN; vai tra `AccountRole`. PR C (23/10): publish chỉ gom nháp
+  APPROVED (6005), người sửa không tự phát hành (6007), BE tự tính số hiệu từ loại cao nhất trên bản LỚN NHẤT từng có
+  (so số, không so chuỗi; chương mới = MAJOR; 6004 khi client gửi lệch), nháp đã vào bản → RELEASED (sửa tiếp mở dòng
+  mới), thu hồi bản đang chạy (6006 khi không còn bản để lùi). Khoá: `GameReleaseRepository.lockCurrent()` đầu mọi thao
+  tác bản phát hành, `ChapterDraftRepository.findFirst…` (FOR UPDATE) ở mọi đường ghi nháp. **Bẫy:** enum `ChangeClass`
+  sinh theo abc (MAJOR, MINOR, PATCH) — đừng dùng `ordinal()` / `compareTo` để tìm loại cao nhất. Chưa làm: ContentReview /
+  VoiceClip, `buildVersion` thành khoá ngoại tới `GameRelease`, ghim bản cho lượt chơi (Known Gap: thu hồi / lùi bản
+  về bản ít chương hơn làm `totalChaptersCurrent` lệch) — kế hoạch `build/studio-giai-doan-2-huong-dan-2026-10-12.md`.
+  `ChapterDraft.changeClass` là enum mới trên cột mới: Hibernate tạo CHECK đủ 3 giá trị khi thêm cột. RELEASED là giá trị
+  mới trên cột CŨ → phải chạy `ops/finteen-deploy/alter-draft-status-check-20261023.sql` trên production TRƯỚC khi merge.
 - **Cửa đăng nhập nội bộ** (23/10, Hưng chốt "tài khoản nội bộ là riêng, không phải khách hàng"): `POST
   /api/auth/internal/login` → `TokenService.issueForInternal` (claim `ctx=INTERNAL`, `app.jwt.internal-ttl-hours` = 8).
   Công tắc `app.auth.internal-login-required` (env `INTERNAL_LOGIN_REQUIRED`, mặc định false): bật thì `/login` + Google

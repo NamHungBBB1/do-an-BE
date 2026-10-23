@@ -137,7 +137,8 @@ class StudioDraftReviewFlowTest {
         mvc.perform(post(BASE + "/withdraw").with(lan))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
 
-        // Phát hành / đổi bản hiện tại: chỉ Manager hoặc ADMIN. Manager qua được vai, vướng số hiệu sai → 1001.
+        // Phát hành / đổi bản hiện tại: chỉ Manager hoặc ADMIN. Manager qua được vai, vướng luật phát hành → 409
+        // (6005 không có nháp duyệt, hoặc 6004 số hiệu lệch — tuỳ class test chạy trước để lại gì trong H2).
         String badRelease = "{\"version\":\"x\"}";
         mvc.perform(post("/api/studio/releases").with(lan).contentType(MediaType.APPLICATION_JSON).content(badRelease))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
@@ -146,7 +147,7 @@ class StudioDraftReviewFlowTest {
         mvc.perform(post("/api/studio/releases/9.9.9/current").with(lan))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
         mvc.perform(post("/api/studio/releases").with(manager).contentType(MediaType.APPLICATION_JSON).content(badRelease))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
+                .andExpect(status().isConflict());
 
         // Người lớn thường không qua cổng Studio.
         mvc.perform(get("/api/studio/chapters").with(as(account("parent"), "SCOPE_PARENT")))
