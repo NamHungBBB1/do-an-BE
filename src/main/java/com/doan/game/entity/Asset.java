@@ -49,4 +49,13 @@ public class Asset {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "label", length = 120)
+    private String label;
+
+    @Column(name = "source_sha256", length = 64)
+    private String sourceSha256;
+
+    @Column(name = "chapter_code", length = 8)
+    private String chapterCode;
 }

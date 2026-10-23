@@ -131,7 +131,11 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST),
     GROUP_NOT_CLASS_OR_CLOSED(8008, "Chỉ lớp đang mở mới có quiz / hậu trắc", HttpStatus.CONFLICT),
     QUESTION_IN_USE(8009, "Câu đã nằm trong đề đã phát hành — không sửa nội dung được, hãy rút rồi tạo câu mới thay thế",
-            HttpStatus.CONFLICT);
+            HttpStatus.CONFLICT),
+
+    // 9xxx — AI (24/10): khoá nhà cung cấp, hàng đợi việc AI nhiều tầng.
+    AI_KEY_INVALID(9001, "Khoá AI không hợp lệ", HttpStatus.BAD_REQUEST),
+    AI_KEY_ALIAS_TAKEN(9002, "Tên gợi nhớ khoá đã có — chọn tên khác", HttpStatus.CONFLICT);
 
     private final int code;
     private final String message;
