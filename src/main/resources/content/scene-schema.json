@@ -48,7 +48,7 @@
         "text": { "type": "string", "label": "Câu hỏi / lời dẫn" },
         "prompt": { "type": "string", "label": "Gợi ý" },
         "choiceGroup": { "type": "string", "label": "Nhóm lựa chọn" },
-        "options": { "type": "options", "required": true, "minItems": 2, "label": "Các lựa chọn" }
+        "options": { "type": "options", "required": true, "minItems": 1, "warnBelowItems": 2, "label": "Các lựa chọn" }
       }
     },
     "minigame": {
