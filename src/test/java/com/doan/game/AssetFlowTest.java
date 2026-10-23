@@ -101,7 +101,12 @@ class AssetFlowTest {
         assertThat(asset.path("height").asInt()).isEqualTo(3);
         assertThat(asset.path("status").asText()).isEqualTo("ORPHAN");
         String ref = asset.path("ref").asText();
-        assertThat(Files.exists(DIR.resolve(ref.substring("{{ASSET_BASE}}/".length())))).isTrue();
+        Path stored = DIR.resolve(ref.substring("{{ASSET_BASE}}/".length()));
+        assertThat(Files.exists(stored)).isTrue();
+        // nginx (user khác) phải đọc được: quyền 644, không phải 600 của createTempFile (lỗi production 24/10). Chỉ kiểm trên POSIX (CI).
+        if (Files.getFileAttributeView(stored, java.nio.file.attribute.PosixFileAttributeView.class) != null) {
+            assertThat(java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(stored))).isEqualTo("rw-r--r--");
+        }
 
         // Tải lại đúng tệp đó → bản cũ, không thêm dòng, nhãn cũ giữ nguyên.
         JsonNode again = result(upload(editor, AssetImageTest.VP8, "ten-khac.webp").andExpect(status().isOk()));

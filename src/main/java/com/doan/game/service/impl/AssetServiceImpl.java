@@ -40,6 +40,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -435,6 +437,11 @@ public class AssetServiceImpl implements AssetService {
             Files.createDirectories(target.getParent());
             Path tmp = Files.createTempFile(target.getParent(), ".up-", ".tmp");
             Files.write(tmp, bytes);
+            // createTempFile tạo quyền 600 → nginx (www-data) không đọc được, trả 403 (bắt được trên production 24/10).
+            // Tệp kho là công khai: 644 như 123 tệp chuyển nhà 22/10. Windows (máy dev) không có quyền POSIX thì bỏ qua.
+            if (Files.getFileAttributeView(tmp, PosixFileAttributeView.class) != null) {
+                Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--"));
+            }
             Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "không ghi được tệp kho: " + e.getMessage());
