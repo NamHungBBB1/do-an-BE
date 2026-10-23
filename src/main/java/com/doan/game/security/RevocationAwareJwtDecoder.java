@@ -4,6 +4,7 @@ import com.doan.game.entity.Account;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.service.EntitlementService;
+import com.doan.game.service.TokenService;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -37,13 +38,17 @@ public class RevocationAwareJwtDecoder implements JwtDecoder {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
+    /** Bật: token không có claim ctx=INTERNAL (phát ở cửa khách hàng) mất vai nội bộ — xem AuthServiceImpl. */
+    private final boolean internalLoginRequired;
 
     public RevocationAwareJwtDecoder(JwtDecoder delegate, AccountRepository accountRepo,
-                              AccountRoleRepository accountRoleRepo, EntitlementService entitlementService) {
+                              AccountRoleRepository accountRoleRepo, EntitlementService entitlementService,
+                              boolean internalLoginRequired) {
         this.delegate = delegate;
         this.accountRepo = accountRepo;
         this.accountRoleRepo = accountRoleRepo;
         this.entitlementService = entitlementService;
+        this.internalLoginRequired = internalLoginRequired;
     }
 
     @Override
@@ -74,6 +79,10 @@ public class RevocationAwareJwtDecoder implements JwtDecoder {
         // token mới. Thay vào đó THAY scope bằng vai + gói đang có trong DB: quyền luôn đúng hiện
         // tại, token vẫn sống. Thu hồi thật (đổi mật khẩu, xoá tài khoản) vẫn đi qua tv ở trên.
         Set<String> current = currentScopes(id);
+        // Token cũ 168 giờ hay token cửa khách hàng không mang được vai nội bộ khi đã bắt buộc cửa riêng.
+        if (internalLoginRequired && !TokenService.CTX_INTERNAL.equals(jwt.getClaimAsString(TokenService.CTX_CLAIM))) {
+            current.removeAll(TokenService.INTERNAL_SCOPES);
+        }
         if (tokenScopes(jwt).equals(current)) {
             return jwt;
         }

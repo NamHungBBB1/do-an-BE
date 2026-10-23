@@ -33,14 +33,25 @@ public class TokenService {
     private final Clock clock;
     private final long adultTtlHours;
     private final long childTtlHours;
+    private final long internalTtlHours;
+
+    /**
+     * Vai nội bộ (Studio + admin). Token mang vai này chỉ nên phát qua cửa nội bộ (claim ctx=INTERNAL, sống ngắn) —
+     * RevocationAwareJwtDecoder bỏ các vai này khỏi token không có claim khi bật app.auth.internal-login-required.
+     */
+    public static final Set<String> INTERNAL_SCOPES = Set.of("ADMIN", "GAME_EDITOR", "GAME_REVIEWER", "GAME_MANAGER");
+    public static final String CTX_CLAIM = "ctx";
+    public static final String CTX_INTERNAL = "INTERNAL";
 
     public TokenService(JwtEncoder encoder, Clock clock,
                         @Value("${app.jwt.adult-ttl-hours:168}") long adultTtlHours,
-                        @Value("${app.jwt.child-ttl-hours:8}") long childTtlHours) {
+                        @Value("${app.jwt.child-ttl-hours:8}") long childTtlHours,
+                        @Value("${app.jwt.internal-ttl-hours:8}") long internalTtlHours) {
         this.encoder = encoder;
         this.clock = clock;
         this.adultTtlHours = adultTtlHours;
         this.childTtlHours = childTtlHours;
+        this.internalTtlHours = internalTtlHours;
     }
 
     /**
@@ -49,15 +60,24 @@ public class TokenService {
      * mật khẩu gần nhất.
      */
     public TokenResponse issueForAccount(UUID accountId, Set<String> scopes, int tokenVersion) {
-        return issue(accountId.toString(), "ACCOUNT", scopes, adultTtlHours, tokenVersion);
+        return issue(accountId.toString(), "ACCOUNT", scopes, adultTtlHours, tokenVersion, false);
+    }
+
+    /**
+     * Token cửa nội bộ (23/10): như token người lớn nhưng có claim ctx=INTERNAL và sống ngắn (mặc định 8 giờ —
+     * NIST SP 800-63B-4 khuyên AAL2 đăng nhập lại sau tối đa 24 giờ).
+     */
+    public TokenResponse issueForInternal(UUID accountId, Set<String> scopes, int tokenVersion) {
+        return issue(accountId.toString(), "ACCOUNT", scopes, internalTtlHours, tokenVersion, true);
     }
 
     /** Token trẻ: subject là id slot, KHÔNG phải id tài khoản — trẻ không có tài khoản. */
     public TokenResponse issueForSlot(UUID slotId) {
-        return issue(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1);
+        return issue(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1, false);
     }
 
-    private TokenResponse issue(String sub, String typ, Set<String> scopes, long hours, int tokenVersion) {
+    private TokenResponse issue(String sub, String typ, Set<String> scopes, long hours, int tokenVersion,
+                                boolean internal) {
         Instant now = Instant.now(clock);
         JwtClaimsSet.Builder b = JwtClaimsSet.builder()
                 .issuer("finteen")
@@ -71,6 +91,9 @@ public class TokenService {
         // Trẻ không có Account nên không có phiên bản token — đừng nhét số -1 vào làm gì.
         if (tokenVersion >= 0) {
             b.claim("tv", tokenVersion);
+        }
+        if (internal) {
+            b.claim(CTX_CLAIM, CTX_INTERNAL);
         }
         JwtClaimsSet claims = b.build();
         // BẮT BUỘC khai HS256 trong header: JwtEncoderParameters không có header thì Nimbus đi tìm

@@ -91,6 +91,12 @@ public class AuthController {
      * Nút "Đăng nhập bằng Google": FE lấy ID token của Firebase rồi gửi thẳng vào đây.
      * permitAll — không có JWT của FinTeen trong tay người dùng mới (đang định đăng nhập).
      */
+    /** Cửa đăng nhập nội bộ (ADMIN / GAME_*): token sống 8 giờ, có dấu ctx=INTERNAL. Không có Google. */
+    @PostMapping("/internal/login")
+    public ApiResponse<TokenResponse> internalLogin(@RequestBody LoginRequest req) {
+        return ApiResponse.ok(authService.internalLogin(req));
+    }
+
     @PostMapping("/login/google")
     public ApiResponse<TokenResponse> loginWithGoogle(@RequestBody LinkCredentialRequest req) {
         return ApiResponse.ok(authService.loginWithGoogle(req));

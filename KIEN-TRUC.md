@@ -172,6 +172,12 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
   (PR C), ContentReview / VoiceClip và `buildVersion` thành khoá ngoại tới `GameRelease` — kế hoạch
   `build/studio-giai-doan-2-huong-dan-2026-10-12.md`. `ChapterDraft.changeClass` là enum mới trên cột mới: Hibernate
   tạo CHECK đủ 3 giá trị khi thêm cột; CHECK `chapter_draft_status_check` trên production đã đủ 4 giá trị (kiểm 21/10).
+- **Cửa đăng nhập nội bộ** (23/10, Hưng chốt "tài khoản nội bộ là riêng, không phải khách hàng"): `POST
+  /api/auth/internal/login` → `TokenService.issueForInternal` (claim `ctx=INTERNAL`, `app.jwt.internal-ttl-hours` = 8).
+  Công tắc `app.auth.internal-login-required` (env `INTERNAL_LOGIN_REQUIRED`, mặc định false): bật thì `/login` + Google
+  từ chối tài khoản nội bộ (3023) và `RevocationAwareJwtDecoder` bỏ vai nội bộ khỏi token không có `ctx` — hai chỗ phải đi
+  cùng nhau, vì decoder thay scope bằng vai trong DB mỗi request (thiếu bước bỏ vai thì TTL 8 giờ vô nghĩa). Danh sách vai
+  nội bộ: `TokenService.INTERNAL_SCOPES`.
 - **Thêm giá trị vào một enum đã có cột trên production** (như `Role` 15/10): `ddl-auto=update` KHÔNG sửa CHECK
   constraint Postgres đã tạo (`account_role_role_check` vẫn 5 giá trị cũ) → INSERT giá trị mới hỏng 500 dù test H2
   xanh. Phải chạy SQL tay một lần, mẫu `ops/finteen-deploy/alter-role-check-20261015.sql` (đã chạy trên production

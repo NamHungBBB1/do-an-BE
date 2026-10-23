@@ -115,6 +115,13 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.admin-emails:}")
     String adminEmails;
 
+    /**
+     * Bật thì cửa khách hàng (login mật khẩu, Google) từ chối tài khoản nội bộ (3023) — Hưng chốt 23/10: tài khoản nội
+     * bộ là riêng, không phải khách hàng. Tắt mặc định cho tới khi FE có trang đăng nhập nội bộ.
+     */
+    @Value("${app.auth.internal-login-required:false}")
+    boolean internalLoginRequired;
+
     // ================================================================ đăng ký
     @Override
     @Transactional
@@ -270,6 +277,21 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     public TokenResponse login(LoginRequest req) {
+        return issueCustomerToken(authenticatePassword(req));
+    }
+
+    @Override
+    public TokenResponse internalLogin(LoginRequest req) {
+        Account a = authenticatePassword(req);
+        Set<String> scopes = scopes(a.getId());
+        if (!isInternal(scopes)) {
+            throw new AppException(ErrorCode.NOT_INTERNAL_ACCOUNT);
+        }
+        return tokenService.issueForInternal(a.getId(), scopes, a.getTokenVersion());
+    }
+
+    /** Phần chung của hai cửa mật khẩu: sai → 3002 + tăng bộ đếm, khoá → 3016, chưa xác minh → 3011. */
+    private Account authenticatePassword(LoginRequest req) {
         String email = normalizeEmail(req == null ? null : req.email());
         Account a = email == null ? null : accountRepo.findByEmailIgnoreCase(email).orElse(null);
         if (a == null || req.password() == null) {
@@ -294,8 +316,7 @@ public class AuthServiceImpl implements AuthService {
         }
         accountRepo.resetFailedPassword(a.getId());
         credentialRepo.touchLastUsed(c.getId(), now);
-
-        return tokenService.issueForAccount(a.getId(), scopes(a.getId()), a.getTokenVersion());
+        return a;
     }
 
     // ================================================================ quên mật khẩu
@@ -468,7 +489,7 @@ public class AuthServiceImpl implements AuthService {
         // Phát token NGAY TRONG giao dịch: Account lấy qua Credential là proxy lười, ra ngoài giao
         // dịch mới đọc tokenVersion là LazyInitializationException.
         try {
-            return txTemplate.execute(status -> issueToken(findOrCreateGoogleAccount(user)));
+            return txTemplate.execute(status -> issueCustomerToken(findOrCreateGoogleAccount(user)));
         } catch (DataIntegrityViolationException | PessimisticLockingFailureException conflict) {
             if (conflict instanceof DataIntegrityViolationException && !DbErrors.isUniqueViolation(conflict)) {
                 throw conflict;
@@ -476,7 +497,7 @@ public class AuthServiceImpl implements AuthService {
             log.info("Đăng nhập Google {} va chạm với request song song — tra lại", user.sub());
             TokenResponse t = txTemplate.execute(status -> credentialRepo
                     .findByProviderAndSubject(AuthProvider.GOOGLE, user.sub())
-                    .map(c -> issueToken(c.getAccount()))
+                    .map(c -> issueCustomerToken(c.getAccount()))
                     .orElse(null));
             if (t == null) {
                 // Không phải chính người này tạo song song: email vừa bị một đăng ký mật khẩu chiếm.
@@ -484,6 +505,19 @@ public class AuthServiceImpl implements AuthService {
             }
             return t;
         }
+    }
+
+    /** Cửa khách hàng (login mật khẩu, Google): khi bật internal-login-required, tài khoản nội bộ phải vào cửa riêng. */
+    private TokenResponse issueCustomerToken(Account a) {
+        Set<String> scopes = scopes(a.getId());
+        if (internalLoginRequired && isInternal(scopes)) {
+            throw new AppException(ErrorCode.INTERNAL_LOGIN_REQUIRED);
+        }
+        return tokenService.issueForAccount(a.getId(), scopes, a.getTokenVersion());
+    }
+
+    private static boolean isInternal(Set<String> scopes) {
+        return scopes.stream().anyMatch(TokenService.INTERNAL_SCOPES::contains);
     }
 
     private TokenResponse issueToken(Account a) {

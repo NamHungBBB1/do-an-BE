@@ -61,7 +61,7 @@ public class SecurityConfig {
                 // /login/google chưa chạy (thiếu OAuth client ID) nhưng CŨNG phải permitAll:
                 // chặn nó ở đây thì về sau có client ID rồi vẫn 401, mà 401 là "thiếu token"
                 // chứ không phải "chưa làm" — dễ hiểu nhầm thành bug.
-                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/verify",
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/internal/login", "/api/auth/verify",
                         "/api/auth/verify/resend", "/api/auth/login/google",
                         "/api/auth/password/forgot", "/api/auth/password/reset",
                         // Trẻ đăng nhập bằng mã + PIN nên chưa có token; webhook PayOS tự kiểm chữ ký.
@@ -191,12 +191,14 @@ public class SecurityConfig {
      */
     @Bean
     JwtDecoder jwtDecoder(AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
-                          EntitlementService entitlementService, Clock clock) {
+                          EntitlementService entitlementService, Clock clock,
+                          @Value("${app.auth.internal-login-required:false}") boolean internalLoginRequired) {
         NimbusJwtDecoder nimbus = NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256).build();
         JwtTimestampValidator timestampValidator = new JwtTimestampValidator();
         timestampValidator.setClock(clock);
         nimbus.setJwtValidator(timestampValidator);
-        return new RevocationAwareJwtDecoder(nimbus, accountRepo, accountRoleRepo, entitlementService);
+        return new RevocationAwareJwtDecoder(nimbus, accountRepo, accountRoleRepo, entitlementService,
+                internalLoginRequired);
     }
 }
