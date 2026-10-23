@@ -73,6 +73,8 @@ public class SecurityConfig {
                 // Nội dung game CÔNG KHAI (Hưng chốt 08/10): kịch bản không bí mật, thứ thu tiền là
                 // báo cáo và chỉ số. Chỉ GET; đường ghi nằm ở /api/studio.
                 .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
+                // Kho ảnh khi BE tự phục vụ (chạy tại chỗ, AssetsConfig); production nginx trả trước khi tới BE.
+                .requestMatchers(HttpMethod.GET, "/assets/**").permitAll()
                 // Studio mở cho BỐN vai nội bộ: kho câu hỏi (17/10) và vòng đời nháp / phát hành (PR B 21/10).
                 // Ai làm được việc gì thì service tra AccountRole: Editor sửa / gửi, Reviewer duyệt, Manager phát hành.
                 .requestMatchers("/api/studio/**").hasAnyAuthority("SCOPE_ADMIN", "SCOPE_GAME_EDITOR",

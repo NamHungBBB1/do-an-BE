@@ -108,6 +108,10 @@ public enum ErrorCode {
     RELEASE_STATE_CONFLICT(6006, "Bản phát hành đang ở trạng thái không cho thao tác này", HttpStatus.CONFLICT),
     // Bốn mắt cả ở khâu phát hành (quy tắc 05/10 mục 1): người sửa nháp không tự phát hành nháp đó.
     SELF_PUBLISH_FORBIDDEN(6007, "Không được phát hành bản nháp do chính mình sửa", HttpStatus.FORBIDDEN),
+    // 24/10 kho ảnh đợt 2a (spec build/spec-kho-anh-giong-2026-10-24.md mục 3).
+    ASSET_INVALID(6008, "Tệp không hợp lệ — chỉ nhận ảnh PNG, JPEG, WebP tối đa 5 MB", HttpStatus.BAD_REQUEST),
+    ASSET_IN_USE(6009, "Tệp đang được nội dung dùng — chỉ xoá được tệp mồ côi", HttpStatus.CONFLICT),
+    ASSET_CONVERTER_UNAVAILABLE(6010, "Máy chủ chưa đổi được ảnh sang WebP (thiếu cwebp)", HttpStatus.SERVICE_UNAVAILABLE),
 
     // 7xxx — chơi game, lưu tiến độ (Hưng chốt 12/10).
     RELEASE_CHAPTER_NOT_FOUND(7001, "Bản phát hành không có chương này", HttpStatus.NOT_FOUND),
