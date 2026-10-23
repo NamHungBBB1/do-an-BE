@@ -1,5 +1,10 @@
 package com.doan.game;
 
+import java.util.Map;
+import com.doan.game.repository.ChapterRepository;
+import com.doan.game.repository.ChapterDraftRepository;
+import com.doan.game.repository.GameReleaseRepository;
+import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
@@ -71,9 +76,14 @@ class PlayFlowTest {
     private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
 
     /** Bản của test này — ContentFlowTest chỉ dùng 1.0.0 / 1.0.1 nên 1.0.2 luôn còn trống. */
-    private static final String VERSION = "1.0.2";
+    /** Số hiệu BE tính khi phát hành (PR C 23/10) — một lần mỗi class, xem ContentTestSupport. */
+    private static String version;
 
     @Autowired MockMvc mvc;
+    @Autowired ReleaseChapterRepository releaseChapterRepo;
+    @Autowired GameReleaseRepository releaseRepo;
+    @Autowired ChapterDraftRepository draftRepo;
+    @Autowired ChapterRepository chapterRepo;
     @Autowired AccountRepository accountRepo;
     @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired EntitlementRepository entitlementRepo;
@@ -94,7 +104,7 @@ class PlayFlowTest {
         releaseVersion();
         String child = newChild("playhop");
 
-        var res = mvc.perform(batchRequest(child, validBatch(1, 1, VERSION)))
+        var res = mvc.perform(batchRequest(child, validBatch(1, 1, version)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.result.attemptIndex").value(1))
@@ -110,7 +120,7 @@ class PlayFlowTest {
         var choices = choiceEventRepo.findBySlot_IdAndChapterAndAttemptIndex(slotId, 1, 1);
         assertThat(choices).hasSize(1);
         assertThat(choices.get(0).getEffects()).contains("\"SAVING\":10").contains("\"FIQ\":99");
-        assertThat(choices.get(0).getBuildVersion()).isEqualTo(VERSION);
+        assertThat(choices.get(0).getBuildVersion()).isEqualTo(version);
 
         // MiniGameResult: 2 dòng cùng game — ITEM_MEAL đúng (NEEDS == category), ITEM_UPGRADE sai.
         var minis = miniGameResultRepo.findBySlot_IdAndChapterAndAttemptIndex(slotId, 1, 1);
@@ -143,7 +153,7 @@ class PlayFlowTest {
     void careerMatchScoresJobsAndQuestions() throws Exception {
         releaseVersion();
         String child = newChild("career");
-        String body = "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + VERSION + "\","
+        String body = "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + version + "\","
                 + "\"choices\":[],\"miniGames\":["
                 + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"JOB_DAY\",\"chosen\":\"fit\"},"
                 + "{\"gameId\":\"CAREER_MATCH_CH03\",\"itemId\":\"JOB_NIGHT\",\"chosen\":\"fit\"},"
@@ -182,7 +192,7 @@ class PlayFlowTest {
     void resendSameBatchIsNoop() throws Exception {
         releaseVersion();
         String child = newChild("playgui");
-        String body = validBatch(1, 1, VERSION);
+        String body = validBatch(1, 1, version);
 
         mvc.perform(batchRequest(child, body))
                 .andExpect(status().isOk())
@@ -361,29 +371,11 @@ class PlayFlowTest {
      * (6001) thì chỉ đưa con trỏ về. JSON chương giàu deltaStats + minigame để BE chấm được.
      */
     private String releaseVersion() throws Exception {
-        var cur = mvc.perform(get("/api/content/current")).andReturn().getResponse();
-        if (cur.getStatus() == 200
-                && cur.getContentAsString(StandardCharsets.UTF_8).contains("\"version\":\"" + VERSION + "\"")) {
-            return VERSION;
+        if (version == null) {
+            version = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(
+                    releaseChapterRepo, releaseRepo, draftRepo, chapterRepo), Map.of("CH01", chapterOne(), "CH02", chapterTwo()), "play flow test");
         }
-        var asAdmin = admin();
-        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content(chapterOne()))
-                .andExpect(status().isOk());
-        mvc.perform(put("/api/studio/chapters/CH02/draft").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content(chapterTwo()))
-                .andExpect(status().isOk());
-        var pub = mvc.perform(post("/api/studio/releases").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"version\":\"" + VERSION + "\",\"note\":\"play flow test\"}"))
-                .andReturn().getResponse();
-        if (pub.getStatus() == 409) {
-            mvc.perform(post("/api/studio/releases/" + VERSION + "/current").with(asAdmin))
-                    .andExpect(status().isOk());
-        } else {
-            assertThat(pub.getStatus()).as(pub.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(200);
-        }
-        return VERSION;
+        return version;
     }
 
     /** CH01: 1 cảnh choice 2 option (deltaStats, có khoá FIQ để kiểm bỏ qua) + 2 mini-game —

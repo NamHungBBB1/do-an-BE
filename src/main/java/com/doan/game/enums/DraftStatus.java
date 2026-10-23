@@ -4,5 +4,6 @@ public enum DraftStatus {
     APPROVED,
     DRAFT,
     REJECTED,
+    RELEASED,
     SUBMITTED
 }

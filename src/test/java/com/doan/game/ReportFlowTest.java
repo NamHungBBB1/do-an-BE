@@ -1,5 +1,10 @@
 package com.doan.game;
 
+import java.util.Map;
+import com.doan.game.repository.ChapterRepository;
+import com.doan.game.repository.ChapterDraftRepository;
+import com.doan.game.repository.GameReleaseRepository;
+import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
@@ -73,9 +78,14 @@ class ReportFlowTest {
     private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
 
     /** Bản của test này — ContentFlowTest 1.0.0/1.0.1, PlayFlowTest 1.0.2 nên 1.0.3 luôn trống. */
-    private static final String VERSION = "1.0.3";
+    /** Số hiệu BE tính khi phát hành (PR C 23/10) — một lần mỗi class, xem ContentTestSupport. */
+    private static String version;
 
     @Autowired MockMvc mvc;
+    @Autowired ReleaseChapterRepository releaseChapterRepo;
+    @Autowired GameReleaseRepository releaseRepo;
+    @Autowired ChapterDraftRepository draftRepo;
+    @Autowired ChapterRepository chapterRepo;
     @Autowired AccountRepository accountRepo;
     @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired EntitlementRepository entitlementRepo;
@@ -309,26 +319,11 @@ class ReportFlowTest {
      * report không 1003 và totalChapters có giá trị.
      */
     private String releaseVersion() throws Exception {
-        var cur = mvc.perform(get("/api/content/current")).andReturn().getResponse();
-        if (cur.getStatus() == 200
-                && cur.getContentAsString(StandardCharsets.UTF_8).contains("\"version\":\"" + VERSION + "\"")) {
-            return VERSION;
+        if (version == null) {
+            version = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(
+                    releaseChapterRepo, releaseRepo, draftRepo, chapterRepo), Map.of("CH01", minimalChapter()), "report flow test");
         }
-        var asAdmin = admin();
-        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content(minimalChapter()))
-                .andExpect(status().isOk());
-        var pub = mvc.perform(post("/api/studio/releases").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"version\":\"" + VERSION + "\",\"note\":\"report flow test\"}"))
-                .andReturn().getResponse();
-        if (pub.getStatus() == 409) {
-            mvc.perform(post("/api/studio/releases/" + VERSION + "/current").with(asAdmin))
-                    .andExpect(status().isOk());
-        } else {
-            assertThat(pub.getStatus()).as(pub.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(200);
-        }
-        return VERSION;
+        return version;
     }
 
     /** Tổng chương bản HIỆN TẠI đọc từ /api/content/current — publish() sao mọi nháp studio vào bản. */

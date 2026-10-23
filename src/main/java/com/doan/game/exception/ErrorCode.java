@@ -93,6 +93,14 @@ public enum ErrorCode {
     // 21/10 PR B: duyệt hai người (NIST AC-5) — người sửa nháp không tự duyệt, kể cả ADMIN.
     SELF_REVIEW_FORBIDDEN(6002, "Không được duyệt bản nháp do chính mình sửa", HttpStatus.FORBIDDEN),
     DRAFT_STATE_CONFLICT(6003, "Bản nháp đang ở trạng thái không cho thao tác này", HttpStatus.CONFLICT),
+    // 23/10 PR C: số hiệu do BE tính từ loại thay đổi cao nhất (quy tắc 05/10 mục 3); client gửi thì phải khớp.
+    RELEASE_VERSION_MISMATCH(6004, "Số phiên bản không khớp loại thay đổi của các nháp đã duyệt", HttpStatus.CONFLICT),
+    NO_APPROVED_DRAFT(6005, "Không có bản nháp nào đã duyệt để phát hành", HttpStatus.CONFLICT),
+    // Dùng chung như 6003 bên nháp: thu hồi bản không phải bản đang chạy, không còn bản để lùi, đặt lại bản đã thu hồi,
+    // phát hành khi bản đang chạy không phải bản mới nhất.
+    RELEASE_STATE_CONFLICT(6006, "Bản phát hành đang ở trạng thái không cho thao tác này", HttpStatus.CONFLICT),
+    // Bốn mắt cả ở khâu phát hành (quy tắc 05/10 mục 1): người sửa nháp không tự phát hành nháp đó.
+    SELF_PUBLISH_FORBIDDEN(6007, "Không được phát hành bản nháp do chính mình sửa", HttpStatus.FORBIDDEN),
 
     // 7xxx — chơi game, lưu tiến độ (Hưng chốt 12/10).
     RELEASE_CHAPTER_NOT_FOUND(7001, "Bản phát hành không có chương này", HttpStatus.NOT_FOUND),
