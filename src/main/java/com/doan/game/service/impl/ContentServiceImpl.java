@@ -5,6 +5,8 @@ import com.doan.game.DTO.request.RecallReleaseRequest;
 import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
+import com.doan.game.DTO.response.DraftContentResponse;
+import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
 import com.doan.game.entity.Account;
@@ -177,43 +179,15 @@ public class ContentServiceImpl implements ContentService {
     @Transactional
     public ReleaseSummaryResponse publish(UUID callerId, CreateReleaseRequest req) {
         requireAnyRole(callerId, Role.ADMIN, Role.GAME_MANAGER);
-        // Khoá con trỏ trước: phát hành / đổi bản / thu hồi chạy lần lượt.
-        GameRelease current = releaseRepo.lockCurrent().stream().findFirst().orElse(null);
-        List<GameRelease> all = releaseRepo.findAll();
-        if (current != null && all.stream().anyMatch(r -> r.getRecalledAt() == null
-                && compareVersion(r.getVersion(), current.getVersion()) > 0)) {
-            // Phát hành chồng lên bản đã bị lùi sẽ lặng lẽ đánh rơi thay đổi của bản mới hơn.
-            throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, "bản đang chạy " + current.getVersion()
-                    + " không phải bản mới nhất — thu hồi bản mới hơn hoặc đặt lại nó làm hiện tại trước");
-        }
-        Map<UUID, ReleaseChapter> frozen = current == null ? Map.of()
-                : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(current.getId()).stream()
-                        .collect(Collectors.toMap(rc -> rc.getChapter().getId(), Function.identity()));
-
-        // Chỉ nháp ĐÃ DUYỆT (lưu sau khi duyệt thì về DRAFT, nên APPROVED luôn là đúng bản đã duyệt).
-        List<ChapterDraft> approved = new ArrayList<>();
-        ChangeClass top = null;
-        for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
-            ChapterDraft d = draftRepo.findFirstByChapter_IdOrderByRevisionDesc(c.getId()).orElse(null);
-            if (d == null || d.getStatus() != DraftStatus.APPROVED) {
-                continue;
-            }
-            if (d.getEditor() != null && d.getEditor().getId().equals(callerId)) {
-                throw new AppException(ErrorCode.SELF_PUBLISH_FORBIDDEN, c.getCode());
-            }
-            // Thêm chương luôn là MAJOR (quy tắc 05/10 mục 3), dù nháp ghi loại thấp hơn.
-            ChangeClass cls = frozen.containsKey(c.getId()) ? d.getChangeClass() : ChangeClass.MAJOR;
-            top = top == null || rank(cls) > rank(top) ? normalize(cls) : top;
-            approved.add(d);
-        }
-        if (approved.isEmpty()) {
-            throw new AppException(ErrorCode.NO_APPROVED_DRAFT);
-        }
-        String version = nextVersion(all.stream().map(GameRelease::getVersion).toList(), top);
+        ReleasePlan plan = plan(callerId, true);
+        String version = plan.version();
+        ChangeClass top = plan.top();
         String asked = req == null || req.version() == null ? "" : req.version().trim();
         if (!asked.isEmpty() && !asked.equals(version)) {
             throw new AppException(ErrorCode.RELEASE_VERSION_MISMATCH, "loại " + top + " → phải là " + version);
         }
+        Map<UUID, ReleaseChapter> frozen = plan.frozen();
+        List<ChapterDraft> approved = plan.approved();
         Instant now = Instant.now(clock);
         Account publisher = accountRepo.findById(callerId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
@@ -247,6 +221,60 @@ public class ContentServiceImpl implements ContentService {
         moveCurrentPointer(release);
         log.info("Phát hành {} ({}, {} chương đổi) bởi {}", version, top, approved.size(), callerId);
         return toSummary(release);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReleasePlanResponse previewRelease(UUID callerId) {
+        ReleasePlan plan = plan(callerId, false);
+        return new ReleasePlanResponse(plan.version(), plan.top(),
+                plan.current() == null ? null : plan.current().getVersion(),
+                plan.approved().stream().map(ContentServiceImpl::toDraftSummary).toList());
+    }
+
+    /** Kết quả gom nháp của một lần phát hành — dùng chung cho publish và xem trước. */
+    private record ReleasePlan(GameRelease current, Map<UUID, ReleaseChapter> frozen, List<ChapterDraft> approved,
+                               ChangeClass top, String version) {
+    }
+
+    /** lock = true: khoá con trỏ bản hiện tại và các dòng nháp (publish); false: chỉ đọc (xem trước). */
+    private ReleasePlan plan(UUID callerId, boolean lock) {
+        // Khoá con trỏ trước: phát hành / đổi bản / thu hồi chạy lần lượt.
+        GameRelease current = (lock ? releaseRepo.lockCurrent() : releaseRepo.findByIsCurrentTrue())
+                .stream().findFirst().orElse(null);
+        List<GameRelease> all = releaseRepo.findAll();
+        if (current != null && all.stream().anyMatch(r -> r.getRecalledAt() == null
+                && compareVersion(r.getVersion(), current.getVersion()) > 0)) {
+            // Phát hành chồng lên bản đã bị lùi sẽ lặng lẽ đánh rơi thay đổi của bản mới hơn.
+            throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, "bản đang chạy " + current.getVersion()
+                    + " không phải bản mới nhất — thu hồi bản mới hơn hoặc đặt lại nó làm hiện tại trước");
+        }
+        Map<UUID, ReleaseChapter> frozen = current == null ? Map.of()
+                : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(current.getId()).stream()
+                        .collect(Collectors.toMap(rc -> rc.getChapter().getId(), Function.identity()));
+
+        // Chỉ nháp ĐÃ DUYỆT (lưu sau khi duyệt thì về DRAFT, nên APPROVED luôn là đúng bản đã duyệt).
+        List<ChapterDraft> approved = new ArrayList<>();
+        ChangeClass top = null;
+        for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
+            ChapterDraft d = (lock ? draftRepo.findFirstByChapter_IdOrderByRevisionDesc(c.getId())
+                    : draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId())).orElse(null);
+            if (d == null || d.getStatus() != DraftStatus.APPROVED) {
+                continue;
+            }
+            if (d.getEditor() != null && d.getEditor().getId().equals(callerId)) {
+                throw new AppException(ErrorCode.SELF_PUBLISH_FORBIDDEN, c.getCode());
+            }
+            // Thêm chương luôn là MAJOR (quy tắc 05/10 mục 3), dù nháp ghi loại thấp hơn.
+            ChangeClass cls = frozen.containsKey(c.getId()) ? d.getChangeClass() : ChangeClass.MAJOR;
+            top = top == null || rank(cls) > rank(top) ? normalize(cls) : top;
+            approved.add(d);
+        }
+        if (approved.isEmpty()) {
+            throw new AppException(ErrorCode.NO_APPROVED_DRAFT);
+        }
+        String version = nextVersion(all.stream().map(GameRelease::getVersion).toList(), top);
+        return new ReleasePlan(current, frozen, approved, top, version);
     }
 
     @Override
@@ -291,6 +319,21 @@ public class ContentServiceImpl implements ContentService {
         moveCurrentPointer(previous);
         log.info("Thu hồi {} → bản hiện tại {} bởi {}: {}", version, previous.getVersion(), callerId, reason);
         return toSummary(previous);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DraftContentResponse draftContent(String code) {
+        Chapter chapter = chapterRepo.findByCode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có chương " + code));
+        ChapterDraft d = draftRepo.findTopByChapter_IdOrderByRevisionDesc(chapter.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chương " + code + " chưa có nháp"));
+        try {
+            return new DraftContentResponse(toDraftSummary(d),
+                    objectMapper.readTree(d.getContent().replace(ASSET_PLACEHOLDER, assetBase)));
+        } catch (JsonProcessingException e) {
+            throw new AppException(ErrorCode.UNCATEGORIZED, "JSON nháp hỏng trong DB: " + code);
+        }
     }
 
     @Override
@@ -549,6 +592,9 @@ public class ContentServiceImpl implements ContentService {
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: không ghi được JSON");
         }
+        // Nháp tải về (GET …/draft) đã thay placeholder bằng URL thật; lưu lại thì đổi về placeholder để bản phát hành
+        // không dính domain kho file (đổi domain chỉ cần đổi app.assets.base-url).
+        json = json.replace(assetBase, ASSET_PLACEHOLDER);
         if (json.getBytes(StandardCharsets.UTF_8).length > MAX_CONTENT_BYTES) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: quá 2 MB — ảnh / giọng để ở kho file");
         }

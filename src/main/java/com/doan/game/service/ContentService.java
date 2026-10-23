@@ -5,6 +5,8 @@ import com.doan.game.DTO.request.RecallReleaseRequest;
 import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
+import com.doan.game.DTO.response.DraftContentResponse;
+import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +40,15 @@ public interface ContentService {
      * cảnh có thật. Nháp đang SUBMITTED thì 6003; nháp REJECTED / APPROVED lưu lại thì về DRAFT, revision tăng.
      */
     ChapterSummaryResponse saveDraft(UUID callerId, String code, JsonNode content);
+
+    /** Nháp mới nhất của một chương kèm JSON ({{ASSET_BASE}} đã thay) — Editor sửa tiếp, Reviewer chơi thử. 1003 nếu chưa có. */
+    DraftContentResponse draftContent(String code);
+
+    /**
+     * Xem trước bản sắp phát hành cho người đang xem: chạy đúng luật của publish nhưng không ghi gì — lỗi giống hệt
+     * publish (6005 không có nháp duyệt, 6006 bản đang chạy không phải bản mới nhất, 6007 người xem sửa một nháp trong bản).
+     */
+    ReleasePlanResponse previewRelease(UUID callerId);
 
     /** Bản nháp mới nhất của mọi chương, theo số chương (mọi vai Studio xem được). */
     List<DraftSummaryResponse> listDrafts();

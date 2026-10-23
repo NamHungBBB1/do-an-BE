@@ -6,7 +6,9 @@ import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
+import com.doan.game.DTO.response.DraftContentResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
+import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
 import com.doan.game.service.ContentService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,6 +45,12 @@ public class StudioController {
         return ApiResponse.ok(contentService.saveDraft(currentAccountId(jwt), code.trim().toUpperCase(), content));
     }
 
+    /** Nháp mới nhất của một chương KÈM nội dung — Editor sửa tiếp, Reviewer chơi thử. */
+    @GetMapping("/chapters/{code}/draft")
+    public ApiResponse<DraftContentResponse> draft(@PathVariable String code) {
+        return ApiResponse.ok(contentService.draftContent(code.trim().toUpperCase()));
+    }
+
     /** Trạng thái nháp mới nhất của mọi chương (không kèm nội dung). */
     @GetMapping("/chapters")
     public ApiResponse<List<DraftSummaryResponse>> listDrafts() {
@@ -69,6 +77,12 @@ public class StudioController {
     @GetMapping("/releases")
     public ApiResponse<List<ReleaseSummaryResponse>> listReleases() {
         return ApiResponse.ok(contentService.listReleases());
+    }
+
+    /** Xem trước bản sắp phát hành: số hiệu BE sẽ tính + các nháp đã duyệt sẽ vào bản. Không ghi gì. */
+    @GetMapping("/releases/next")
+    public ApiResponse<ReleasePlanResponse> previewRelease(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(contentService.previewRelease(currentAccountId(jwt)));
     }
 
     @PostMapping("/releases")

@@ -270,6 +270,47 @@ class ContentFlowTest {
                 .andExpect(jsonPath("$.result[1].recalledAt").isNotEmpty());
     }
 
+    /** Đọc nháp kèm nội dung (Reviewer chơi thử, Editor sửa tiếp) và xem trước bản sắp phát hành. */
+    @Test
+    void draftContentRoundTripAndReleasePreview() throws Exception {
+        var asAdmin = admin();
+        mvc.perform(get("/api/studio/chapters/CH01/draft").with(asAdmin))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value(1003));
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Nháp", "choice-1"))).andExpect(status().isOk());
+
+        // Tải về: URL thật để chơi thử; lưu lại nguyên vậy thì BE đổi về placeholder.
+        String body = mvc.perform(get("/api/studio/chapters/ch01/draft").with(asAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.draft.status").value("DRAFT"))
+                .andExpect(jsonPath("$.result.draft.revision").value(1))
+                .andExpect(jsonPath("$.result.content.scenes[0].background").value("https://cdn.test.local/a/bg1.webp"))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        String content = new com.fasterxml.jackson.databind.ObjectMapper().readTree(body)
+                .path("result").path("content").toString();
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(content)).andExpect(status().isOk());
+        assertThat(draftRepo.findAll()).singleElement().satisfies(d -> {
+            assertThat(d.getContent()).contains("{{ASSET_BASE}}/a/bg1.webp").doesNotContain("cdn.test.local");
+            assertThat(d.getRevision()).isEqualTo(2);
+        });
+
+        // Xem trước: chạy đúng luật publish, không ghi gì.
+        mvc.perform(get("/api/studio/releases/next").with(asAdmin))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(6005));
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, false);
+        mvc.perform(get("/api/studio/releases/next").with(asAdmin))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(6007));
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, true);
+        mvc.perform(get("/api/studio/releases/next").with(asAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.0"))
+                .andExpect(jsonPath("$.result.changeClass").value("MAJOR"))
+                .andExpect(jsonPath("$.result.currentVersion").doesNotExist())
+                .andExpect(jsonPath("$.result.drafts[0].code").value("CH01"));
+        assertThat(releaseRepo.count()).isZero();
+    }
+
     private ContentTestSupport.Repos repos() {
         return new ContentTestSupport.Repos(releaseChapterRepo, releaseRepo, draftRepo, chapterRepo);
     }
