@@ -1,0 +1,704 @@
+{
+ "id": "CH02_V2",
+ "title": "Tháng đầu tiên và mục tiêu lớn",
+ "version": "2.0",
+ "initialStats": {
+  "SAVING": 50,
+  "HAPPINESS": 50,
+  "RISK": 30,
+  "GOAL": 50,
+  "WEALTH": 0,
+  "FIQ": 0
+ },
+ "initialMoney": 3000000,
+ "metadata": {
+  "chapterId": "CH02",
+  "targetAge": 16,
+  "goalDescription": "Lập ngân sách từ 3.000.000đ thu nhập mô phỏng, lên kế hoạch tiết kiệm mua Laptop 6.000.000đ và xử lý khoản phát sinh sửa xe 200.000đ.",
+  "coreKnowledgeUnits": [
+   "D02.01",
+   "D02.02",
+   "D02.03",
+   "D02.04"
+  ],
+  "allKnowledgeUnits": [
+   "D02.01",
+   "D02.02",
+   "D02.03",
+   "D02.04",
+   "D02.05",
+   "D02.06",
+   "D08.03",
+   "D08.04"
+  ]
+ },
+ "sprites": {
+  "AN": {
+   "an-neutral.png": "{{ASSET_BASE}}/a/01b49192cdb523deb674.webp",
+   "an-thinking.png": "{{ASSET_BASE}}/a/dd2e22396d5efd5cad9f.webp",
+   "an-relieved.png": "{{ASSET_BASE}}/a/daaedb279eb54ad1ddfb.webp",
+   "an-worried-money.png": "{{ASSET_BASE}}/a/eff18d26be3a134fbe52.webp"
+  },
+  "MINH": {
+   "minh-neutral.png": "{{ASSET_BASE}}/a/88bdd6afac0604fd08a5.webp",
+   "minh-inviting.png": "{{ASSET_BASE}}/a/fd88419f1a2d0dd85a2e.webp"
+  },
+  "CO_LINH": {
+   "co-linh-neutral.png": "{{ASSET_BASE}}/a/1da74ebe550af25b72b9.webp",
+   "co-linh-explaining.png": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+   "co-linh-encouraging.png": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp"
+  }
+ },
+ "scenes": [
+  {
+   "id": "CH02_SC01_B1",
+   "type": "dialogue",
+   "title": "Cô Linh hướng dẫn thu nhập mô phỏng",
+   "background": "{{ASSET_BASE}}/a/8626dde24bd48aa65a8b.webp",
+   "backgroundId": "BG03",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Chào các em! Trong bài học này, các em nhận 3.000.000đ thu nhập mô phỏng đầu tháng để quản lý sinh hoạt cá nhân.",
+   "nextSceneId": "CH02_SC01_B2",
+   "knowledgeUnits": [
+    "D02.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/ec8378e1a955bcac5664.mp3"
+  },
+  {
+   "id": "CH02_SC01_B2",
+   "type": "dialogue",
+   "title": "An nhận nhiệm vụ",
+   "background": "{{ASSET_BASE}}/a/8626dde24bd48aa65a8b.webp",
+   "backgroundId": "BG03",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/dd2e22396d5efd5cad9f.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "3 triệu đồng cho cả tháng... Mình cần phải tính toán kĩ các khoản chi cố định trước khi tiêu xài tự do.",
+   "nextSceneId": "CH02_SC02_A",
+   "knowledgeUnits": [
+    "D02.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/af4844fee2fdf750cf12.mp3"
+  },
+  {
+   "id": "CH02_SC02_A",
+   "type": "scene",
+   "title": "Chia phong bì ngân sách",
+   "background": "{{ASSET_BASE}}/a/19f7307b8b081b61fdbe.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/19f7307b8b081b61fdbe.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH02_SC02_B1",
+   "knowledgeUnits": [
+    "D02.02"
+   ]
+  },
+  {
+   "id": "CH02_SC02_B1",
+   "type": "dialogue",
+   "title": "Minh rủ tăng ngân sách giải trí",
+   "background": "{{ASSET_BASE}}/a/3fdc0f03a5cac005adda.webp",
+   "backgroundId": "BG03B",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/fd88419f1a2d0dd85a2e.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Chi nhiều cho giải trí chút đi An! Tháng này có bao nhiêu sự kiện hay ho đang chờ tụi mình kìa!",
+   "nextSceneId": "CH02_SC02_B2",
+   "knowledgeUnits": [
+    "D02.02"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/a649665aadbd0de96755.mp3"
+  },
+  {
+   "id": "CH02_SC02_B2",
+   "type": "dialogue",
+   "title": "Cô Linh lưu ý quy tắc ngân sách",
+   "background": "{{ASSET_BASE}}/a/3fdc0f03a5cac005adda.webp",
+   "backgroundId": "BG03B",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Hãy đảm bảo các khoản nền cơ bản như Phòng ở, Ăn uống, Đi lại được ưu tiên trước nhé.",
+   "nextSceneId": "CH02_SC02_BUDGET_BUILDER",
+   "knowledgeUnits": [
+    "D02.02"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/c9f87ca9965448a6a763.mp3"
+  },
+  {
+   "id": "CH02_SC02_BUDGET_BUILDER",
+   "type": "minigame",
+   "title": "Thực hành phân bổ Ngân sách (Budget Builder)",
+   "background": "{{ASSET_BASE}}/a/3fdc0f03a5cac005adda.webp",
+   "backgroundId": "BG03B",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "game": {
+    "id": "BUDGET_BUILDER_CH02",
+    "mechanic": "DRAG_AND_DROP",
+    "title": "Budget Builder Mini-Game",
+    "instruction": "Kéo thả các thẻ số tiền vào đúng 6 phong bì danh mục ngân sách.",
+    "draggables": [
+     {
+      "id": "amt_600",
+      "value": 600000,
+      "label": "600.000đ"
+     },
+     {
+      "id": "amt_900",
+      "value": 900000,
+      "label": "900.000đ"
+     },
+     {
+      "id": "amt_200",
+      "value": 200000,
+      "label": "200.000đ"
+     },
+     {
+      "id": "amt_100",
+      "value": 100000,
+      "label": "100.000đ"
+     },
+     {
+      "id": "amt_1000",
+      "value": 1000000,
+      "label": "1.000.000đ"
+     },
+     {
+      "id": "amt_200_buffer",
+      "value": 200000,
+      "label": "200.000đ"
+     }
+    ],
+    "dropZones": [
+     {
+      "id": "housing",
+      "label": "Phòng ở chia sẻ",
+      "image": "{{ASSET_BASE}}/a/07254725e67853e5db26.webp",
+      "expectedValue": 600000
+     },
+     {
+      "id": "food",
+      "label": "Ăn uống",
+      "image": "{{ASSET_BASE}}/a/67d6a48e4ac8092dc5a0.webp",
+      "expectedValue": 900000
+     },
+     {
+      "id": "transport",
+      "label": "Đi lại",
+      "image": "{{ASSET_BASE}}/a/975f86e0e84bbcef8ea1.webp",
+      "expectedValue": 200000
+     },
+     {
+      "id": "entertainment",
+      "label": "Giải trí",
+      "image": "{{ASSET_BASE}}/a/312a7bc11fe0fbf35628.webp",
+      "expectedValue": 100000
+     },
+     {
+      "id": "savings_laptop",
+      "label": "Mục tiêu mua Laptop",
+      "image": "{{ASSET_BASE}}/a/68c5402cda4823ce71d4.webp",
+      "expectedValue": 1000000
+     },
+     {
+      "id": "emergency_buffer",
+      "label": "Dự trù linh hoạt",
+      "image": "{{ASSET_BASE}}/a/ea4a515aaca3b580a356.webp",
+      "expectedValue": 200000
+     }
+    ]
+   },
+   "nextSceneId": "CH02_SC03_A",
+   "onPassSceneId": "CH02_SC03_A",
+   "onFailSceneId": "CH02_SC02_BUDGET_BUILDER",
+   "knowledgeUnits": [
+    "D02.02"
+   ]
+  },
+  {
+   "id": "CH02_SC03_A",
+   "type": "scene",
+   "title": "Lập kế hoạch mua Laptop",
+   "background": "{{ASSET_BASE}}/a/5f0903d29bafdf16e201.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/5f0903d29bafdf16e201.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH02_SC03_B1",
+   "knowledgeUnits": [
+    "D02.03"
+   ]
+  },
+  {
+   "id": "CH02_SC03_B1",
+   "type": "dialogue",
+   "title": "An xác định mục tiêu Laptop 6 triệu",
+   "background": "{{ASSET_BASE}}/a/2d19460b0af91a8ea1b8.webp",
+   "backgroundId": "BG04",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/dd2e22396d5efd5cad9f.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Chiếc máy tính phục vụ học tập có giá 6.000.000đ. Mình cần tính xem nên chọn lộ trình tiết kiệm mấy tháng.",
+   "nextSceneId": "CH02_SC03_CHOICE",
+   "knowledgeUnits": [
+    "D02.03"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/51606dc6d16231bee92e.mp3"
+  },
+  {
+   "id": "CH02_SC03_CHOICE",
+   "type": "choice",
+   "title": "Chọn phương án tiết kiệm",
+   "background": "{{ASSET_BASE}}/a/2d19460b0af91a8ea1b8.webp",
+   "backgroundId": "BG04",
+   "characters": [],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Mình sẽ chọn lộ trình tích lũy nào?",
+   "options": [
+    {
+     "id": "CH02_SC03_CHOICE_A",
+     "text": "A. Tiết kiệm 1.000.000đ/tháng trong 6 tháng (Đạt mục tiêu nhanh, dự trù còn 200.000đ/tháng)",
+     "label": "A. 1.000.000đ/tháng x 6 tháng",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "SAVING": 10,
+      "HAPPINESS": 0,
+      "RISK": 5,
+      "GOAL": 10
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 1
+     },
+     "flag": "aggressive_savings",
+     "nextSceneId": "CH02_SC03_CHOICE_A_1"
+    },
+    {
+     "id": "CH02_SC03_CHOICE_B",
+     "text": "B. Tiết kiệm 800.000đ/tháng trong 8 tháng (Dễ thở hơn, dự trù còn 400.000đ/tháng)",
+     "label": "B. 800.000đ/tháng x 8 tháng",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "SAVING": 5,
+      "HAPPINESS": 5,
+      "RISK": 0,
+      "GOAL": 8
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 1,
+      "P": 2
+     },
+     "flag": "balanced_savings",
+     "nextSceneId": "CH02_SC03_CHOICE_B_1"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.03"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/f42731d262b568be18c1.mp3"
+  },
+  {
+   "id": "CH02_SC03_CHOICE_A_1",
+   "type": "dialogue",
+   "title": "Đồng ý phương án 6 tháng",
+   "background": "{{ASSET_BASE}}/a/2d19460b0af91a8ea1b8.webp",
+   "backgroundId": "BG04",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "encouraging",
+     "src": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Quyết tâm rất tốt! 1.000.000đ/tháng giúp em sớm có máy tính, nhưng hãy nhớ giữ lại 200.000đ dự phòng nhé.",
+   "nextSceneId": "CH02_SC03_SAVINGS_RACE",
+   "knowledgeUnits": [],
+   "voiceUrl": "{{ASSET_BASE}}/v/3b6de241d451a80f4aaa.mp3"
+  },
+  {
+   "id": "CH02_SC03_CHOICE_B_1",
+   "type": "dialogue",
+   "title": "Đồng ý phương án 8 tháng",
+   "background": "{{ASSET_BASE}}/a/2d19460b0af91a8ea1b8.webp",
+   "backgroundId": "BG04",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "encouraging",
+     "src": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Lựa chọn rất an toàn! 800.000đ/tháng giúp em có khoản dự phòng dư dả 400.000đ cho các rủi ro bất ngờ.",
+   "nextSceneId": "CH02_SC03_SAVINGS_RACE",
+   "knowledgeUnits": [],
+   "voiceUrl": "{{ASSET_BASE}}/v/ccce91628727b0bd8069.mp3"
+  },
+  {
+   "id": "CH02_SC03_SAVINGS_RACE",
+   "type": "minigame",
+   "title": "Mô phỏng lộ trình tích lũy (Savings Race)",
+   "background": "{{ASSET_BASE}}/a/2d19460b0af91a8ea1b8.webp",
+   "backgroundId": "BG04",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "game": {
+    "id": "SAVINGS_RACE_CH02",
+    "mechanic": "TIMELINE",
+    "title": "Savings Race Mini-Game",
+    "instruction": "Khởi chạy lộ trình tích lũy theo phương án bạn vừa chọn để xem diễn biến theo tháng.",
+    "targetAmount": 6000000,
+    "goalImage": "{{ASSET_BASE}}/a/68c5402cda4823ce71d4.webp",
+    "calendarImage": "{{ASSET_BASE}}/a/c7529e28a217d85c0125.webp"
+   },
+   "nextSceneId": "CH02_SC04_A",
+   "onPassSceneId": "CH02_SC04_A",
+   "onFailSceneId": "CH02_SC03_SAVINGS_RACE",
+   "knowledgeUnits": [
+    "D02.03"
+   ]
+  },
+  {
+   "id": "CH02_SC04_A",
+   "type": "scene",
+   "title": "Sự cố xe đạp bất ngờ",
+   "background": "{{ASSET_BASE}}/a/4838fe64dfe10a5f277c.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/4838fe64dfe10a5f277c.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH02_SC04_B1",
+   "knowledgeUnits": [
+    "D02.04"
+   ]
+  },
+  {
+   "id": "CH02_SC04_B1",
+   "type": "dialogue",
+   "title": "Phát hiện xe bị hỏng",
+   "background": "{{ASSET_BASE}}/a/9b9a0832cc98eb0cb622.webp",
+   "backgroundId": "BG05B",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/fd88419f1a2d0dd85a2e.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Thôi xong rồi An ơi! Lốp xe đạp của cậu bị xẹp dí rồi, tiệm báo giá thay ruột với bọc lốp mất 200.000đ đó!",
+   "nextSceneId": "CH02_SC04_B2",
+   "knowledgeUnits": [
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/40f4981213a35e679f9c.mp3"
+  },
+  {
+   "id": "CH02_SC04_B2",
+   "type": "dialogue",
+   "title": "An đắn đo xử lý khoản phát sinh",
+   "background": "{{ASSET_BASE}}/a/9b9a0832cc98eb0cb622.webp",
+   "backgroundId": "BG05B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "worried-money",
+     "src": "{{ASSET_BASE}}/a/eff18d26be3a134fbe52.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "200.000đ phát sinh bất ngờ... Mình sẽ lấy nguồn tiền từ đâu để chi trả đây?",
+   "nextSceneId": "CH02_SC04_CHOICE",
+   "knowledgeUnits": [
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/dfb0c31fc9d293da7304.mp3"
+  },
+  {
+   "id": "CH02_SC04_CHOICE",
+   "type": "choice",
+   "title": "Lựa chọn nguồn chi trả rủi ro",
+   "background": "{{ASSET_BASE}}/a/9b9a0832cc98eb0cb622.webp",
+   "backgroundId": "BG05B",
+   "characters": [],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Cách xử lý khoản sửa xe 200.000đ:",
+   "options": [
+    {
+     "id": "CH02_SC04_CHOICE_A",
+     "text": "A. Trích từ Quỹ dự trù linh hoạt 200.000đ (Bảo toàn nguyên vẹn tiền tiết kiệm Laptop)",
+     "label": "A. Dùng Quỹ dự trù linh hoạt",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [
+      {
+       "eventId": "EV_CH02_REPAIR_BIKE_BUFFER",
+       "amount": -200000,
+       "description": "Chi trả tiền sửa xe từ Quỹ dự trù linh hoạt"
+      }
+     ],
+     "deltaStats": {
+      "SAVING": 5,
+      "HAPPINESS": 2,
+      "RISK": -5,
+      "GOAL": 5
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "risk_handled_buffer",
+     "nextSceneId": "CH02_SC04_CHOICE_A_1"
+    },
+    {
+     "id": "CH02_SC04_CHOICE_B",
+     "text": "B. Trích từ Tiền tiết kiệm mua Laptop (Chấp nhận lùi tiến độ mua máy lại 1 tháng)",
+     "label": "B. Trích từ Tiền tiết kiệm Laptop",
+     "condition": {
+      "type": "ALWAYS_UNLOCKED"
+     },
+     "moneyEvents": [
+      {
+       "eventId": "EV_CH02_REPAIR_BIKE_SAVINGS",
+       "amount": -200000,
+       "description": "Chi trả tiền sửa xe từ Hũ tiết kiệm Laptop"
+      }
+     ],
+     "deltaStats": {
+      "SAVING": -5,
+      "HAPPINESS": -2,
+      "RISK": 5,
+      "GOAL": -5
+     },
+     "evidenceScores": {
+      "I": 1,
+      "C": 1,
+      "P": 1
+     },
+     "flag": "risk_handled_savings",
+     "nextSceneId": "CH02_SC04_CHOICE_B_1"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/f6227afb18d7e4b1bd54.mp3"
+  },
+  {
+   "id": "CH02_SC04_CHOICE_A_1",
+   "type": "dialogue",
+   "title": "Xử lý êm đẹp bằng Quỹ dự trù",
+   "background": "{{ASSET_BASE}}/a/9b9a0832cc98eb0cb622.webp",
+   "backgroundId": "BG05B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "relieved",
+     "src": "{{ASSET_BASE}}/a/daaedb279eb54ad1ddfb.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "May mà mình có lập Quỹ dự trù linh hoạt! Tiền tiết kiệm mua Laptop vẫn hoàn toàn nguyên vẹn.",
+   "nextSceneId": "CH02_SC05_A",
+   "knowledgeUnits": [],
+   "voiceUrl": "{{ASSET_BASE}}/v/bd9917521d8fe361769c.mp3"
+  },
+  {
+   "id": "CH02_SC04_CHOICE_B_1",
+   "type": "dialogue",
+   "title": "Chấp nhận lùi thời hạn",
+   "background": "{{ASSET_BASE}}/a/9b9a0832cc98eb0cb622.webp",
+   "backgroundId": "BG05B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/dd2e22396d5efd5cad9f.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Trừ vào tiền mua Laptop làm mình bị thiếu một khoản... Mình phải điều chỉnh lại thời hạn tiết kiệm thêm 1 tháng rồi.",
+   "nextSceneId": "CH02_SC05_A",
+   "knowledgeUnits": [],
+   "voiceUrl": "{{ASSET_BASE}}/v/509555d450ead490c858.mp3"
+  },
+  {
+   "id": "CH02_SC05_A",
+   "type": "scene",
+   "title": "Rà soát lại ngân sách",
+   "background": "{{ASSET_BASE}}/a/ba28902d535b9d968f88.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/ba28902d535b9d968f88.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH02_SC05_B1",
+   "knowledgeUnits": [
+    "D02.05",
+    "D02.06"
+   ]
+  },
+  {
+   "id": "CH02_SC05_B1",
+   "type": "dialogue",
+   "title": "Cô Linh tổng kết bài học rủi ro",
+   "background": "{{ASSET_BASE}}/a/3fdc0f03a5cac005adda.webp",
+   "backgroundId": "BG03B",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "encouraging",
+     "src": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp",
+     "position": "LEFT"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Các khoản phát sinh như sửa xe luôn xuất hiện bất ngờ. Lập Quỹ dự trù chính là lá chắn bảo vệ mục tiêu tài chính của các em!",
+   "nextSceneId": "CH02_ENDING",
+   "knowledgeUnits": [
+    "D02.05",
+    "D02.06"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/585d481ffe2e6710a690.mp3"
+  },
+  {
+   "id": "CH02_ENDING",
+   "type": "ending",
+   "title": "Kết thúc Chương 2",
+   "background": "{{ASSET_BASE}}/a/3fdc0f03a5cac005adda.webp",
+   "backgroundId": "BG03B",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": null,
+   "knowledgeUnits": []
+  }
+ ],
+ "endingRules": {
+  "priorityOrder": [
+   "A_GOAL_ACHIEVED",
+   "B_BALANCED",
+   "C_RECOVERY"
+  ],
+  "endings": [
+   {
+    "id": "A_GOAL_ACHIEVED",
+    "title": "Ending A: Goal Achieved",
+    "condition": "flag == 'risk_handled_buffer'",
+    "storyText": "An tự tin tổng kết tháng: 'Quản lý ngân sách chuẩn xác và có Quỹ dự trù giúp mình chủ động vượt qua sự cố sửa xe mà mục tiêu mua Laptop vẫn đúng tiến độ!'",
+    "characterSprite": "{{ASSET_BASE}}/a/daaedb279eb54ad1ddfb.webp",
+    "position": "LEFT",
+    "backgroundId": "BG03B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   },
+   {
+    "id": "B_BALANCED",
+    "title": "Ending B: Balanced",
+    "condition": "flag == 'risk_handled_savings'",
+    "storyText": "An cập nhật lại sổ tay: 'Dù phải lùi thời hạn mua Laptop thêm 1 tháng do sửa xe, mình đã biết cách tái cấu trúc kế hoạch tài chính thích ứng với thực tế.'",
+    "characterSprite": "{{ASSET_BASE}}/a/dd2e22396d5efd5cad9f.webp",
+    "position": "LEFT",
+    "backgroundId": "BG03B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   },
+   {
+    "id": "C_RECOVERY",
+    "title": "Ending C: Recovery",
+    "condition": "DEFAULT_FALLBACK",
+    "storyText": "An rút kinh nghiệm sâu sắc: 'Sự cố bất ngờ nhắc nhở mình không bao giờ được dồn hết tiền vào một mục tiêu mà quên mất Quỹ dự trù rủi ro.'",
+    "characterSprite": "{{ASSET_BASE}}/a/eff18d26be3a134fbe52.webp",
+    "position": "LEFT",
+    "backgroundId": "BG03B",
+    "finalStats": {
+     "SAVING": null,
+     "HAPPINESS": null,
+     "RISK": null,
+     "GOAL": null
+    }
+   }
+  ]
+ }
+}

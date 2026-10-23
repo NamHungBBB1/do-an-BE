@@ -74,7 +74,7 @@ class ContentFlowTest {
                  "sprites":{"MOM":{"neutral":"{{ASSET_BASE}}/a/abc.webp"}},
                  "scenes":[
                    {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/a/bg1.webp","text":"Chào","nextSceneId":"%s"},
-                   {"id":"choice-1","type":"choice","options":[{"id":"a","text":"Tiết kiệm","nextSceneId":"end"}]},
+                   {"id":"choice-1","type":"choice","options":[{"id":"a","text":"Tiết kiệm","nextSceneId":"end"},{"id":"b","text":"Tiêu ngay","nextSceneId":"end"}]},
                    {"id":"end","type":"ending"}
                  ],
                  "endingRules":{"priorityOrder":["x"],"endings":[]}}

@@ -7,6 +7,7 @@ import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
 import com.doan.game.DTO.response.DraftContentResponse;
+import com.doan.game.DTO.response.DraftSavedResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
@@ -39,10 +40,16 @@ public class StudioController {
 
     /** Body = nguyên object chương theo hình dạng FE (chapterNV2GameData). Lưu đè bản nháp của chương. */
     @PutMapping("/chapters/{code}/draft")
-    public ApiResponse<ChapterSummaryResponse> saveDraft(@AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<DraftSavedResponse> saveDraft(@AuthenticationPrincipal Jwt jwt,
                                                          @PathVariable String code,
                                                          @RequestBody JsonNode content) {
         return ApiResponse.ok(contentService.saveDraft(currentAccountId(jwt), code.trim().toUpperCase(), content));
+    }
+
+    /** Bộ khuôn nội dung (BE quyết khung): Studio dựng form, FE game kiểm schemaVersion. */
+    @GetMapping("/scene-schema")
+    public ApiResponse<JsonNode> sceneSchema() {
+        return ApiResponse.ok(contentService.sceneSchema());
     }
 
     /** Nháp mới nhất của một chương KÈM nội dung — Editor sửa tiếp, Reviewer chơi thử. */

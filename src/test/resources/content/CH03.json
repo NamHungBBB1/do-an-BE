@@ -1,0 +1,1256 @@
+{
+ "id": "CH03_V2",
+ "title": "Công việc đầu tiên",
+ "version": "2.0",
+ "initialStats": {
+  "SAVING": 50,
+  "HAPPINESS": 50,
+  "RISK": 30,
+  "GOAL": 50,
+  "WEALTH": 0,
+  "FIQ": 0
+ },
+ "initialMoney": 300000,
+ "metadata": {
+  "chapterId": "CH03",
+  "targetAge": 17,
+  "goalDescription": "Chọn hướng công việc mô phỏng theo thu nhập thực nhận, kỹ năng, thời gian học và tháng thu nhập thấp; kiểm tra thông tin độc lập trước khi quyết định.",
+  "coreKnowledgeUnits": [
+   "D02.02",
+   "D02.03",
+   "D02.04",
+   "D02.07"
+  ],
+  "allKnowledgeUnits": [
+   "D02.01",
+   "D02.02",
+   "D02.03",
+   "D02.04",
+   "D02.05",
+   "D02.06",
+   "D02.07",
+   "D02.08",
+   "D08.01",
+   "D08.07"
+  ]
+ },
+ "sprites": {
+  "AN": {
+   "an-neutral.png": "{{ASSET_BASE}}/a/cd20d1319798a0482dc6.webp",
+   "an-thinking.png": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+   "an-relieved.png": "{{ASSET_BASE}}/a/c709a9351fa15feb007a.webp",
+   "an-worried-money.png": "{{ASSET_BASE}}/a/19650d449ae5cee6c4d2.webp"
+  },
+  "MINH": {
+   "minh-neutral.png": "{{ASSET_BASE}}/a/53ba4084291f00fd93df.webp",
+   "minh-inviting.png": "{{ASSET_BASE}}/a/7f96193978f0ca45281f.webp"
+  },
+  "CO_LINH": {
+   "co-linh-neutral.png": "{{ASSET_BASE}}/a/1da74ebe550af25b72b9.webp",
+   "co-linh-explaining.png": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+   "co-linh-encouraging.png": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp"
+  },
+  "TU_VAN": {
+   "tu-van-neutral.png": "{{ASSET_BASE}}/a/07a557e5823b66af7e42.webp",
+   "tu-van-presenting.png": "{{ASSET_BASE}}/a/65fd3f8ba64e2b40d1eb.webp"
+  }
+ },
+ "scenes": [
+  {
+   "id": "CH03_SC01_A",
+   "type": "scene",
+   "title": "Ba lời mời",
+   "background": "{{ASSET_BASE}}/a/1851f58a0f3063105701.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/1851f58a0f3063105701.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH03_SC01_B0",
+   "knowledgeUnits": [
+    "D02.01"
+   ]
+  },
+  {
+   "id": "CH03_SC01_B0",
+   "type": "dialogue",
+   "title": "Tuần nghề nghiệp",
+   "background": "{{ASSET_BASE}}/a/a24cf70c68b0020401c7.webp",
+   "backgroundId": "BG06",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Chào mừng các em đến với Tuần lễ Hướng nghiệp! Thử thách hôm nay là tìm một công việc phù hợp với quỹ thời gian rảnh tối đa 12 tiếng/tuần và số vốn hiện có là 300.000đ. Bàn của cô đang có 3 tấm thẻ công việc giả định để các em tập làm quen với việc quản lý thu nhập, hãy đọc và cân nhắc thật kỹ nhé!",
+   "nextSceneId": "CH03_SC01_JOBS",
+   "knowledgeUnits": [
+    "D02.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/d9ad8408073875f86df0.mp3"
+  },
+  {
+   "id": "CH03_SC01_JOBS",
+   "type": "dialogue",
+   "title": "An xem qua các việc làm",
+   "background": "{{ASSET_BASE}}/a/a24cf70c68b0020401c7.webp",
+   "backgroundId": "BG06",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Để mình xem qua các việc làm trước đã.",
+   "nextSceneId": "CH03_SC01_JOBS_CHECK",
+   "knowledgeUnits": [
+    "D02.01"
+   ],
+   "inspect": {
+    "id": "ch03_job_compare",
+    "buttonText": "Xem bảng so sánh ba việc",
+    "popupImages": [
+     {
+      "src": "{{ASSET_BASE}}/a/68121e69180402eb7c93.webp",
+      "caption": "Bán hàng hưởng hoa hồng · 16 giờ/tuần",
+      "description": "Thu nhập có thể lên tới 3.000.000đ!"
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/8b8b45fb9e9369344616.webp",
+      "caption": "Trợ lý thiết kế · 10 giờ/tuần",
+      "description": "Lương gộp 3.000.000đ, chưa trừ các khoản khấu trừ theo quy định. Cần đóng phí 200.000đ trước."
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/a9c3a4f6464dc07e4be9.webp",
+      "caption": "Bán hàng nhỏ · 12 giờ/tuần",
+      "description": "Doanh thu mang về 1.200.000đ."
+     }
+    ],
+    "dataText": "Quỹ thời gian của An: tối đa 12 giờ/tuần.\nNgân sách học kỹ năng: 300.000đ.",
+    "setFlags": {
+     "jobs_compared": true
+    }
+   },
+   "voiceUrl": "{{ASSET_BASE}}/v/eadf9cd876eecb991839.mp3"
+  },
+  {
+   "id": "CH03_SC01_JOBS_CHECK",
+   "type": "conditional",
+   "ifTrueSceneId": "CH03_SC01_B1",
+   "ifFalseSceneId": "CH03_SC01_JOBS",
+   "condition": {
+    "expression": "flags.jobs_compared"
+   }
+  },
+  {
+   "id": "CH03_SC01_B1",
+   "type": "dialogue",
+   "title": "Minh rủ chọn hoa hồng",
+   "background": "{{ASSET_BASE}}/a/a24cf70c68b0020401c7.webp",
+   "backgroundId": "BG06",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "inviting",
+     "src": "{{ASSET_BASE}}/a/7f96193978f0ca45281f.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Uầy An ơi, công việc bán hàng hưởng hoa hồng này ghi thu nhập cao nhất tận 3 triệu kìa! Chốt đơn đi ông, nghĩ nhiều làm gì!",
+   "nextSceneId": "CH03_SC01_B2",
+   "knowledgeUnits": [
+    "D02.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/16446b13ff93d69d3978.mp3"
+  },
+  {
+   "id": "CH03_SC01_B2",
+   "type": "dialogue",
+   "title": "Cô Linh nhắc dữ kiện còn thiếu",
+   "background": "{{ASSET_BASE}}/a/a24cf70c68b0020401c7.webp",
+   "backgroundId": "BG06",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Minh nhìn kỹ lại xem nào. Con số to nhất trên quảng cáo chưa chắc là số tiền các em được cầm về tay đâu nhé. Thử nghĩ xem, nhỡ tháng đó ế khách thì sao? Hoặc lương 'gộp' có giống lương 'thực nhận' không?",
+   "nextSceneId": "CH03_SC01_B3",
+   "knowledgeUnits": [
+    "D02.02",
+    "D02.03"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/166f1160f01611081a73.mp3"
+  },
+  {
+   "id": "CH03_SC01_B3",
+   "type": "dialogue",
+   "title": "An tách doanh thu và lợi nhuận",
+   "background": "{{ASSET_BASE}}/a/a24cf70c68b0020401c7.webp",
+   "backgroundId": "BG06",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Đúng rồi đó Minh. Giống như cái việc bán đồ này nè, mang về 1 triệu 2 nhưng mình phải bỏ tiền vốn ra mua vật liệu trước mà. Đâu phải tất cả 1 triệu 2 đó đều là tiền lãi của mình đâu.",
+   "nextSceneId": "CH03_SC02_A",
+   "knowledgeUnits": [
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/964e0ab04c5853657ba8.mp3"
+  },
+  {
+   "id": "CH03_SC02_A",
+   "type": "scene",
+   "title": "Kiểm tra lời giới thiệu",
+   "background": "{{ASSET_BASE}}/a/2296e22eb3085965a2d0.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/2296e22eb3085965a2d0.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH03_SC02_B1",
+   "knowledgeUnits": [
+    "D08.01"
+   ]
+  },
+  {
+   "id": "CH03_SC02_B1",
+   "type": "dialogue",
+   "title": "Lời hứa chắc chắn có việc",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [
+    {
+     "id": "TU_VAN",
+     "expression": "presenting",
+     "src": "{{ASSET_BASE}}/a/65fd3f8ba64e2b40d1eb.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Người tư vấn",
+   "speakerId": "TU_VAN",
+   "text": "Đăng ký khóa này đi em trai! Chỗ anh bảo đảm 100% học xong là có việc làm ngay, lương tháng đầu dư sức bù tiền học phí!",
+   "nextSceneId": "CH03_SC02_B2",
+   "knowledgeUnits": [
+    "D08.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/a9135b0b141ebcec725d.mp3"
+  },
+  {
+   "id": "CH03_SC02_B2",
+   "type": "dialogue",
+   "title": "An muốn đọc chương trình",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Chắc chắn có việc luôn ạ? Lời hứa này 'mạnh' thật đấy... Nhưng em chưa thấy chương trình học cụ thể, và yêu cầu tuyển dụng của các công ty đối tác nằm ở đâu ạ?",
+   "nextSceneId": "CH03_SC02_B3",
+   "knowledgeUnits": [
+    "D08.01",
+    "D08.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/b530a5588c1e64378c38.mp3"
+  },
+  {
+   "id": "CH03_SC02_B3",
+   "type": "dialogue",
+   "title": "Cô Linh về thuế và dữ liệu thực hành",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Khi ai đó cam kết quá chắc chắn, em thử đoán xem họ có được lợi ích gì khi em gật đầu không? À, còn dòng chữ nhỏ xíu ghi 'khấu trừ thuế' kia nữa, hãy nhớ thuế là khoản đóng góp để nhà nước duy trì dịch vụ công, nhưng trong các ví dụ thực hành của trung tâm thế này, em phải đọc kỹ xem đó là thuế thật hay chỉ là phí ảo nhé.",
+   "nextSceneId": "CH03_SC02_CHOICE",
+   "knowledgeUnits": [
+    "D02.08"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/66b924400084d6a1992d.mp3"
+  },
+  {
+   "id": "CH03_SC02_CHOICE",
+   "type": "choice",
+   "title": "Kiểm tra lời giới thiệu",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Người tư vấn hưởng hoa hồng tuyển sinh. Em sẽ làm gì với lời bảo đảm này?",
+   "prompt": "Bạn sẽ làm gì với lời bảo đảm có việc?",
+   "inspect": {
+    "id": "ch03_source_data",
+    "buttonText": "Mở chương trình và yêu cầu tuyển dụng",
+    "popupImage": "{{ASSET_BASE}}/a/68c5402cda4823ce71d4.webp",
+    "dataText": "Về người tư vấn: Phát hiện ra họ nhận được tiền hoa hồng trên mỗi học viên đăng ký. (Cẩn thận: Lời khuyên của họ có thể thiên vị vì lợi ích cá nhân!)\nVề khóa học thiết kế: Website trường có đăng chương trình học rõ ràng, nhưng không có văn bản nào cam kết chắc chắn có việc làm ngay như lời quảng cáo.\nPhí khóa nhập môn: 200.000đ."
+   },
+   "options": [
+    {
+     "id": "CH03_SC02_CHOICE_A",
+     "label": "Đối chiếu chương trình học, chi phí và nguồn tuyển dụng độc lập",
+     "requires": {
+      "inspected": [
+       "ch03_source_data"
+      ],
+      "lockedReason": "Hãy mở chương trình khóa học và yêu cầu tuyển dụng trước khi chọn."
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "RISK": -1,
+      "GOAL": 1
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 1,
+      "P": 2
+     },
+     "flag": "source_checked",
+     "setFlags": {
+      "source_unchecked": false
+     },
+     "nextSceneId": "CH03_SC02_A_R1"
+    },
+    {
+     "id": "CH03_SC02_CHOICE_B",
+     "label": "Đăng ký liền tay luôn",
+     "requires": {
+      "inspected": [
+       "ch03_source_data"
+      ],
+      "lockedReason": "Hãy mở chương trình khóa học và yêu cầu tuyển dụng trước khi chọn."
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "RISK": 3
+     },
+     "evidenceScores": {
+      "I": 0,
+      "C": 0,
+      "P": 0
+     },
+     "flag": "source_unchecked",
+     "setFlags": {
+      "source_checked": false
+     },
+     "nextSceneId": "CH03_SC02_B_R1"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.08",
+    "D08.01",
+    "D08.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/a42709f146ee0b49a7dc.mp3"
+  },
+  {
+   "id": "CH03_SC02_A_R1",
+   "type": "dialogue",
+   "title": "Đã kiểm tra nguồn thông tin",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "relieved",
+     "src": "{{ASSET_BASE}}/a/c709a9351fa15feb007a.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Trường này có dạy thiết kế thật, nhưng trên website không có văn bản nào cam kết '100% có việc làm' cả.",
+   "nextSceneId": "CH03_SC02_JOIN",
+   "knowledgeUnits": [
+    "D08.01"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/037cf5064a6dee9e6f3f.mp3"
+  },
+  {
+   "id": "CH03_SC02_B_R1",
+   "type": "dialogue",
+   "title": "Nguồn thông tin chưa kiểm tra",
+   "background": "{{ASSET_BASE}}/a/f2d9de3ee9ff2618c036.webp",
+   "backgroundId": "BG06B",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "An ơi, em quyết định hơi vội rồi. Khi một người cố gắng thuyết phục em bằng mọi giá, rất có thể họ đang được nhận tiền hoa hồng trên chính quyết định của em đấy. Nhớ nhé, đừng bao giờ gật đầu với một lời hứa mà em chưa tự tay kiểm chứng.",
+   "nextSceneId": "CH03_SC02_JOIN",
+   "knowledgeUnits": [
+    "D08.01",
+    "D08.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/6988bbd9816e2f46192a.mp3"
+  },
+  {
+   "id": "CH03_SC02_JOIN",
+   "type": "conditional",
+   "title": "Điểm hội tụ cảnh 3",
+   "condition": {
+    "check": "flags.career_plan_opened"
+   },
+   "ifTrueSceneId": "CH03_SC03_CHOICE",
+   "ifFalseSceneId": "CH03_SC03_A",
+   "characters": [],
+   "knowledgeUnits": []
+  },
+  {
+   "id": "CH03_SC03_A",
+   "type": "scene",
+   "title": "Lịch tuần của An",
+   "background": "{{ASSET_BASE}}/a/4f1dc7ed6e75fd6471f9.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/4f1dc7ed6e75fd6471f9.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH03_SC03_B1",
+   "knowledgeUnits": [
+    "D02.03"
+   ]
+  },
+  {
+   "id": "CH03_SC03_B1",
+   "type": "dialogue",
+   "title": "An nhìn quỹ thời gian",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "worried-money",
+     "src": "{{ASSET_BASE}}/a/19650d449ae5cee6c4d2.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Nhìn lịch tuần này xem, mình rảnh tối đa có 12 tiếng thôi. Công việc bán hàng nhận hoa hồng kia yêu cầu làm tận 16 tiếng, chọn là kiểu gì cũng cấn lịch học trên trường cho xem.",
+   "nextSceneId": "CH03_SC03_B2",
+   "knowledgeUnits": [
+    "D02.03"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/ed12dd446855fcc7c412.mp3"
+  },
+  {
+   "id": "CH03_SC03_B2",
+   "type": "dialogue",
+   "title": "Minh nhắc học phí trả trước",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "MINH",
+     "expression": "neutral",
+     "src": "{{ASSET_BASE}}/a/53ba4084291f00fd93df.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Minh",
+   "speakerId": "MINH",
+   "text": "Công nhận. Nhưng ông tính sao vụ làm trợ lý thiết kế? Muốn nhận việc đó thì ngay hôm nay phải bỏ ra 200.000đ đóng học phí khóa nhập môn trước đấy nhé!",
+   "nextSceneId": "CH03_SC03_B3",
+   "knowledgeUnits": [
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/ca4f19451a3237d302bd.mp3"
+  },
+  {
+   "id": "CH03_SC03_B3",
+   "type": "dialogue",
+   "title": "Mở Career Match",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "explaining",
+     "src": "{{ASSET_BASE}}/a/e253c95a0814c977c7d4.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Khoan chốt vội nhé An! Em thử mở Career Match lên để kiểm tra xem việc nào khớp với lịch rảnh và tự tính lại số tiền thực nhận xem sao. Nhớ quy tắc này: 'lương trên giấy' chưa phải là tiền trong ví, nên số dư tài khoản hiện tại sẽ chưa tăng lên đâu, nó chỉ bị trừ đi nếu em chọn việc phải đóng phí trước thôi.",
+   "nextSceneId": "CH03_SC03_CAREER_MATCH",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.04",
+    "D02.07"
+   ],
+   "setFlags": {
+    "career_plan_opened": true
+   },
+   "voiceUrl": "{{ASSET_BASE}}/v/f0fd853a504b2cffb583.mp3"
+  },
+  {
+   "id": "CH03_SC03_CAREER_MATCH",
+   "type": "minigame",
+   "title": "Career Match: ghép nghề với kỹ năng và thời gian",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "game": {
+    "id": "CAREER_MATCH_CH03",
+    "mechanic": "MATCH_AND_CALCULATE",
+    "title": "Career Match",
+    "instruction": "Ghép từng việc với quỹ thời gian 12 giờ/tuần, rồi tính thu nhập thực nhận, lợi nhuận và khoản linh hoạt của tháng thấp.",
+    "weeklyLimit": 12,
+    "timeImage": "{{ASSET_BASE}}/a/c7529e28a217d85c0125.webp",
+    "jobs": [
+     {
+      "id": "commission",
+      "name": "Bán hàng hoa hồng",
+      "image": "{{ASSET_BASE}}/a/68121e69180402eb7c93.webp",
+      "hours": 16,
+      "facts": [
+       "Tháng tốt: 3.000.000đ",
+       "Tháng thấp: 2.000.000đ"
+      ]
+     },
+     {
+      "id": "design",
+      "name": "Trợ lý thiết kế",
+      "image": "{{ASSET_BASE}}/a/8b8b45fb9e9369344616.webp",
+      "hours": 10,
+      "facts": [
+       "Lương gộp: 3.000.000đ",
+       "Khấu trừ giả định: 300.000đ",
+       "Khóa nhập môn: 200.000đ"
+      ]
+     },
+     {
+      "id": "small-business",
+      "name": "Bán sản phẩm nhỏ",
+      "image": "{{ASSET_BASE}}/a/a9c3a4f6464dc07e4be9.webp",
+      "hours": 12,
+      "facts": [
+       "Doanh thu: 1.200.000đ",
+       "Chi phí: 800.000đ"
+      ]
+     }
+    ],
+    "questions": [
+     {
+      "id": "net_salary",
+      "title": "Trợ lý thiết kế: Lương thực nhận",
+      "formula": "Đừng để mức lương 'gộp' trên poster đánh lừa! Hãy tính số tiền An thực sự được mang về túi sau khi trừ đi các khoản khấu trừ bắt buộc.",
+      "options": [
+       {
+        "id": "a",
+        "label": "2.700.000đ"
+       },
+       {
+        "id": "b",
+        "label": "3.300.000đ"
+       },
+       {
+        "id": "c",
+        "label": "2.400.000đ"
+       }
+      ],
+      "correctId": "a",
+      "hint": "Lương gộp là số trước khấu trừ. Thực nhận = lương gộp trừ khấu trừ là 300.000đ.",
+      "explain": "Chính xác! Lương thực nhận = Lương gộp (3.000.000đ) - Khấu trừ (300.000đ). Phải luôn phân biệt rõ hai khái niệm này nhé!"
+     },
+     {
+      "id": "profit",
+      "title": "Bán sản phẩm nhỏ: Lợi nhuận",
+      "formula": "Tiền bán hàng thu về (Doanh thu) chưa chắc là tiền của mình! Nhớ trừ đi phần tiền túi An phải tự ứng ra trước để nhập hàng nhé.",
+      "options": [
+       {
+        "id": "a",
+        "label": "2.000.000đ"
+       },
+       {
+        "id": "b",
+        "label": "400.000đ"
+       },
+       {
+        "id": "c",
+        "label": "1.200.000đ"
+       }
+      ],
+      "correctId": "b",
+      "hint": "Doanh thu chưa phải tiền lãi. Lợi nhuận = doanh thu trừ chi phí.",
+      "explain": "Chuẩn luôn! Lợi nhuận = Doanh thu (1.200.000đ) - Chi phí vốn (800.000đ). Kinh doanh là phải tính cả chi phí rủi ro!"
+     },
+     {
+      "id": "low_month",
+      "title": "Tháng hoa hồng thấp: Bài toán bấp bênh thu nhập",
+      "formula": "Tháng này ế khách! Nếu An kiếm được mức thu nhập thấp nhất, sau khi thanh toán hết các chi phí sinh hoạt 'Thiết yếu', quỹ tiền cho các khoản 'Linh hoạt' còn lại bao nhiêu?",
+      "options": [
+       {
+        "id": "a",
+        "label": "3.800.000đ"
+       },
+       {
+        "id": "b",
+        "label": "0đ"
+       },
+       {
+        "id": "c",
+        "label": "200.000đ"
+       }
+      ],
+      "correctId": "c",
+      "hint": "Lấy thu nhập tháng thấp trừ phần chi phí thiết yếu để biết còn bao nhiêu cho khoản linh hoạt.",
+      "explain": "Quá đỉnh! Quỹ linh hoạt = Thu nhập tháng thấp (2.000.000đ) - Chi phí thiết yếu (1.800.000đ). Cầm 200.000đ thì tháng này An phải 'thắt lưng buộc bụng' lắm đây!"
+     }
+    ],
+    "maxScore": 6
+   },
+   "nextSceneId": "CH03_SC03_CHOICE",
+   "onPassSceneId": "CH03_SC03_CHOICE",
+   "onFailSceneId": "CH03_SC03_CAREER_MATCH",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.04",
+    "D02.07"
+   ]
+  },
+  {
+   "id": "CH03_SC03_CHOICE",
+   "type": "choice",
+   "title": "Chọn công việc và kỹ năng",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Không nhận lương ngay khi chọn. Mình sẽ chọn hướng nào?",
+   "prompt": "Bạn chọn công việc nào?",
+   "inspect": {
+    "id": "ch03_job_compare",
+    "buttonText": "Xem bảng so sánh ba việc",
+    "popupImages": [
+     {
+      "src": "{{ASSET_BASE}}/a/68121e69180402eb7c93.webp",
+      "caption": "Bán hàng hưởng hoa hồng · 16 giờ/tuần",
+      "description": "Thu nhập có thể lên tới 3.000.000đ!"
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/8b8b45fb9e9369344616.webp",
+      "caption": "Trợ lý thiết kế · 10 giờ/tuần",
+      "description": "Lương gộp 3.000.000đ, chưa trừ các khoản khấu trừ theo quy định. Cần đóng phí 200.000đ trước."
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/a9c3a4f6464dc07e4be9.webp",
+      "caption": "Bán hàng nhỏ · 12 giờ/tuần",
+      "description": "Doanh thu mang về 1.200.000đ."
+     }
+    ],
+    "dataText": "Quỹ thời gian của An: tối đa 12 giờ/tuần.\nNgân sách học kỹ năng: 300.000đ.",
+    "setFlags": {
+     "jobs_compared": true
+    }
+   },
+   "reviewAction": {
+    "label": "Quay lại kiểm tra nguồn",
+    "targetSceneId": "CH03_SC02_CHOICE"
+   },
+   "options": [
+    {
+     "id": "CH03_SC03_CHOICE_A",
+     "label": "Làm Trợ lý thiết kế",
+     "requires": {
+      "minMoney": 200000,
+      "flags": [
+       "source_checked"
+      ],
+      "inspected": [
+       "ch03_job_compare"
+      ],
+      "lockedReason": "Cần xem bảng so sánh, đã kiểm tra nguồn và phí khóa nhập môn (cảnh 2), và còn ít nhất 200.000đ."
+     },
+     "moneyEvents": [
+      {
+       "eventId": "ch03_course_fee",
+       "amount": -200000,
+       "label": "Phí khóa nhập môn thiết kế"
+      }
+     ],
+     "deltaStats": {
+      "GOAL": 7
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "career_fit",
+     "setFlags": {
+      "career_mismatch": false
+     },
+     "nextSceneId": "CH03_SC03_A_R1"
+    },
+    {
+     "id": "CH03_SC03_CHOICE_B",
+     "label": "Nhận việc bán hàng hoa hồng",
+     "requires": {
+      "inspected": [
+       "ch03_job_compare"
+      ],
+      "lockedReason": "Hãy mở bảng so sánh ba việc trước khi chọn."
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "HAPPINESS": -4,
+      "GOAL": 1
+     },
+     "evidenceScores": {
+      "I": 0,
+      "C": 0,
+      "P": 0
+     },
+     "flag": "career_mismatch",
+     "setFlags": {
+      "career_fit": false
+     },
+     "nextSceneId": "CH03_SC03_B_R1"
+    },
+    {
+     "id": "CH03_SC03_CHOICE_C",
+     "label": "Tự bán sản phẩm nhỏ",
+     "requires": {
+      "inspected": [
+       "ch03_job_compare"
+      ],
+      "lockedReason": "Hãy mở bảng so sánh ba việc trước khi chọn."
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "GOAL": 3
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "career_fit",
+     "setFlags": {
+      "career_mismatch": false
+     },
+     "nextSceneId": "CH03_SC03_D_R1"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.04",
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/e583811c6c4afb3e691b.mp3"
+  },
+  {
+   "id": "CH03_SC03_A_R1",
+   "type": "dialogue",
+   "title": "Đã trả phí khóa nhập môn",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "relieved",
+     "src": "{{ASSET_BASE}}/a/c709a9351fa15feb007a.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Chấp nhận đau ví chút vậy, tài khoản chỉ còn đúng 100.000đ. Nhưng bù lại, công việc này chỉ tốn 10 tiếng một tuần, mình vẫn dư sức đi học đầy đủ mà không lo trễ nải.",
+   "nextSceneId": "CH03_SC04_A",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/9a328cbdf3fb9245ec30.mp3"
+  },
+  {
+   "id": "CH03_SC03_B_R1",
+   "type": "dialogue",
+   "title": "Lịch học bị chồng",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "worried-money",
+     "src": "{{ASSET_BASE}}/a/19650d449ae5cee6c4d2.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Ủa chết, công việc này lẹm mất 4 tiếng vào lịch học chính trên trường rồi!",
+   "nextSceneId": "CH03_SC03_C_R1",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/4a26e5e04868cc06826b.mp3"
+  },
+  {
+   "id": "CH03_SC03_C_R1",
+   "type": "dialogue",
+   "title": "Lịch học bị chồng",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "encouraging",
+     "src": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Làm thêm là tốt, nhưng đừng để ảnh hưởng đến việc học chính nhé An. Em xem lại lịch và cân nhắc đổi phương án khác xem sao?",
+   "nextSceneId": "CH03_SC03_REVISE",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/0caa1444cfb214d3b464.mp3"
+  },
+  {
+   "id": "CH03_SC03_REVISE",
+   "type": "choice",
+   "title": "Sửa kế hoạch công việc",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Lịch học đang bị cấn mất 4 tiếng! Mình phải đổi phương án thôi...",
+   "prompt": "Bạn sửa kế hoạch ra sao?",
+   "choiceGroup": "CH03_SC03_CHOICE",
+   "inspect": {
+    "id": "ch03_job_compare",
+    "buttonText": "Xem bảng so sánh ba việc",
+    "popupImages": [
+     {
+      "src": "{{ASSET_BASE}}/a/68121e69180402eb7c93.webp",
+      "caption": "Bán hàng hưởng hoa hồng · 16 giờ/tuần",
+      "description": "Thu nhập có thể lên tới 3.000.000đ!"
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/8b8b45fb9e9369344616.webp",
+      "caption": "Trợ lý thiết kế · 10 giờ/tuần",
+      "description": "Lương gộp 3.000.000đ, chưa trừ các khoản khấu trừ theo quy định. Cần đóng phí 200.000đ trước."
+     },
+     {
+      "src": "{{ASSET_BASE}}/a/a9c3a4f6464dc07e4be9.webp",
+      "caption": "Bán hàng nhỏ · 12 giờ/tuần",
+      "description": "Doanh thu mang về 1.200.000đ."
+     }
+    ],
+    "dataText": "Quỹ thời gian của An: tối đa 12 giờ/tuần.\nNgân sách học kỹ năng: 300.000đ.",
+    "setFlags": {
+     "jobs_compared": true
+    }
+   },
+   "reviewAction": {
+    "label": "Quay lại kiểm tra nguồn",
+    "targetSceneId": "CH03_SC02_CHOICE"
+   },
+   "options": [
+    {
+     "id": "CH03_SC03_REVISE_A",
+     "label": "Quay xe làm trợ lý thiết kế",
+     "requires": {
+      "minMoney": 200000,
+      "flags": [
+       "source_checked"
+      ],
+      "inspected": [
+       "ch03_job_compare"
+      ],
+      "lockedReason": "Cần xem bảng so sánh, đã kiểm tra nguồn và phí khóa nhập môn (cảnh 2), và còn ít nhất 200.000đ."
+     },
+     "moneyEvents": [
+      {
+       "eventId": "ch03_course_fee",
+       "amount": -200000,
+       "label": "Phí khóa nhập môn thiết kế"
+      }
+     ],
+     "deltaStats": {
+      "GOAL": 7
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "career_fit",
+     "setFlags": {
+      "career_mismatch": false
+     },
+     "nextSceneId": "CH03_SC03_A_R1"
+    },
+    {
+     "id": "CH03_SC03_REVISE_C",
+     "label": "Chuyển sang Tự bán sản phẩm nhỏ",
+     "requires": {
+      "inspected": [
+       "ch03_job_compare"
+      ],
+      "lockedReason": "Hãy mở bảng so sánh ba việc trước khi chọn."
+     },
+     "moneyEvents": [],
+     "deltaStats": {
+      "GOAL": 3
+     },
+     "evidenceScores": {
+      "I": 2,
+      "C": 2,
+      "P": 2
+     },
+     "flag": "career_fit",
+     "setFlags": {
+      "career_mismatch": false
+     },
+     "nextSceneId": "CH03_SC03_D_R1"
+    },
+    {
+     "id": "CH03_SC03_REVISE_KEEP",
+     "label": "Mặc kệ, cứ chọn Bán hàng hoa hồng!",
+     "moneyEvents": [],
+     "deltaStats": {
+      "HAPPINESS": -4,
+      "GOAL": 1
+     },
+     "evidenceScores": {
+      "I": 0,
+      "C": 0,
+      "P": 0
+     },
+     "flag": "career_mismatch",
+     "setFlags": {
+      "career_fit": false
+     },
+     "nextSceneId": "CH03_SC04_A"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/c8a52b2654f0abaaabea.mp3"
+  },
+  {
+   "id": "CH03_SC03_D_R1",
+   "type": "dialogue",
+   "title": "Chọn bán hàng nhỏ",
+   "background": "{{ASSET_BASE}}/a/918b77cb7ae8997cb510.webp",
+   "backgroundId": "BG07",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Tuy tiền lời ít hơn mấy việc kia thật, nhưng thời gian lại vừa khít với lịch rảnh của mình. Chậm mà chắc, chọn cái này là hợp lý nhất rồi!",
+   "nextSceneId": "CH03_SC04_A",
+   "knowledgeUnits": [
+    "D02.03",
+    "D02.04"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/c1f24337e0add8d47f74.mp3"
+  },
+  {
+   "id": "CH03_SC04_A",
+   "type": "scene",
+   "title": "Ngày báo cáo nghề nghiệp",
+   "background": "{{ASSET_BASE}}/a/ed26cf59620560643301.webp",
+   "sceneArt": "{{ASSET_BASE}}/a/ed26cf59620560643301.webp",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": "CH03_SC04_B1",
+   "knowledgeUnits": [
+    "D02.07",
+    "D02.08"
+   ]
+  },
+  {
+   "id": "CH03_SC04_B1",
+   "type": "dialogue",
+   "title": "Cô Linh hỏi về căn cứ lựa chọn",
+   "background": "{{ASSET_BASE}}/a/6a984361c9ff62d821ef.webp",
+   "backgroundId": "BG06C",
+   "characters": [
+    {
+     "id": "CO_LINH",
+     "expression": "encouraging",
+     "src": "{{ASSET_BASE}}/a/4d1216494dff55c54441.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Tổng kết lại chặng đường hôm nay nào An! Sau bao nhiêu lần 'cân não', em đã rút ra được bí kíp gì khi chốt một công việc chưa? Và giả sử lỡ rơi vào những tháng 'ế khách', thu nhập sụt giảm thì em sẽ làm gì?",
+   "nextSceneId": "CH03_SC04_B2",
+   "knowledgeUnits": [
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/f3cd6b22989535e36dd9.mp3"
+  },
+  {
+   "id": "CH03_SC04_B2",
+   "type": "dialogue",
+   "title": "An trình bày căn cứ",
+   "background": "{{ASSET_BASE}}/a/6a984361c9ff62d821ef.webp",
+   "backgroundId": "BG06C",
+   "characters": [
+    {
+     "id": "AN",
+     "expression": "thinking",
+     "src": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+     "position": "center"
+    }
+   ],
+   "speaker": "An",
+   "speakerId": "AN",
+   "text": "Dạ, bài học nhớ đời của em là không được lóa mắt bởi những con số to đùng trên quảng cáo nữa ạ! Từ giờ chọn việc, em phải soi xem lịch làm có khớp với thời gian rảnh không, tự nhẩm xem 'lương thực nhận' cầm về túi là bao nhiêu, và tuyệt đối phảikiểm chứng thông tin chứ không nghe mấy lời hứa suông.",
+   "nextSceneId": "CH03_SC04_R1",
+   "knowledgeUnits": [
+    "D02.07",
+    "D08.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/c8d928c03a889bd74053.mp3"
+  },
+  {
+   "id": "CH03_SC04_R1",
+   "type": "choice",
+   "title": "Reflection 1: dữ kiện và phép tính",
+   "background": "{{ASSET_BASE}}/a/6a984361c9ff62d821ef.webp",
+   "backgroundId": "BG06C",
+   "characters": [],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Tóm lại, bài học rút ra ở đây là gì nhỉ? Khi cân nhắc một công việc, mình bắt buộc phải soi kỹ những cái gì?",
+   "prompt": "Tóm lại, bài học rút ra ở đây là gì nhỉ? Khi cân nhắc một công việc, mình bắt buộc phải soi kỹ những cái gì?",
+   "options": [
+    {
+     "id": "CH03_SC04_R1_A",
+     "label": "Soi toàn diện! Cân đối thời gian làm việc, tính 'lương cầm về' và phải kiểm chứng thông tin!",
+     "reflectionScore": 2,
+     "nextSceneId": "CH03_SC04_R2"
+    },
+    {
+     "id": "CH03_SC04_R1_B",
+     "label": "Chỉ quan tâm Lương và Giờ làm",
+     "reflectionScore": 1,
+     "nextSceneId": "CH03_SC04_R2"
+    },
+    {
+     "id": "CH03_SC04_R1_C",
+     "label": "Cứ thấy số tiền to nhất là chốt!",
+     "reflectionScore": 0,
+     "nextSceneId": "CH03_SC04_R2"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/730a284f0988fa151246.mp3"
+  },
+  {
+   "id": "CH03_SC04_R2",
+   "type": "choice",
+   "title": "Reflection 2: đánh đổi và bước tiếp theo",
+   "background": "{{ASSET_BASE}}/a/6a984361c9ff62d821ef.webp",
+   "backgroundId": "BG06C",
+   "characters": [],
+   "speaker": "Cô Linh",
+   "speakerId": "CO_LINH",
+   "text": "Nhìn lại quyết định vừa rồi, nhận ra bài học lớn nhất khi đi làm là gì nhỉ?",
+   "prompt": "Nhìn lại quyết định vừa rồi, nhận ra bài học lớn nhất khi đi làm là gì nhỉ?",
+   "options": [
+    {
+     "id": "CH03_SC04_R2_A",
+     "label": "Chấp nhận tốn phí học hoặc lãi ít đi để bảo vệ lịch học, và phải luôn có sẵn kế hoạch dự phòng cho những tháng 'ế khách'.",
+     "reflectionScore": 2,
+     "nextSceneId": "CH03_ENDING"
+    },
+    {
+     "id": "CH03_SC04_R2_B",
+     "label": "Chỉ biết chấp nhận mất tiền/thời gian trước mắt, còn hậu quả hay kế hoạch sau này thì... tới đâu hay tới đó!",
+     "reflectionScore": 1,
+     "nextSceneId": "CH03_ENDING"
+    },
+    {
+     "id": "CH03_SC04_R2_C",
+     "label": "Chẳng quan tâm đánh đổi! Cứ việc nào ghi lương to nhất là chốt.",
+     "reflectionScore": 0,
+     "nextSceneId": "CH03_ENDING"
+    }
+   ],
+   "knowledgeUnits": [
+    "D02.08",
+    "D08.07"
+   ],
+   "voiceUrl": "{{ASSET_BASE}}/v/94ec55ff6cdcbd0ade7b.mp3"
+  },
+  {
+   "id": "CH03_ENDING",
+   "type": "ending",
+   "title": "Kết thúc Chương 3",
+   "background": "{{ASSET_BASE}}/a/6a984361c9ff62d821ef.webp",
+   "backgroundId": "BG06C",
+   "characters": [],
+   "speaker": null,
+   "speakerId": null,
+   "text": null,
+   "nextSceneId": null,
+   "knowledgeUnits": []
+  }
+ ],
+ "endingRules": {
+  "priorityOrder": [
+   "C_RECOVERY",
+   "A_GOAL_ACHIEVED",
+   "B_BALANCED"
+  ],
+  "endings": [
+   {
+    "id": "C_RECOVERY",
+    "title": "Ending C: Recovery",
+    "condition": "flags.career_mismatch || !flags.source_checked || RISK > 55 || SAVING < 40",
+    "storyText": "An cần xem lại thông tin nghề: “Mức lương quảng cáo chưa đủ để quyết định.”",
+    "characterSprite": "{{ASSET_BASE}}/a/19650d449ae5cee6c4d2.webp",
+    "position": "center",
+    "backgroundId": "BG06C"
+   },
+   {
+    "id": "A_GOAL_ACHIEVED",
+    "title": "Ending A: Goal Achieved",
+    "condition": "flags.career_fit && flags.source_checked && !flags.choiceRevised && evidenceScore >= 9 && miniGameCompleted && reflectionScore >= 3",
+    "storyText": "An nộp lịch khả thi: “Mình đã chọn bằng dữ kiện, kể cả chi phí học trước mắt.”",
+    "characterSprite": "{{ASSET_BASE}}/a/c709a9351fa15feb007a.webp",
+    "position": "center",
+    "backgroundId": "BG06C"
+   },
+   {
+    "id": "B_BALANCED",
+    "title": "Ending B: Balanced",
+    "condition": "DEFAULT_FALLBACK",
+    "storyText": "An sửa lịch hoặc chọn con đường khác phù hợp: “Mình có một phương án đủ căn cứ để thử.”",
+    "characterSprite": "{{ASSET_BASE}}/a/deb38e29b7714d07fc95.webp",
+    "position": "center",
+    "backgroundId": "BG06C"
+   }
+  ]
+ },
+ "endingReport": {
+  "maxChoiceScore": 6,
+  "miniGameMax": 6,
+  "reflectionMax": 4,
+  "weights": {
+   "choices": 0.6,
+   "miniGame": 0.3,
+   "reflection": 0.1
+  },
+  "bands": [
+   {
+    "min": 85,
+    "label": "Đã thể hiện vững"
+   },
+   {
+    "min": 60,
+    "label": "Đang hình thành"
+   },
+   {
+    "min": 0,
+    "label": "Cần luyện thêm"
+   }
+  ],
+  "achieved": [
+   {
+    "when": "flags.source_checked",
+    "text": "Bạn đã đối chiếu chương trình, chi phí và nguồn tuyển dụng độc lập trước khi quyết định."
+   },
+   {
+    "when": "flags.career_fit",
+    "text": "Bạn chọn công việc khớp quỹ thời gian 12 giờ/tuần và dựa trên số tiền thực nhận."
+   },
+   {
+    "text": "Bạn đã hoàn thành Career Match và tính được thực nhận, lợi nhuận và khoản linh hoạt của tháng thấp."
+   }
+  ],
+  "practice": [
+   {
+    "when": "!flags.source_checked",
+    "text": "Hỏi xem người giới thiệu có hưởng hoa hồng không và đối chiếu nguồn độc lập trước khi tin lời bảo đảm."
+   },
+   {
+    "when": "flags.career_mismatch",
+    "text": "Đặt số giờ làm cạnh quỹ thời gian trước khi nhìn mức thu nhập cao nhất."
+   },
+   {
+    "when": "flags.choiceRevised",
+    "text": "Kiểm tra dữ kiện ngay từ lần chọn đầu để không phải sửa kế hoạch."
+   },
+   {
+    "text": "Lập sẵn kế hoạch cho tháng thu nhập thấp: 2.000.000đ trừ 1.800.000đ thiết yếu còn 200.000đ linh hoạt."
+   }
+  ],
+  "nextStep": "Mua thông minh: so sánh tổng giá trị, hợp đồng, thuê bao và quyền khiếu nại."
+ }
+}

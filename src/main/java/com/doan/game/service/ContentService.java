@@ -6,6 +6,7 @@ import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
 import com.doan.game.DTO.response.DraftContentResponse;
+import com.doan.game.DTO.response.DraftSavedResponse;
 import com.doan.game.DTO.response.ReleasePlanResponse;
 import com.doan.game.DTO.response.DraftSummaryResponse;
 import com.doan.game.DTO.response.ReleaseSummaryResponse;
@@ -39,7 +40,10 @@ public interface ContentService {
      * Editor / ADMIN lưu nháp cho chương (tạo Chapter nếu chưa có). Kiểm cấu trúc: scene id không trùng, mọi next trỏ
      * cảnh có thật. Nháp đang SUBMITTED thì 6003; nháp REJECTED / APPROVED lưu lại thì về DRAFT, revision tăng.
      */
-    ChapterSummaryResponse saveDraft(UUID callerId, String code, JsonNode content);
+    DraftSavedResponse saveDraft(UUID callerId, String code, JsonNode content);
+
+    /** Bộ khuôn nội dung (24/10, K1): loại cảnh, trường, chỉ số, điều kiện, loại mini-game — Studio dựng form từ đây. */
+    JsonNode sceneSchema();
 
     /** Nháp mới nhất của một chương kèm JSON ({{ASSET_BASE}} đã thay) — Editor sửa tiếp, Reviewer chơi thử. 1003 nếu chưa có. */
     DraftContentResponse draftContent(String code);
