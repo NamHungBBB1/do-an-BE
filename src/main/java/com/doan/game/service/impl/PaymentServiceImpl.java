@@ -103,9 +103,9 @@ public class PaymentServiceImpl implements PaymentService {
         // Khoá tài khoản (P-02): hai request Mua cùng lúc xếp hàng, request sau thấy đơn request trước vừa tạo.
         Account account = accountRepo.lockById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
-        // "Admin là admin, không mua gói" (Hưng chốt 08/10, P-08).
-        if (accountRoleRepo.existsByAccount_IdAndRole(accountId, Role.ADMIN)) {
-            throw new AppException(ErrorCode.FORBIDDEN, "tài khoản admin không mua gói");
+        // "Admin là admin, không mua gói" (Hưng chốt 08/10, P-08), mở rộng 23/10 cho mọi vai nội bộ.
+        if (accountRoleRepo.isInternal(accountId)) {
+            throw new AppException(ErrorCode.INTERNAL_ACCOUNT_NOT_CUSTOMER);
         }
         Plan plan = planRepo.findByKind(kind)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));

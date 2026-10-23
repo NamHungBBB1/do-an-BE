@@ -25,6 +25,12 @@ public interface AuthService {
     TokenResponse login(LoginRequest req);
 
     /**
+     * Cửa nội bộ (23/10): kiểm mật khẩu y hệt login (sai → 3002 như login, không lộ email nào là nội bộ); đúng mà
+     * không có vai nội bộ → 3022. Token có claim ctx=INTERNAL, sống app.jwt.internal-ttl-hours (8 giờ). Không có Google.
+     */
+    TokenResponse internalLogin(LoginRequest req);
+
+    /**
      * Đăng nhập/đăng ký bằng Google (qua Firebase): BE kiểm ID token rồi phát JWT FinTeen,
      * không giữ phiên nào của Google. Nhận cả req để kiểm provider chứ không chỉ idToken.
      */

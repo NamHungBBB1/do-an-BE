@@ -21,6 +21,9 @@ import java.util.UUID;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
 
+    /** Đã từng tạo đơn mua gói — tài khoản khách hàng, không cấp vai nội bộ (23/10). */
+    boolean existsByAccount_Id(UUID accountId);
+
     Optional<Transaction> findByOrderCode(Long orderCode);
 
     /**

@@ -15,6 +15,7 @@ import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.LearnerGroupMapper;
 import com.doan.game.mapper.SlotMapper;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
@@ -50,6 +51,7 @@ public class GroupServiceImpl implements GroupService {
     private final LearnerGroupRepository groupRepo;
     private final LearnerSlotRepository slotRepo;
     private final AccountRepository accountRepo;
+    private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
     private final ReportService reportService;
     private final Clock clock;
@@ -73,6 +75,9 @@ public class GroupServiceImpl implements GroupService {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "name: tối đa 80 ký tự");
         }
         LearningContext context = parseContext(req.context());
+        if (accountRoleRepo.isInternal(ownerId)) {
+            throw new AppException(ErrorCode.INTERNAL_ACCOUNT_NOT_CUSTOMER);
+        }
         PlanKind required = context == LearningContext.FAMILY ? PlanKind.PARENT : PlanKind.TEACHER;
         if (!entitlementService.activePlans(ownerId).contains(required)) {
             // Dùng lại 3005 PLAN_REQUIRED có sẵn (Hưng chốt 07/10) — hai mã cùng nghĩa thì FE
