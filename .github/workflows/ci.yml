@@ -19,6 +19,8 @@ jobs:
           java-version: '17'
           distribution: temurin
           cache: maven
+      # Kho ảnh (24/10): đổi PNG / JPEG → WebP bằng ffmpeg; không có thì ca test giữ trong suốt bị bỏ qua thay vì chạy.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: mvn -B test
 
   deploy:

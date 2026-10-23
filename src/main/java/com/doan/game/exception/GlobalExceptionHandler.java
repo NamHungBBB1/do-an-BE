@@ -112,6 +112,15 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ec.getCode(), "tham số " + ex.getName() + " sai kiểu"));
     }
 
+    /** Tệp tải lên vượt spring.servlet.multipart.max-file-size (kho ảnh 24/10) → 400/6008 thay vì 500. */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        ErrorCode ec = ErrorCode.ASSET_INVALID;
+        return ResponseEntity.status(ec.getStatus())
+                .body(ApiResponse.error(ec.getCode(), ec.getMessage()));
+    }
+
     /** Endpoint còn khung ném UnsupportedOperationException → 501/1004 đúng như README hứa, không phải 500. */
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotImplemented(UnsupportedOperationException ex) {
