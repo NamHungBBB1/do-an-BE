@@ -237,6 +237,10 @@ public class ContentSchema {
             if (v.size() < min) {
                 throw fail(p, "cần ít nhất " + min + " lựa chọn");
             }
+            // 1 lựa chọn là màn "Tiếp tục" có thật (CH05_SC04_RECAP) — cho qua, chỉ nhắc.
+            if (v.size() < def.path("warnBelowItems").asInt(0)) {
+                warn(p + ": chỉ " + v.size() + " lựa chọn — như nút tiếp tục");
+            }
             Map<String, JsonNode> defs = new LinkedHashMap<>();
             schema.path("optionFields").fields().forEachRemaining(e -> defs.put(e.getKey(), e.getValue()));
             for (int i = 0; i < v.size(); i++) {

@@ -42,6 +42,13 @@ class ContentSchemaTest {
     }
 
     @Test
+    void singleOptionChoiceIsAllowedWithWarning() throws Exception {
+        ObjectNode c = minimal();
+        ((com.fasterxml.jackson.databind.node.ArrayNode) c.path("scenes").get(0).path("options")).remove(1);
+        assertThat(schema.validate(c)).containsExactly("scenes[0].options: chỉ 1 lựa chọn — như nút tiếp tục");
+    }
+
+    @Test
     void uppercasePositionIsKeptAndWarned() throws Exception {
         JsonNode ch = chapter("CH01.json");
         assertThat(schema.validate(ch)).anyMatch(w -> w.contains(".position: 'LEFT'"));
@@ -78,8 +85,8 @@ class ContentSchemaTest {
         assertThatThrownBy(() -> schema.validate(c)).isInstanceOf(AppException.class).hasMessageContaining("scenes[0].type");
 
         ObjectNode d = minimal();
-        ((com.fasterxml.jackson.databind.node.ArrayNode) d.path("scenes").get(0).path("options")).remove(1);
-        assertThatThrownBy(() -> schema.validate(d)).hasMessageContaining("ít nhất 2 lựa chọn");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) d.path("scenes").get(0).path("options")).removeAll();
+        assertThatThrownBy(() -> schema.validate(d)).hasMessageContaining("ít nhất 1 lựa chọn");
 
         ObjectNode e = minimal();
         ((ObjectNode) e.path("scenes").get(0).path("options").get(0).path("deltaStats")).put("SAVING", "nhiều");
