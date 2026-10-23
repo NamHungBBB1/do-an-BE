@@ -37,8 +37,15 @@ class ContentSchemaTest {
         assertThat(warnings).isNotEmpty();   // điều kiện chuỗi, tên loại cũ 'scene', mini-game thiếu kind, FIQ
         assertThat(warnings).anyMatch(w -> w.contains("tên cũ 'scene'"));
         assertThat(warnings).anyMatch(w -> w.contains("initialStats.FIQ"));
-        // "LEFT" viết hoa đã chuẩn hoá về chữ thường (FE chỉ hiểu chữ thường).
-        assertThat(ch.toString()).doesNotContain("\"position\":\"LEFT\"");
+        // Bộ khuôn không được đổi nội dung: tách rồi ghép phải y bản cũ (Hưng 24/10).
+        assertThat(ch).isEqualTo(chapter(file));
+    }
+
+    @Test
+    void uppercasePositionIsKeptAndWarned() throws Exception {
+        JsonNode ch = chapter("CH01.json");
+        assertThat(schema.validate(ch)).anyMatch(w -> w.contains(".position: 'LEFT'"));
+        assertThat(ch.toString()).contains("\"position\":\"LEFT\"");
     }
 
     @Test

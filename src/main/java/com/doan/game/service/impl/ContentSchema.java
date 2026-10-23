@@ -4,8 +4,6 @@ import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -197,7 +195,10 @@ public class ContentSchema {
             }
         }
 
-        /** position chuẩn hoá về chữ thường ("LEFT" → "left": FE chỉ hiểu chữ thường — 19 chỗ trong CH01–02). */
+        /**
+         * position giữ NGUYÊN chữ người soạn ghi, chỉ cảnh báo khi khác chữ thường. "LEFT" (19 chỗ CH01–02) FE không hiểu nên nhân vật
+         * đứng sát mép; tự đổi sang "left" làm nhân vật dịch vào 8 % — đổi hình mà không ai quyết (Hưng 24/10: ghép lại phải y bản cũ).
+         */
         void position(JsonNode c, String p) {
             JsonNode pos = c.get("position");
             if (pos == null || pos.isNull()) {
@@ -207,8 +208,8 @@ public class ContentSchema {
             if (!positions.contains(norm)) {
                 throw fail(p + ".position", "phải là " + positions);
             }
-            if (!norm.equals(pos.asText()) && c instanceof ObjectNode o) {
-                o.set("position", TextNode.valueOf(norm));
+            if (!norm.equals(pos.asText())) {
+                warn(p + ".position: '" + pos.asText() + "' FE chưa hiểu (nhân vật đứng sát mép) — sửa thành '" + norm + "' sẽ dịch nhân vật vào");
             }
         }
 
