@@ -17,6 +17,9 @@ import java.util.UUID;
 @Repository
 public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> {
 
+    /** Đã từng có gói (kể cả hết hạn) — tài khoản khách hàng, không cấp vai nội bộ (23/10). */
+    boolean existsByAccount_Id(UUID accountId);
+
     /** Gói mới nhất của một loại: gia hạn nối tiếp từ expiresOn của nó. */
     Optional<Entitlement> findTopByAccount_IdAndKindOrderByExpiresOnDesc(UUID accountId, PlanKind kind);
 

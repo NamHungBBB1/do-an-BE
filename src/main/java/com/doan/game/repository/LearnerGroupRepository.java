@@ -14,6 +14,9 @@ import java.util.UUID;
 @Repository
 public interface LearnerGroupRepository extends JpaRepository<LearnerGroup, UUID> {
 
+    /** Đã từng mở nhóm (gia đình / lớp) — tài khoản khách hàng, không cấp vai nội bộ (23/10). */
+    boolean existsByOwner_Id(UUID ownerId);
+
     /**
      * Khoá dòng nhóm (SELECT ... FOR UPDATE) khi mở slot: đếm slot rồi chèn mà không khoá thì
      * hai request song song cùng đếm 3/4 rồi cùng chèn, nhóm thành 5/4. Mẫu có sẵn:

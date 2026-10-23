@@ -84,6 +84,40 @@ class InternalLoginFlowTest {
                 .andExpect(status().isForbidden());
     }
 
+    /** Tài khoản nội bộ là riêng: chỉ cấp vai cho tài khoản trắng (3024); tài khoản nội bộ không nhận gói, không mở nhóm (3025). */
+    @Test
+    void internalAndCustomerAccountsStaySeparate() throws Exception {
+        Account admin = account("quan-tri", Role.ADMIN);
+        Account customer = account("da-mua", null);
+        Account clean = account("trang", null);
+        String access = json.readTree(login("/api/auth/internal/login", admin.getEmail(), PASSWORD)
+                        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("result").path("accessToken").asText();
+        String bearer = "Bearer " + access;
+
+        mvc.perform(post("/api/entitlements/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accountId\":\"" + customer.getId() + "\",\"kind\":\"PARENT\",\"months\":1,\"reason\":\"thu\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/admin/roles/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                        .content(roleJson(customer, "GAME_EDITOR")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(3024));
+        mvc.perform(post("/api/admin/roles/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                        .content(roleJson(clean, "GAME_EDITOR")))
+                .andExpect(status().isOk());
+
+        // Ngược lại: tài khoản nội bộ không nhận gói, không mở nhóm.
+        mvc.perform(post("/api/entitlements/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accountId\":\"" + clean.getId() + "\",\"kind\":\"PARENT\",\"months\":1,\"reason\":\"thu\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3025));
+        mvc.perform(post("/api/groups").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Nhom admin\",\"context\":\"FAMILY\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3025));
+    }
+
+    private static String roleJson(Account a, String role) {
+        return "{\"subjectId\":\"" + a.getId() + "\",\"role\":\"" + role + "\",\"reason\":\"thu\"}";
+    }
+
     private org.springframework.test.web.servlet.ResultActions login(String path, String email, String password)
             throws Exception {
         return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)

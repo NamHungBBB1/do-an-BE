@@ -12,7 +12,10 @@ import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.EntitlementRepository;
+import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.RoleGrantLogRepository;
+import com.doan.game.repository.TransactionRepository;
 import com.doan.game.mapper.AccountMapper;
 import com.doan.game.service.AdminService;
 import com.doan.game.service.EntitlementService;
@@ -57,6 +60,9 @@ public class AdminServiceImpl implements AdminService {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final RoleGrantLogRepository roleGrantLogRepo;
+    private final EntitlementRepository entitlementRepo;
+    private final TransactionRepository transactionRepo;
+    private final LearnerGroupRepository groupRepo;
     private final EntitlementService entitlementService;
     private final Clock clock;
 
@@ -65,6 +71,11 @@ public class AdminServiceImpl implements AdminService {
     public RoleListResponse grantRole(UUID actorId, GrantRoleRequest req) {
         Role role = internalRole(req);
         Account target = target(req);
+        // Tài khoản nội bộ là riêng, không phải khách hàng (Hưng chốt 23/10): chỉ cấp cho tài khoản trắng.
+        if (entitlementRepo.existsByAccount_Id(target.getId()) || transactionRepo.existsByAccount_Id(target.getId())
+                || groupRepo.existsByOwner_Id(target.getId())) {
+            throw new AppException(ErrorCode.CUSTOMER_ACCOUNT_NOT_INTERNAL);
+        }
         // Đã có thì lặp vô hại: không thêm dòng (UNIQUE(accountId, role)) và không ghi sổ, vì không có gì đổi.
         if (!accountRoleRepo.existsByAccount_IdAndRole(target.getId(), role)) {
             Instant now = Instant.now(clock);

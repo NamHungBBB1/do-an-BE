@@ -10,6 +10,7 @@ import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.EntitlementMapper;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.service.EntitlementFactory;
 import com.doan.game.service.EntitlementService;
@@ -46,6 +47,7 @@ public class EntitlementServiceImpl implements EntitlementService {
 
     private final EntitlementRepository entitlementRepo;
     private final AccountRepository accountRepo;
+    private final AccountRoleRepository accountRoleRepo;
     private final EntitlementFactory entitlementFactory;
     private final Clock clock;
 
@@ -91,6 +93,9 @@ public class EntitlementServiceImpl implements EntitlementService {
         }
         Account recipient = accountRepo.findById(req.accountId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + req.accountId()));
+        if (accountRoleRepo.isInternal(recipient.getId())) {
+            throw new AppException(ErrorCode.INTERNAL_ACCOUNT_NOT_CUSTOMER);
+        }
         Account admin = accountRepo.findById(adminId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản admin " + adminId));
 

@@ -220,16 +220,16 @@ class PaymentServiceImplTest {
         verify(planRepo, never()).findByKind(any());
     }
 
-    /** P-08: admin là admin, không mua gói → 3004. */
+    /** P-08: admin là admin, không mua gói; từ 23/10 mọi vai nội bộ → 3025. */
     @Test
     void adminCannotBuyAPlan() {
         when(accountRepo.lockById(account.getId())).thenReturn(Optional.of(account));
-        when(accountRoleRepo.existsByAccount_IdAndRole(account.getId(), com.doan.game.enums.Role.ADMIN)).thenReturn(true);
+        when(accountRoleRepo.isInternal(account.getId())).thenReturn(true);
 
         var ex = org.junit.jupiter.api.Assertions.assertThrows(com.doan.game.exception.AppException.class,
                 () -> svc.createPayment(account.getId(), new com.doan.game.DTO.request.BuyPlanRequest("PARENT")));
 
-        assertEquals(3004, ex.getErrorCode().getCode());
+        assertEquals(3025, ex.getErrorCode().getCode());
         verifyNoInteractions(payOSProvider);
     }
 

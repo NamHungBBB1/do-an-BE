@@ -73,6 +73,10 @@ public enum ErrorCode {
     // 23/10 cửa đăng nhập nội bộ (Hưng chốt: tài khoản nội bộ là riêng, không phải khách hàng).
     NOT_INTERNAL_ACCOUNT(3022, "Tài khoản này không phải tài khoản nội bộ", HttpStatus.FORBIDDEN),
     INTERNAL_LOGIN_REQUIRED(3023, "Tài khoản nội bộ đăng nhập ở trang đăng nhập nội bộ", HttpStatus.FORBIDDEN),
+    CUSTOMER_ACCOUNT_NOT_INTERNAL(3024, "Tài khoản này đã dùng như khách hàng (gói, giao dịch hoặc nhóm) — cấp vai nội bộ"
+            + " cho một tài khoản riêng", HttpStatus.CONFLICT),
+    INTERNAL_ACCOUNT_NOT_CUSTOMER(3025, "Tài khoản nội bộ không mua gói, không nhận gói và không mở nhóm",
+            HttpStatus.FORBIDDEN),
     // 4xxx  thanh toán và gói
     PLAN_KIND_INVALID(4001, "Loại gói không hợp lệ — chỉ PARENT hoặc TEACHER", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_NOT_SET(4002, "Admin chưa đặt giá cho gói này", HttpStatus.CONFLICT),
