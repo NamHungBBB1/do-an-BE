@@ -2,6 +2,7 @@ package com.doan.game;
 
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.enums.ChangeClass;
 import com.doan.game.enums.Role;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -124,11 +126,23 @@ class ContentFlowTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(1003));
 
-        // Phiên bản phải là SemVer.
+        // PR C: chỉ phát hành nháp ĐÃ DUYỆT — nháp chưa duyệt thì 6005.
+        mvc.perform(post("/api/studio/releases").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6005));
+        // Duyệt nhưng người phát hành chính là người sửa → 6007 (bốn mắt cả ở khâu phát hành).
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, false);
+        mvc.perform(post("/api/studio/releases").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(6007));
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, true);
+        // Số hiệu do BE tính: bản đầu luôn 1.0.0 — gửi số khác → 6004.
         mvc.perform(post("/api/studio/releases").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"version\":\"v1\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6004));
 
         mvc.perform(post("/api/studio/releases").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -163,14 +177,19 @@ class ContentFlowTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/api/content/chapters/CH01"))
                 .andExpect(jsonPath("$.result.title").value("Lần 1"));   // nháp chưa phát hành
+        // Nháp đã RELEASED không bị kéo về: sửa tiếp mở dòng nháp mới, revision nối tiếp.
+        assertThat(draftRepo.findAll()).extracting(d -> d.getStatus() + "@" + d.getRevision())
+                .containsExactlyInAnyOrder("RELEASED@1", "DRAFT@2");
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, true);
         mvc.perform(post("/api/studio/releases").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"version\":\"1.0.0\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(6001));
+                .andExpect(jsonPath("$.code").value(6004));
         mvc.perform(post("/api/studio/releases").with(asAdmin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"version\":\"1.0.1\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.current").value(true));
+                .andExpect(jsonPath("$.result.current").value(true))
+                .andExpect(jsonPath("$.result.changeClass").value("PATCH"));
         mvc.perform(get("/api/content/current"))
                 .andExpect(jsonPath("$.result.version").value("1.0.1"));
         mvc.perform(get("/api/content/releases/1.0.1/chapters/CH01"))
@@ -188,5 +207,70 @@ class ContentFlowTest {
         mvc.perform(get("/api/studio/releases").with(asAdmin))
                 .andExpect(jsonPath("$.result.length()").value(2))
                 .andExpect(jsonPath("$.result[?(@.current == true)].version").value("1.0.0"));
+        // Bản đang chạy không phải bản mới nhất → không phát hành chồng lên (sẽ đánh rơi thay đổi của 1.0.1).
+        mvc.perform(post("/api/studio/releases").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6006));
+    }
+
+    /** Thu hồi bản lỗi: lùi về bản cũ hơn, bản bị thu hồi không dùng lại được; số hiệu sau đó vẫn đi lên; chương mới = MAJOR. */
+    @Test
+    void recallRollsBackAndNewChapterIsMajor() throws Exception {
+        var asAdmin = admin();
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Bản 1", "choice-1"))).andExpect(status().isOk());
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.PATCH, true);
+        // Bản đầu luôn 1.0.0, loại PATCH vẫn ghi MAJOR vì CH01 là chương mới.
+        mvc.perform(post("/api/studio/releases").with(asAdmin).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.0"))
+                .andExpect(jsonPath("$.result.changeClass").value("MAJOR"));
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(asAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Bản lỗi", "choice-1"))).andExpect(status().isOk());
+        ContentTestSupport.approve(repos(), "CH01", ChangeClass.MINOR, true);
+        mvc.perform(post("/api/studio/releases").with(asAdmin).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(jsonPath("$.result.version").value("1.1.0"));
+
+        // Thu hồi: phải có lý do; chỉ bản đang chạy.
+        mvc.perform(post("/api/studio/releases/1.1.0/recall").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(post("/api/studio/releases/1.0.0/recall").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6006));
+        mvc.perform(post("/api/studio/releases/1.1.0/recall").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"sai số liệu cảnh 2\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.0"))
+                .andExpect(jsonPath("$.result.current").value(true));
+        mvc.perform(get("/api/content/current")).andExpect(jsonPath("$.result.version").value("1.0.0"));
+        assertThat(releaseRepo.findByVersion("1.1.0").orElseThrow().getRecallReason()).isEqualTo("sai số liệu cảnh 2");
+        // Bản đã thu hồi không đặt lại được; không còn bản cũ hơn để lùi → từ chối, game không bao giờ mất bản hiện tại.
+        mvc.perform(post("/api/studio/releases/1.1.0/current").with(asAdmin))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(6006));
+        mvc.perform(post("/api/studio/releases/1.0.0/recall").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(6006));
+
+        // Bản sửa đi lên từ số LỚN NHẤT (kể cả bản đã thu hồi) — không ra lại 1.1.0. Thêm CH02 (khai PATCH) → MAJOR 2.0.0,
+        // CH01 giữ nội dung của bản đang chạy 1.0.0.
+        mvc.perform(put("/api/studio/chapters/CH02/draft").with(asAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Chương 2", "choice-1"))).andExpect(status().isOk());
+        ContentTestSupport.approve(repos(), "CH02", ChangeClass.PATCH, true);
+        mvc.perform(post("/api/studio/releases").with(asAdmin).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("2.0.0"))
+                .andExpect(jsonPath("$.result.chapters.length()").value(2));
+        mvc.perform(get("/api/content/releases/2.0.0/chapters/CH01")).andExpect(jsonPath("$.result.title").value("Bản 1"));
+        mvc.perform(get("/api/studio/releases").with(asAdmin))
+                .andExpect(jsonPath("$.result[0].version").value("2.0.0"))
+                .andExpect(jsonPath("$.result[1].recalledAt").isNotEmpty());
+    }
+
+    private ContentTestSupport.Repos repos() {
+        return new ContentTestSupport.Repos(releaseChapterRepo, releaseRepo, draftRepo, chapterRepo);
     }
 }

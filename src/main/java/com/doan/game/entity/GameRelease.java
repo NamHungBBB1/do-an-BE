@@ -1,5 +1,6 @@
 package com.doan.game.entity;
 
+import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -39,4 +40,19 @@ public class GameRelease {
 
     @Column(name = "is_current", nullable = false, columnDefinition = "boolean default false not null")
     private boolean isCurrent;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "change_class")
+    private ChangeClass changeClass;
+
+    @Column(name = "recalled_at")
+    private Instant recalledAt;
+
+    /** Account. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "recalled_by_id", nullable = true)
+    private Account recalledBy;
+
+    @Column(name = "recall_reason", length = 255)
+    private String recallReason;
 }

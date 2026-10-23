@@ -1,6 +1,7 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.CreateReleaseRequest;
+import com.doan.game.DTO.request.RecallReleaseRequest;
 import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
@@ -11,6 +12,7 @@ import com.doan.game.entity.Chapter;
 import com.doan.game.entity.ChapterDraft;
 import com.doan.game.entity.GameRelease;
 import com.doan.game.entity.ReleaseChapter;
+import com.doan.game.enums.ChangeClass;
 import com.doan.game.enums.DraftStatus;
 import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
@@ -28,6 +30,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +44,13 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Ruột nội dung game, giai đoạn 1 (09/10). Nội dung lưu NGUYÊN hình dạng JSON của FE
@@ -60,7 +66,6 @@ public class ContentServiceImpl implements ContentService {
     private static final Logger log = LoggerFactory.getLogger(ContentServiceImpl.class);
     static final String ASSET_PLACEHOLDER = "{{ASSET_BASE}}";
     private static final Pattern CODE = Pattern.compile("^CH(\\d{1,2})$");
-    private static final Pattern SEMVER = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
     /** Các trường trỏ sang cảnh khác, theo đúng data FE (nextSceneId, onPass/onFail, if/else, option.nextSceneId). */
     private static final String[] SCENE_REFS = {
             "nextSceneId", "onPassSceneId", "onFailSceneId", "ifTrueSceneId", "ifFalseSceneId"};
@@ -103,7 +108,10 @@ public class ContentServiceImpl implements ContentService {
     @Override
     @Transactional(readOnly = true)
     public List<ReleaseSummaryResponse> listReleases() {
-        return releaseRepo.findAllByOrderByReleasedAtDesc().stream().map(this::toSummary).toList();
+        // Theo số hiệu, mới nhất trước — không theo releasedAt: sau thu hồi / lùi bản hai thứ tự này lệch nhau.
+        return releaseRepo.findAll().stream()
+                .sorted((a, b) -> compareVersion(b.getVersion(), a.getVersion()))
+                .map(this::toSummary).toList();
     }
 
     @Override
@@ -141,18 +149,19 @@ public class ContentServiceImpl implements ContentService {
         chapter.setTitle(content.path("title").asText(chapter.getTitle() == null ? code : chapter.getTitle()));
         Chapter saved = chapterRepo.save(chapter);
 
-        // Một bản nháp sống mỗi chương, lưu đè. Nháp đã vào bản phát hành vẫn giữ nguyên ở ReleaseChapter
-        // (đóng băng), nên đè nháp không đụng tới thứ trẻ đang chơi. Đang chờ duyệt thì khoá: Reviewer phải
-        // duyệt đúng thứ đã gửi. Sửa nháp REJECTED / APPROVED thì về DRAFT — phiếu duyệt cũ hết giá trị.
-        ChapterDraft draft = draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(saved.getId()).orElseGet(() -> {
-            ChapterDraft d = new ChapterDraft();
-            d.setChapter(saved);
-            d.setCreatedAt(now);
-            d.setRevision(0);
-            return d;
-        });
-        if (draft.getStatus() == DraftStatus.SUBMITTED) {
+        // Một bản nháp sống mỗi chương, lưu đè. Đang chờ duyệt thì khoá: Reviewer phải duyệt đúng thứ đã gửi.
+        // Sửa nháp REJECTED / APPROVED thì về DRAFT — phiếu duyệt cũ hết giá trị. Dòng RELEASED là lịch sử (state
+        // machine X.5: trạng thái cuối) — sửa tiếp thì mở dòng mới, revision nối tiếp (PR C, 23/10).
+        ChapterDraft latest = draftRepo.findFirstByChapter_IdOrderByRevisionDesc(saved.getId()).orElse(null);
+        if (latest != null && latest.getStatus() == DraftStatus.SUBMITTED) {
             throw new AppException(ErrorCode.DRAFT_STATE_CONFLICT, code + " đang chờ duyệt — rút lại rồi mới sửa");
+        }
+        ChapterDraft draft = latest;
+        if (draft == null || draft.getStatus() == DraftStatus.RELEASED) {
+            draft = new ChapterDraft();
+            draft.setChapter(saved);
+            draft.setCreatedAt(now);
+            draft.setRevision(latest == null ? 0 : latest.getRevision());
         }
         draft.setContent(json);
         draft.setStatus(DraftStatus.DRAFT);
@@ -166,57 +175,122 @@ public class ContentServiceImpl implements ContentService {
 
     @Override
     @Transactional
-    public ReleaseSummaryResponse publish(UUID adminId, CreateReleaseRequest req) {
-        requireAnyRole(adminId, Role.ADMIN, Role.GAME_MANAGER);
-        String version = req == null || req.version() == null ? "" : req.version().trim();
-        if (!SEMVER.matcher(version).matches()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "version: dạng MAJOR.MINOR.PATCH, vd 1.0.1");
+    public ReleaseSummaryResponse publish(UUID callerId, CreateReleaseRequest req) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_MANAGER);
+        // Khoá con trỏ trước: phát hành / đổi bản / thu hồi chạy lần lượt.
+        GameRelease current = releaseRepo.lockCurrent().stream().findFirst().orElse(null);
+        List<GameRelease> all = releaseRepo.findAll();
+        if (current != null && all.stream().anyMatch(r -> r.getRecalledAt() == null
+                && compareVersion(r.getVersion(), current.getVersion()) > 0)) {
+            // Phát hành chồng lên bản đã bị lùi sẽ lặng lẽ đánh rơi thay đổi của bản mới hơn.
+            throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, "bản đang chạy " + current.getVersion()
+                    + " không phải bản mới nhất — thu hồi bản mới hơn hoặc đặt lại nó làm hiện tại trước");
         }
-        if (releaseRepo.findByVersion(version).isPresent()) {
-            throw new AppException(ErrorCode.RELEASE_VERSION_TAKEN, version);
+        Map<UUID, ReleaseChapter> frozen = current == null ? Map.of()
+                : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(current.getId()).stream()
+                        .collect(Collectors.toMap(rc -> rc.getChapter().getId(), Function.identity()));
+
+        // Chỉ nháp ĐÃ DUYỆT (lưu sau khi duyệt thì về DRAFT, nên APPROVED luôn là đúng bản đã duyệt).
+        List<ChapterDraft> approved = new ArrayList<>();
+        ChangeClass top = null;
+        for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
+            ChapterDraft d = draftRepo.findFirstByChapter_IdOrderByRevisionDesc(c.getId()).orElse(null);
+            if (d == null || d.getStatus() != DraftStatus.APPROVED) {
+                continue;
+            }
+            if (d.getEditor() != null && d.getEditor().getId().equals(callerId)) {
+                throw new AppException(ErrorCode.SELF_PUBLISH_FORBIDDEN, c.getCode());
+            }
+            // Thêm chương luôn là MAJOR (quy tắc 05/10 mục 3), dù nháp ghi loại thấp hơn.
+            ChangeClass cls = frozen.containsKey(c.getId()) ? d.getChangeClass() : ChangeClass.MAJOR;
+            top = top == null || rank(cls) > rank(top) ? normalize(cls) : top;
+            approved.add(d);
         }
-        List<Chapter> chapters = chapterRepo.findAllByOrderByChapterNumberAsc();
-        List<ChapterDraft> drafts = new ArrayList<>();
-        for (Chapter c : chapters) {
-            draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(c.getId()).ifPresent(drafts::add);
+        if (approved.isEmpty()) {
+            throw new AppException(ErrorCode.NO_APPROVED_DRAFT);
         }
-        if (drafts.isEmpty()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "chưa có bản nháp chương nào để phát hành");
+        String version = nextVersion(all.stream().map(GameRelease::getVersion).toList(), top);
+        String asked = req == null || req.version() == null ? "" : req.version().trim();
+        if (!asked.isEmpty() && !asked.equals(version)) {
+            throw new AppException(ErrorCode.RELEASE_VERSION_MISMATCH, "loại " + top + " → phải là " + version);
         }
         Instant now = Instant.now(clock);
-        Account admin = accountRepo.findById(adminId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + adminId));
+        Account publisher = accountRepo.findById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
 
-        // Đóng băng: chép nguyên JSON nháp sang ReleaseChapter kèm hash; nháp sửa tiếp không ảnh hưởng.
         GameRelease release = new GameRelease();
         release.setVersion(version);
-        release.setNote(req.note() == null || req.note().isBlank() ? null : req.note().trim());
-        release.setReleasedBy(admin);
+        release.setNote(req == null || req.note() == null || req.note().isBlank() ? null : req.note().trim());
+        release.setReleasedBy(publisher);
         release.setReleasedAt(now);
         release.setCurrent(false);
-        release = releaseRepo.saveAndFlush(release);
-        for (ChapterDraft d : drafts) {
-            ReleaseChapter rc = new ReleaseChapter();
-            rc.setRelease(release);
-            rc.setChapter(d.getChapter());
-            rc.setContent(d.getContent());
-            rc.setContentHash(sha256(d.getContent()));
-            releaseChapterRepo.save(rc);
+        release.setChangeClass(top);
+        try {
+            release = releaseRepo.saveAndFlush(release);
+        } catch (DataIntegrityViolationException e) {
+            // Lần phát hành đầu chưa có dòng current để khoá: hai lần bấm cùng lúc đụng UNIQUE(version).
+            throw new AppException(ErrorCode.RELEASE_VERSION_TAKEN, version);
+        }
+        // Đóng băng: chép nguyên JSON sang ReleaseChapter kèm hash; nháp sửa tiếp không ảnh hưởng.
+        Set<UUID> changed = new HashSet<>();
+        for (ChapterDraft d : approved) {
+            saveReleaseChapter(release, d.getChapter(), d.getContent(), sha256(d.getContent()));
+            d.setStatus(DraftStatus.RELEASED);
+            changed.add(d.getChapter().getId());
+        }
+        // Chương không có nháp duyệt giữ nguyên nội dung (và hash) của bản đang chạy.
+        for (ReleaseChapter old : frozen.values()) {
+            if (!changed.contains(old.getChapter().getId())) {
+                saveReleaseChapter(release, old.getChapter(), old.getContent(), old.getContentHash());
+            }
         }
         moveCurrentPointer(release);
-        log.info("Phát hành {} ({} chương) bởi {}", version, drafts.size(), adminId);
+        log.info("Phát hành {} ({}, {} chương đổi) bởi {}", version, top, approved.size(), callerId);
         return toSummary(release);
     }
 
     @Override
     @Transactional
-    public ReleaseSummaryResponse setCurrent(UUID adminId, String version) {
-        requireAnyRole(adminId, Role.ADMIN, Role.GAME_MANAGER);
+    public ReleaseSummaryResponse setCurrent(UUID callerId, String version) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_MANAGER);
+        releaseRepo.lockCurrent();
         GameRelease release = releaseRepo.findByVersion(version)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
+        if (release.getRecalledAt() != null) {
+            throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, version + " đã bị thu hồi — phát hành bản sửa");
+        }
         moveCurrentPointer(release);
-        log.info("Đổi bản hiện tại sang {} bởi {}", version, adminId);
+        log.info("Đổi bản hiện tại sang {} bởi {}", version, callerId);
         return toSummary(release);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseSummaryResponse recall(UUID callerId, String version, RecallReleaseRequest req) {
+        requireAnyRole(callerId, Role.ADMIN, Role.GAME_MANAGER);
+        String reason = req == null || req.reason() == null || req.reason().isBlank() ? null : req.reason().trim();
+        if (reason == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "reason: thu hồi phải ghi lý do");
+        }
+        releaseRepo.lockCurrent();
+        GameRelease target = releaseRepo.findByVersion(version)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
+        if (!target.isCurrent()) {
+            throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, "chỉ thu hồi được bản đang chạy");
+        }
+        // Lùi về bản chưa thu hồi, cũ hơn, mới nhất. Không còn bản nào thì từ chối: không có bản hiện tại là game chết.
+        GameRelease previous = releaseRepo.findAll().stream()
+                .filter(r -> r.getRecalledAt() == null && compareVersion(r.getVersion(), version) < 0)
+                .max((a, b) -> compareVersion(a.getVersion(), b.getVersion()))
+                .orElseThrow(() -> new AppException(ErrorCode.RELEASE_STATE_CONFLICT,
+                        "không còn bản cũ hơn để lùi về — phát hành bản sửa thay vì thu hồi"));
+        target.setRecalledAt(Instant.now(clock));
+        target.setRecalledBy(accountRepo.findById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId)));
+        target.setRecallReason(reason);
+        moveCurrentPointer(previous);
+        log.info("Thu hồi {} → bản hiện tại {} bởi {}: {}", version, previous.getVersion(), callerId, reason);
+        return toSummary(previous);
     }
 
     @Override
@@ -225,7 +299,7 @@ public class ContentServiceImpl implements ContentService {
         // ponytail: một truy vấn mỗi chương (8 chương); gộp thành một query nếu số chương lớn lên.
         List<DraftSummaryResponse> out = new ArrayList<>();
         for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
-            draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(c.getId()).ifPresent(d -> out.add(toDraftSummary(d)));
+            draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId()).ifPresent(d -> out.add(toDraftSummary(d)));
         }
         return out;
     }
@@ -307,7 +381,7 @@ public class ContentServiceImpl implements ContentService {
     private ChapterDraft requireDraft(String code) {
         Chapter chapter = chapterRepo.findByCode(code)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có chương " + code));
-        return draftRepo.findTopByChapter_IdOrderByUpdatedAtDesc(chapter.getId())
+        return draftRepo.findFirstByChapter_IdOrderByRevisionDesc(chapter.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chương " + code + " chưa có nháp"));
     }
 
@@ -366,7 +440,64 @@ public class ContentServiceImpl implements ContentService {
                 .map(rc -> new ChapterSummaryResponse(rc.getChapter().getCode(),
                         rc.getChapter().getChapterNumber(), rc.getChapter().getTitle()))
                 .toList();
-        return new ReleaseSummaryResponse(r.getVersion(), r.getReleasedAt(), r.getNote(), r.isCurrent(), chapters);
+        return new ReleaseSummaryResponse(r.getVersion(), r.getReleasedAt(), r.getNote(), r.isCurrent(),
+                r.getChangeClass(), r.getRecalledAt(), chapters);
+    }
+
+    private void saveReleaseChapter(GameRelease release, Chapter chapter, String content, String hash) {
+        ReleaseChapter rc = new ReleaseChapter();
+        rc.setRelease(release);
+        rc.setChapter(chapter);
+        rc.setContent(content);
+        rc.setContentHash(hash);
+        releaseChapterRepo.save(rc);
+    }
+
+    /** So SemVer theo SỐ — so chuỗi thì "1.10.0" < "1.9.0". */
+    static int compareVersion(String a, String b) {
+        int[] x = parseVersion(a);
+        int[] y = parseVersion(b);
+        for (int i = 0; i < 3; i++) {
+            if (x[i] != y[i]) {
+                return Integer.compare(x[i], y[i]);
+            }
+        }
+        return 0;
+    }
+
+    private static int[] parseVersion(String v) {
+        return Arrays.stream(v.split("\\.")).mapToInt(Integer::parseInt).toArray();
+    }
+
+    /**
+     * Số hiệu kế tiếp tính từ bản LỚN NHẤT từng phát hành, kể cả bản đã thu hồi (tính từ bản hiện tại thì sau khi lùi
+     * bản sẽ ra số đã có). Chưa có bản nào → 1.0.0.
+     */
+    static String nextVersion(List<String> existing, ChangeClass cls) {
+        String max = existing.stream().max(ContentServiceImpl::compareVersion).orElse(null);
+        if (max == null) {
+            return "1.0.0";
+        }
+        int[] v = parseVersion(max);
+        return switch (normalize(cls)) {
+            case MAJOR -> (v[0] + 1) + ".0.0";
+            case MINOR -> v[0] + "." + (v[1] + 1) + ".0";
+            case PATCH -> v[0] + "." + v[1] + "." + (v[2] + 1);
+        };
+    }
+
+    /** Thiếu loại thì xếp cao nhất (quy tắc 05/10: nghi ngờ thì xếp loại cao hơn). */
+    private static ChangeClass normalize(ChangeClass c) {
+        return c == null ? ChangeClass.MAJOR : c;
+    }
+
+    /** Xếp hạng bằng tay: enum ChangeClass sinh theo abc (MAJOR, MINOR, PATCH) nên ordinal() / compareTo sai thứ tự. */
+    private static int rank(ChangeClass c) {
+        return switch (normalize(c)) {
+            case PATCH -> 1;
+            case MINOR -> 2;
+            case MAJOR -> 3;
+        };
     }
 
     static int parseChapterNumber(String code) {

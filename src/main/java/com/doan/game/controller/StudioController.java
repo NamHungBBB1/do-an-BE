@@ -1,6 +1,7 @@
 package com.doan.game.controller;
 
 import com.doan.game.DTO.request.CreateReleaseRequest;
+import com.doan.game.DTO.request.RecallReleaseRequest;
 import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ApiResponse;
@@ -81,6 +82,13 @@ public class StudioController {
     public ApiResponse<ReleaseSummaryResponse> setCurrent(@AuthenticationPrincipal Jwt jwt,
                                                           @PathVariable String version) {
         return ApiResponse.ok(contentService.setCurrent(currentAccountId(jwt), version));
+    }
+
+    /** Thu hồi bản đang chạy (lý do bắt buộc): lùi về bản cũ hơn chưa thu hồi; bản bị thu hồi không dùng lại được. */
+    @PostMapping("/releases/{version}/recall")
+    public ApiResponse<ReleaseSummaryResponse> recall(@AuthenticationPrincipal Jwt jwt, @PathVariable String version,
+                                                      @RequestBody RecallReleaseRequest req) {
+        return ApiResponse.ok(contentService.recall(currentAccountId(jwt), version, req));
     }
 
     private static UUID currentAccountId(Jwt jwt) {

@@ -1,6 +1,7 @@
 package com.doan.game.service;
 
 import com.doan.game.DTO.request.CreateReleaseRequest;
+import com.doan.game.DTO.request.RecallReleaseRequest;
 import com.doan.game.DTO.request.ReviewDraftRequest;
 import com.doan.game.DTO.request.SubmitDraftRequest;
 import com.doan.game.DTO.response.ChapterSummaryResponse;
@@ -16,7 +17,8 @@ import java.util.UUID;
  * đang chạy (chapterNV2VisualNovel.js); bản phát hành đóng băng theo phiên bản SemVer; đọc công khai.
  *
  * Giai đoạn 2, PR B (21/10): vòng đời nháp theo vai Editor / Reviewer / Manager (quy tắc phát hành 05/10). ADMIN làm
- * được mọi vai nhưng vẫn không tự duyệt bản mình sửa. publish() CHƯA lọc nháp đã duyệt — việc của PR C.
+ * được mọi vai nhưng vẫn không tự duyệt bản mình sửa. PR C (23/10): publish chỉ gom nháp đã duyệt, BE tự tính số hiệu,
+ * thu hồi bản lỗi.
  */
 public interface ContentService {
 
@@ -49,9 +51,19 @@ public interface ContentService {
     /** Reviewer / ADMIN, không phải người sửa (6002): SUBMITTED → APPROVED hoặc REJECTED (kèm lý do). */
     DraftSummaryResponse reviewDraft(UUID callerId, String code, ReviewDraftRequest req);
 
-    /** Manager / ADMIN: gom bản nháp mới nhất của mọi chương thành phiên bản mới và đặt làm hiện tại. */
+    /**
+     * Manager / ADMIN: gom nháp APPROVED (không có → 6005; nháp do chính mình sửa → 6007) cùng các chương còn lại của
+     * bản hiện tại thành phiên bản mới, đặt làm hiện tại; nháp đã vào bản → RELEASED. Số hiệu tính từ loại cao nhất
+     * (chương mới = MAJOR) trên bản lớn nhất từng có; client gửi version lệch → 6004.
+     */
     ReleaseSummaryResponse publish(UUID callerId, CreateReleaseRequest req);
 
     /** Manager / ADMIN lùi / tiến bản: chỉ đổi con trỏ isCurrent, không xoá gì. */
     ReleaseSummaryResponse setCurrent(UUID callerId, String version);
+
+    /**
+     * Manager / ADMIN thu hồi bản ĐANG CHẠY (lý do bắt buộc): lùi về bản cũ hơn chưa thu hồi, mới nhất; không còn bản
+     * nào → 6006. Bản đã thu hồi không đặt lại được. Trả bản hiện tại mới.
+     */
+    ReleaseSummaryResponse recall(UUID callerId, String version, RecallReleaseRequest req);
 }
