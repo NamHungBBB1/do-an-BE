@@ -24,6 +24,8 @@ public class AssetImageTest {
         assertThat(AssetServiceImpl.webpSize(VP8L)).containsExactly(5, 3);
         assertThat(AssetServiceImpl.webpSize(VP8X)).containsExactly(4, 6);
         assertThat(AssetServiceImpl.webpSize(PNG_ALPHA)).isNull();
+        assertThat(AssetServiceImpl.imageWidth(PNG_ALPHA)).isEqualTo(4);   // PNG / JPEG: ImageIO đọc header
+        assertThat(AssetServiceImpl.imageWidth(new byte[]{1, 2, 3})).isEqualTo(-1);
     }
 
     @Test

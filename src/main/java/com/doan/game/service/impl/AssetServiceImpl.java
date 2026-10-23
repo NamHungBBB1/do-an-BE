@@ -31,6 +31,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,6 +47,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -83,7 +88,7 @@ public class AssetServiceImpl implements AssetService {
     private final Clock clock;
     private final String assetBase;
     private final Path dir;
-    private final String ffmpeg;
+    private final String cwebp;
 
     public AssetServiceImpl(AssetRepository assetRepo, ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                             GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
@@ -91,7 +96,7 @@ public class AssetServiceImpl implements AssetService {
                             ObjectMapper objectMapper, Clock clock,
                             @Value("${app.assets.base-url}") String assetBase,
                             @Value("${app.assets.dir}") String dir,
-                            @Value("${app.assets.ffmpeg:ffmpeg}") String ffmpeg) {
+                            @Value("${app.assets.cwebp:cwebp}") String cwebp) {
         this.assetRepo = assetRepo;
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
@@ -103,7 +108,7 @@ public class AssetServiceImpl implements AssetService {
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
         this.dir = Path.of(dir);
-        this.ffmpeg = ffmpeg;
+        this.cwebp = cwebp;
     }
 
     // ------------------------------------------------------------------ đọc
@@ -163,7 +168,7 @@ public class AssetServiceImpl implements AssetService {
         String chapter = normalizeChapter(chapterCode);
         String cleanLabel = normalizeLabel(label, filename);
 
-        // Trùng tệp gốc (kể cả khi nâng ffmpeg làm WebP ra byte khác) hoặc trùng WebP → trả bản đã có, nhãn cũ giữ nguyên.
+        // Trùng tệp gốc (kể cả khi nâng cwebp làm WebP ra byte khác) hoặc trùng WebP → trả bản đã có, nhãn cũ giữ nguyên.
         String sourceSha = sha256(bytes);
         var bySource = assetRepo.findFirstBySourceSha256(sourceSha);
         if (bySource.isPresent()) {
@@ -330,18 +335,28 @@ public class AssetServiceImpl implements AssetService {
         return null;
     }
 
-    /** ffmpeg: thu về rộng ≤ 1920 giữ tỉ lệ, chất lượng 80; ảnh có kênh trong suốt giữ nguyên (libwebp chọn yuva420p). */
+    /**
+     * cwebp — công cụ chính chủ của libwebp (Google), một tệp chạy vài MB, không kéo gói nào (24/10: ffmpeg qua apt là 142 gói,
+     * 361 MB). Chất lượng 80, nén kỹ (-m 6), bỏ EXIF; rộng quá 1920 mới thu nhỏ (giữ tỉ lệ); kênh trong suốt giữ nguyên.
+     */
     private byte[] toWebp(byte[] bytes, String type) {
+        int width = imageWidth(bytes);
+        if (width <= 0) {
+            throw new AppException(ErrorCode.ASSET_INVALID, "ảnh hỏng — không đọc được kích thước");
+        }
         Path in = null;
         Path out = null;
         try {
             in = Files.createTempFile("asset-", "." + type);
             out = Files.createTempFile("asset-", ".webp");
             Files.write(in, bytes);
-            Process p = new ProcessBuilder(ffmpeg, "-v", "error", "-y", "-i", in.toString(),
-                    "-vf", "scale='min(" + MAX_WIDTH + ",iw)':-1", "-frames:v", "1",
-                    "-c:v", "libwebp", "-quality", String.valueOf(QUALITY), "-compression_level", "6", out.toString())
-                    .redirectErrorStream(true).start();
+            List<String> cmd = new ArrayList<>(List.of(cwebp, "-quiet", "-q", String.valueOf(QUALITY), "-m", "6",
+                    "-metadata", "none"));
+            if (width > MAX_WIDTH) {
+                cmd.addAll(List.of("-resize", String.valueOf(MAX_WIDTH), "0"));
+            }
+            cmd.addAll(List.of(in.toString(), "-o", out.toString()));
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             String err = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             if (!p.waitFor(60, TimeUnit.SECONDS) || p.exitValue() != 0) {
                 p.destroyForcibly();
@@ -349,7 +364,7 @@ public class AssetServiceImpl implements AssetService {
             }
             return Files.readAllBytes(out);
         } catch (IOException e) {
-            // Không chạy được ffmpeg (chưa cài / sai đường dẫn app.assets.ffmpeg) — lỗi máy chủ, không phải lỗi tệp.
+            // Không chạy được cwebp (chưa cài / sai đường dẫn app.assets.cwebp) — lỗi máy chủ, không phải lỗi tệp.
             throw new AppException(ErrorCode.ASSET_CONVERTER_UNAVAILABLE, e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -357,6 +372,25 @@ public class AssetServiceImpl implements AssetService {
         } finally {
             deleteQuietly(in);
             deleteQuietly(out);
+        }
+    }
+
+    /** Rộng ảnh PNG / JPEG đọc từ header bằng ImageIO (không giải mã cả ảnh); -1 nếu không đọc được. */
+    static int imageWidth(byte[] bytes) {
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (in == null || !readers.hasNext()) {
+                return -1;
+            }
+            ImageReader r = readers.next();
+            try {
+                r.setInput(in, true, true);
+                return r.getWidth(0);
+            } finally {
+                r.dispose();
+            }
+        } catch (IOException e) {
+            return -1;
         }
     }
 

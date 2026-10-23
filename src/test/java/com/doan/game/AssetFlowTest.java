@@ -53,6 +53,7 @@ class AssetFlowTest {
     private static final String LEGACY = "{{ASSET_BASE}}/a/0123456789abcdef0123.webp";   // tệp "chuyển nhà" chưa đăng ký
 
     @Autowired MockMvc mvc;
+    @Autowired org.springframework.core.env.Environment env;
     @Autowired AccountRepository accountRepo;
     @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired AssetRepository assetRepo;
@@ -131,10 +132,10 @@ class AssetFlowTest {
         assertThat(Files.exists(DIR.resolve(ref.substring("{{ASSET_BASE}}/".length())))).isFalse();
     }
 
-    /** PNG có nền trong suốt → WebP vẫn giữ kênh trong suốt (VP8X cờ alpha). Cần ffmpeg có libwebp. */
+    /** PNG có nền trong suốt → WebP vẫn giữ kênh trong suốt (VP8X cờ alpha). Cần cwebp có libwebp. */
     @Test
     void pngWithTransparencyStaysTransparent() throws Exception {
-        assumeThat(ffmpegAvailable()).as("cần ffmpeg trong PATH").isTrue();
+        assumeThat(cwebpAvailable()).as("cần cwebp (app.assets.cwebp / env CWEBP)").isTrue();
         JsonNode r = result(upload(as(Role.GAME_EDITOR), AssetImageTest.PNG_ALPHA, "an.png").andExpect(status().isOk()));
         byte[] webp = Files.readAllBytes(DIR.resolve(r.path("asset").path("ref").asText().substring("{{ASSET_BASE}}/".length())));
         assertThat(new String(webp, 12, 4, StandardCharsets.US_ASCII)).isEqualTo("VP8X");
@@ -143,9 +144,10 @@ class AssetFlowTest {
         assertThat(r.path("asset").path("height").asInt()).isEqualTo(6);
     }
 
-    private static boolean ffmpegAvailable() {
+    private boolean cwebpAvailable() {
         try {
-            return new ProcessBuilder("ffmpeg", "-version").redirectErrorStream(true).start().waitFor() == 0;
+            return new ProcessBuilder(env.getProperty("app.assets.cwebp", "cwebp"), "-version")
+                    .redirectErrorStream(true).start().waitFor() == 0;
         } catch (Exception e) {
             return false;
         }

@@ -111,7 +111,7 @@ public enum ErrorCode {
     // 24/10 kho ảnh đợt 2a (spec build/spec-kho-anh-giong-2026-10-24.md mục 3).
     ASSET_INVALID(6008, "Tệp không hợp lệ — chỉ nhận ảnh PNG, JPEG, WebP tối đa 5 MB", HttpStatus.BAD_REQUEST),
     ASSET_IN_USE(6009, "Tệp đang được nội dung dùng — chỉ xoá được tệp mồ côi", HttpStatus.CONFLICT),
-    ASSET_CONVERTER_UNAVAILABLE(6010, "Máy chủ chưa đổi được ảnh sang WebP (thiếu ffmpeg)", HttpStatus.SERVICE_UNAVAILABLE),
+    ASSET_CONVERTER_UNAVAILABLE(6010, "Máy chủ chưa đổi được ảnh sang WebP (thiếu cwebp)", HttpStatus.SERVICE_UNAVAILABLE),
 
     // 7xxx — chơi game, lưu tiến độ (Hưng chốt 12/10).
     RELEASE_CHAPTER_NOT_FOUND(7001, "Bản phát hành không có chương này", HttpStatus.NOT_FOUND),
