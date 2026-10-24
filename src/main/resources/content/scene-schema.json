@@ -2,112 +2,343 @@
   "schemaVersion": 2,
   "note": "Bộ khuôn nội dung game — BE quyết khung (Hưng 24/10). Spec build/spec-bo-khuon-noi-dung-2026-10-24.md. Studio dựng form từ đây; BE kiểm nháp theo đây; FE game chọn khung theo type / game.kind, không theo id.",
   "stats": [
-    { "key": "SAVING", "label": "Tiết kiệm", "initial": 50 },
-    { "key": "HAPPINESS", "label": "Hạnh phúc", "initial": 50 },
-    { "key": "RISK", "label": "Rủi ro", "initial": 30 },
-    { "key": "GOAL", "label": "Mục tiêu", "initial": 50 },
-    { "key": "WEALTH", "label": "Tài sản", "initial": 0 }
+    {
+      "key": "SAVING",
+      "label": "Tiết kiệm",
+      "initial": 50
+    },
+    {
+      "key": "HAPPINESS",
+      "label": "Hạnh phúc",
+      "initial": 50
+    },
+    {
+      "key": "RISK",
+      "label": "Rủi ro",
+      "initial": 30
+    },
+    {
+      "key": "GOAL",
+      "label": "Mục tiêu",
+      "initial": 50
+    },
+    {
+      "key": "WEALTH",
+      "label": "Tài sản",
+      "initial": 0
+    }
   ],
-  "variables": ["money", "miniGameScore", "SAVING", "HAPPINESS", "RISK", "GOAL", "WEALTH", "flag:*", "inspected:*", "choice:*"],
+  "variables": [
+    "money",
+    "miniGameScore",
+    "SAVING",
+    "HAPPINESS",
+    "RISK",
+    "GOAL",
+    "WEALTH",
+    "flag:*",
+    "inspected:*",
+    "choice:*"
+  ],
   "variablesNote": "flag:<tên> = cờ việc không phải lựa chọn (đã mở thẻ, đã kiểm nguồn…); inspected:<mã thẻ> = trẻ đã mở thẻ / vật đó; choice:<nhóm> = lựa chọn cuối của một câu hỏi (nhóm = choiceGroup, không có thì = mã cảnh), so sánh == / != với mã lựa chọn (Hưng 24/10).",
-  "conditionOps": ["==", "!=", ">", ">=", "<", "<="],
-  "conditionExample": { "all": [ { "var": "money", "op": ">=", "value": 500000 }, { "any": [ { "var": "choice:CH04_SC02", "op": "==", "value": "CH04_SC02_A" }, { "var": "inspected:ch04_compare", "op": "==", "value": true } ] } ] },
-  "positions": ["left", "center", "right"],
+  "conditionOps": [
+    "==",
+    "!=",
+    ">",
+    ">=",
+    "<",
+    "<="
+  ],
+  "conditionExample": {
+    "all": [
+      {
+        "var": "money",
+        "op": ">=",
+        "value": 500000
+      },
+      {
+        "any": [
+          {
+            "var": "choice:CH04_SC02",
+            "op": "==",
+            "value": "CH04_SC02_A"
+          },
+          {
+            "var": "inspected:ch04_compare",
+            "op": "==",
+            "value": true
+          }
+        ]
+      }
+    ]
+  },
+  "positions": [
+    "left",
+    "center",
+    "right"
+  ],
   "commonSceneFields": {
-    "id": { "type": "string", "required": true, "label": "Mã cảnh" },
-    "title": { "type": "string", "label": "Tiêu đề" },
-    "background": { "type": "image", "label": "Ảnh nền" },
-    "characters": { "type": "characters", "label": "Nhân vật trên cảnh" },
-    "speaker": { "type": "string", "label": "Tên người nói (hiển thị)" },
-    "speakerId": { "type": "string", "label": "Mã nhân vật nói (gắn giọng)" },
-    "knowledgeUnits": { "type": "array", "label": "Mã khái niệm" },
-    "voice": { "type": "string", "label": "Giọng (trống = theo nhân vật, off = tắt)" },
-    "spokenText": { "type": "string", "label": "Chữ để đọc (giọng)" },
-    "setFlags": { "type": "flags", "label": "Bật / tắt cờ khi vào cảnh {tên: true|false}" }
+    "id": {
+      "type": "string",
+      "required": true,
+      "label": "Mã cảnh"
+    },
+    "title": {
+      "type": "string",
+      "label": "Tiêu đề"
+    },
+    "background": {
+      "type": "image",
+      "label": "Ảnh nền"
+    },
+    "characters": {
+      "type": "characters",
+      "label": "Nhân vật trên cảnh"
+    },
+    "speaker": {
+      "type": "string",
+      "label": "Tên người nói (hiển thị)"
+    },
+    "speakerId": {
+      "type": "string",
+      "label": "Mã nhân vật nói (gắn giọng)"
+    },
+    "knowledgeUnits": {
+      "type": "array",
+      "label": "Mã khái niệm"
+    },
+    "voice": {
+      "type": "string",
+      "label": "Giọng (trống = theo nhân vật, off = tắt)"
+    },
+    "spokenText": {
+      "type": "string",
+      "label": "Chữ để đọc (giọng)"
+    },
+    "setFlags": {
+      "type": "flags",
+      "label": "Bật / tắt cờ khi vào cảnh {tên: true|false}"
+    }
   },
   "sceneTypes": {
     "dialogue": {
       "label": "Thoại",
       "fields": {
-        "text": { "type": "string", "required": true, "label": "Lời thoại" },
-        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+        "text": {
+          "type": "string",
+          "required": true,
+          "label": "Lời thoại"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
       }
     },
     "inspect": {
       "label": "Bấm để xem",
-      "aliases": ["scene"],
+      "aliases": [
+        "scene"
+      ],
       "fields": {
-        "text": { "type": "string", "label": "Chữ" },
-        "sceneArt": { "type": "image", "label": "Ảnh minh hoạ" },
-        "inspect": { "type": "inspect", "label": "Vật bấm để xem" },
-        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+        "text": {
+          "type": "string",
+          "label": "Chữ"
+        },
+        "sceneArt": {
+          "type": "image",
+          "label": "Ảnh minh hoạ"
+        },
+        "inspect": {
+          "type": "inspect",
+          "label": "Vật bấm để xem"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
       }
     },
     "choice": {
       "label": "Lựa chọn",
       "fields": {
-        "text": { "type": "string", "label": "Câu hỏi / lời dẫn" },
-        "prompt": { "type": "string", "label": "Gợi ý" },
-        "choiceGroup": { "type": "string", "label": "Nhóm lựa chọn" },
-        "options": { "type": "options", "required": true, "minItems": 1, "warnBelowItems": 2, "label": "Các lựa chọn" }
+        "text": {
+          "type": "string",
+          "label": "Câu hỏi / lời dẫn"
+        },
+        "prompt": {
+          "type": "string",
+          "label": "Gợi ý"
+        },
+        "choiceGroup": {
+          "type": "string",
+          "label": "Nhóm lựa chọn"
+        },
+        "options": {
+          "type": "options",
+          "required": true,
+          "minItems": 1,
+          "warnBelowItems": 2,
+          "label": "Các lựa chọn"
+        }
       }
     },
     "minigame": {
       "label": "Mini-game",
       "fields": {
-        "game": { "type": "game", "required": true, "label": "Mini-game" },
-        "onPassSceneId": { "type": "sceneRef", "label": "Làm xong thì sang (tên cũ của nextSceneId)" },
-        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+        "game": {
+          "type": "game",
+          "required": true,
+          "label": "Mini-game"
+        },
+        "onPassSceneId": {
+          "type": "sceneRef",
+          "label": "Làm xong thì sang (tên cũ của nextSceneId)"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
       }
     },
     "conditional": {
       "label": "Rẽ nhánh theo điều kiện",
       "fields": {
-        "condition": { "type": "condition", "required": true, "label": "Điều kiện" },
-        "ifTrueSceneId": { "type": "sceneRef", "required": true, "label": "Đúng thì sang" },
-        "ifFalseSceneId": { "type": "sceneRef", "required": true, "label": "Sai thì sang" }
+        "condition": {
+          "type": "condition",
+          "required": true,
+          "label": "Điều kiện"
+        },
+        "ifTrueSceneId": {
+          "type": "sceneRef",
+          "required": true,
+          "label": "Đúng thì sang"
+        },
+        "ifFalseSceneId": {
+          "type": "sceneRef",
+          "required": true,
+          "label": "Sai thì sang"
+        }
       }
     },
     "reflection": {
       "label": "Tự suy ngẫm",
-      "aliases": ["activity"],
+      "aliases": [
+        "activity"
+      ],
       "fields": {
-        "prompt": { "type": "string", "label": "Câu hỏi suy ngẫm" },
-        "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
+        "prompt": {
+          "type": "string",
+          "label": "Câu hỏi suy ngẫm"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
       }
     },
     "summary": {
       "label": "Tổng kết",
-      "fields": { "text": { "type": "string", "label": "Chữ" }, "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" } }
+      "fields": {
+        "text": {
+          "type": "string",
+          "label": "Chữ"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
+      }
     },
     "cutscene": {
       "label": "Cảnh chuyển",
-      "fields": { "text": { "type": "string", "label": "Chữ" }, "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" } }
+      "fields": {
+        "text": {
+          "type": "string",
+          "label": "Chữ"
+        },
+        "nextSceneId": {
+          "type": "sceneRef",
+          "label": "Cảnh kế tiếp"
+        }
+      }
     },
     "ending": {
       "label": "Kết chương",
-      "fields": { "text": { "type": "string", "label": "Chữ" } }
+      "fields": {
+        "text": {
+          "type": "string",
+          "label": "Chữ"
+        }
+      }
     }
   },
   "optionFields": {
-    "id": { "type": "string", "required": true, "label": "Mã lựa chọn" },
-    "text": { "type": "string", "requiredOneOf": ["text", "label"], "label": "Chữ lựa chọn" },
-    "nextSceneId": { "type": "sceneRef", "label": "Chọn xong sang" },
-    "condition": { "type": "condition", "label": "Điều kiện mở (chưa đủ thì lựa chọn bị khoá)" },
-    "lockedReason": { "type": "string", "label": "Câu nhắn cho trẻ khi bị khoá (bắt buộc nếu có điều kiện mở)" },
-    "deltaStats": { "type": "stats", "label": "Cộng / trừ chỉ số" },
-    "moneyEvents": { "type": "array", "label": "Thay đổi tiền" },
-    "setFlags": { "type": "flags", "label": "Bật / tắt cờ {tên: true|false} — chỉ cho việc không phải lựa chọn; ghi nhớ lựa chọn dùng choice:<nhóm>" },
-    "evidenceScores": { "type": "object", "label": "Điểm bằng chứng I / C / P" }
+    "id": {
+      "type": "string",
+      "required": true,
+      "label": "Mã lựa chọn"
+    },
+    "text": {
+      "type": "string",
+      "requiredOneOf": [
+        "text",
+        "label"
+      ],
+      "label": "Chữ lựa chọn"
+    },
+    "nextSceneId": {
+      "type": "sceneRef",
+      "label": "Chọn xong sang"
+    },
+    "condition": {
+      "type": "condition",
+      "label": "Điều kiện mở (chưa đủ thì lựa chọn bị khoá)"
+    },
+    "lockedReason": {
+      "type": "string",
+      "label": "Câu nhắn cho trẻ khi bị khoá (bắt buộc nếu có điều kiện mở)"
+    },
+    "deltaStats": {
+      "type": "stats",
+      "label": "Cộng / trừ chỉ số"
+    },
+    "moneyEvents": {
+      "type": "array",
+      "label": "Thay đổi tiền"
+    },
+    "setFlags": {
+      "type": "flags",
+      "label": "Bật / tắt cờ {tên: true|false} — chỉ cho việc không phải lựa chọn; ghi nhớ lựa chọn dùng choice:<nhóm>"
+    },
+    "evidenceScores": {
+      "type": "object",
+      "label": "Điểm bằng chứng I / C / P"
+    }
   },
   "grading": {
     "note": "Câu chấm điểm = đối tượng có trường grade nằm trong game của cảnh mini-game; BE chấm bằng một hàm chung (spec build/spec-cham-minigame-be-2026-10-24.md). FE gửi trẻ nhập gì ở từng ô nhập (miniGames[].itemId = mã ô, chosen = giá trị JSON), không gửi đúng / sai.",
     "fields": {
-      "id": { "type": "string", "label": "Mã câu — mặc định = id của đối tượng chứa grade; không trùng trong một mini-game" },
-      "input": { "type": "string", "label": "Mã ô nhập FE gửi — mặc định = mã câu" },
-      "part": { "type": "string|number", "label": "Câu thuộc vòng / phần nào — cảnh chỉ chấm câu thuộc game.rounds hoặc game.config.mode" },
-      "concept": { "type": "string", "label": "Khái niệm (mã knowledgeUnit) — mặc định = knowledgeUnits của cảnh nếu cảnh có đúng 1 mã" },
-      "rule": { "type": "rule", "label": "Đáp án / luật — một lá hoặc all / any" }
+      "id": {
+        "type": "string",
+        "label": "Mã câu — mặc định = id của đối tượng chứa grade; không trùng trong một mini-game"
+      },
+      "input": {
+        "type": "string",
+        "label": "Mã ô nhập FE gửi — mặc định = mã câu"
+      },
+      "part": {
+        "type": "string|number",
+        "label": "Câu thuộc vòng / phần nào — cảnh chỉ chấm câu thuộc game.rounds hoặc game.config.mode"
+      },
+      "concept": {
+        "type": "string",
+        "label": "Khái niệm (mã knowledgeUnit) — mặc định = knowledgeUnits của cảnh nếu cảnh có đúng 1 mã"
+      },
+      "rule": {
+        "type": "rule",
+        "label": "Đáp án / luật — một lá hoặc all / any"
+      }
     },
     "comparators": {
       "eq": "bằng (đáp án số so theo giá trị: \"15\" = 15)",
@@ -125,28 +356,3752 @@
       "sum": "cộng các trường của giá trị object",
       "sumOf": "{from: đường dẫn mảng trong game, field} — giá trị là mảng id, cộng trường của các món đó"
     },
-    "groups": { "all": "tất cả luật con đúng", "any": "ít nhất một luật con đúng" },
-    "example": { "id": "ITEM_MEAL", "label": "Bữa ăn", "category": "NEEDS", "grade": { "concept": "D01.02", "rule": { "eq": "NEEDS" } } }
+    "groups": {
+      "all": "tất cả luật con đúng",
+      "any": "ít nhất một luật con đúng"
+    },
+    "example": {
+      "id": "ITEM_MEAL",
+      "label": "Bữa ăn",
+      "category": "NEEDS",
+      "grade": {
+        "concept": "D01.02",
+        "rule": {
+          "eq": "NEEDS"
+        }
+      }
+    }
   },
   "minigameKinds": {
-    "NEED_WANT": { "phase": "A", "label": "Phân loại Cần / Muốn", "frame": "NeedWantMiniGame", "legacyIds": ["NEEDS_OR_WANTS_CH01"], "graded": true },
-    "BUDGET_BUILDER": { "phase": "A", "label": "Chia tiền vào phong bì", "frame": "BudgetBuilderMiniGame", "legacyIds": ["BUDGET_BUILDER_CH02"], "graded": true },
-    "SAVINGS_RACE": { "phase": "A", "label": "Đua tiết kiệm (mô phỏng)", "frame": "SavingsRaceMiniGame", "legacyIds": ["SAVINGS_RACE_CH02"], "graded": false },
-    "CAREER_MATCH": { "phase": "A", "label": "Ghép việc làm thêm + tính giờ", "frame": "CareerMatchMiniGame", "legacyIds": ["CAREER_MATCH_CH03"], "graded": true },
-    "SMART_SHOPPING": { "phase": "A", "label": "Mua sắm thông minh", "frame": "SmartShoppingMiniGame", "legacyIds": ["SMART_SHOPPING_CH04"], "graded": true },
-    "COMPOUND_TIMELINE": { "phase": "A", "label": "Dòng thời gian lãi kép", "frame": "CompoundTimelineMiniGame", "legacyIds": ["COMPOUND_TIMELINE_CH05"], "graded": true },
-    "LOAN_DETECTIVE": { "phase": "A", "label": "Thám tử khoản vay", "frame": "LoanDetectiveMiniGame", "legacyIds": ["LOAN_OFFERS_CH06", "LOAN_REPAYMENT_CH06"], "graded": true },
-    "SCAM_OR_SAFE": { "phase": "A", "label": "Bảo hiểm và lừa đảo", "frame": "ScamOrSafeMiniGame", "legacyIds": ["INSURANCE_DESK_CH07", "SCAM_OR_SAFE_CH07"], "graded": true },
-    "FUTURE_PLAN": { "phase": "A", "label": "Kế hoạch tương lai", "frame": "FuturePlanMiniGame", "legacyIds": ["PORTFOLIO_CH08", "CLAIM_REVIEW_CH08", "LIFE_PLAN_CH08"], "graded": true }
+    "NEED_WANT": {
+      "phase": "A",
+      "label": "Phân loại Cần / Muốn",
+      "frame": "NeedWantMiniGame",
+      "legacyIds": [
+        "NEEDS_OR_WANTS_CH01"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "mechanic": {
+          "type": "string",
+          "required": true
+        },
+        "timeLimitSeconds": {
+          "type": "number",
+          "required": true
+        },
+        "passScore": {
+          "type": "number",
+          "required": true
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "label": {
+                "type": "string",
+                "required": true
+              },
+              "image": {
+                "type": "image",
+                "required": true
+              },
+              "category": {
+                "type": "string",
+                "required": true
+              },
+              "explanation": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "title": {
+                "type": "string",
+                "required": true
+              },
+              "hint": {
+                "type": "string",
+                "required": true
+              },
+              "icon": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "BUDGET_BUILDER": {
+      "phase": "A",
+      "label": "Chia tiền vào phong bì",
+      "frame": "BudgetBuilderMiniGame",
+      "legacyIds": [
+        "BUDGET_BUILDER_CH02"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "mechanic": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "instruction": {
+          "type": "string",
+          "required": true
+        },
+        "draggables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "value": {
+                "type": "number",
+                "required": true
+              },
+              "label": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        },
+        "dropZones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "label": {
+                "type": "string",
+                "required": true
+              },
+              "image": {
+                "type": "image",
+                "required": true
+              },
+              "expectedValue": {
+                "type": "number",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "SAVINGS_RACE": {
+      "phase": "A",
+      "label": "Đua tiết kiệm (mô phỏng)",
+      "frame": "SavingsRaceMiniGame",
+      "legacyIds": [
+        "SAVINGS_RACE_CH02"
+      ],
+      "graded": false,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "mechanic": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "instruction": {
+          "type": "string",
+          "required": true
+        },
+        "targetAmount": {
+          "type": "number",
+          "required": true
+        },
+        "goalImage": {
+          "type": "image",
+          "required": true
+        },
+        "calendarImage": {
+          "type": "image",
+          "required": true
+        },
+        "durationSeconds": {
+          "type": "number",
+          "required": true
+        },
+        "expenseChance": {
+          "type": "number",
+          "required": true
+        },
+        "coinStep": {
+          "type": "number",
+          "required": true
+        },
+        "coinMaxSteps": {
+          "type": "number",
+          "required": true
+        },
+        "expenses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "label": {
+                "type": "string",
+                "required": true
+              },
+              "image": {
+                "type": "image",
+                "required": true
+              },
+              "value": {
+                "type": "number",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "CAREER_MATCH": {
+      "phase": "A",
+      "label": "Ghép việc làm thêm + tính giờ",
+      "frame": "CareerMatchMiniGame",
+      "legacyIds": [
+        "CAREER_MATCH_CH03"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "mechanic": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "instruction": {
+          "type": "string",
+          "required": true
+        },
+        "weeklyLimit": {
+          "type": "number",
+          "required": true
+        },
+        "timeImage": {
+          "type": "image",
+          "required": true
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "name": {
+                "type": "string",
+                "required": true
+              },
+              "image": {
+                "type": "image",
+                "required": true
+              },
+              "hours": {
+                "type": "number",
+                "required": true
+              },
+              "facts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          },
+          "required": true
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "title": {
+                "type": "string",
+                "required": true
+              },
+              "formula": {
+                "type": "string",
+                "required": true
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "fields": {
+                    "id": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "label": {
+                      "type": "string",
+                      "required": true
+                    }
+                  }
+                },
+                "required": true
+              },
+              "correctId": {
+                "type": "string",
+                "required": true
+              },
+              "hint": {
+                "type": "string",
+                "required": true
+              },
+              "explain": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          "required": true
+        },
+        "maxScore": {
+          "type": "number",
+          "required": true
+        },
+        "texts": {
+          "type": "object",
+          "fields": {
+            "fitAllCorrect": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "SMART_SHOPPING": {
+      "phase": "A",
+      "label": "Mua sắm thông minh",
+      "frame": "SmartShoppingMiniGame",
+      "legacyIds": [
+        "SMART_SHOPPING_CH04"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "phones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "required": true
+              },
+              "label": {
+                "type": "string",
+                "required": true
+              },
+              "image": {
+                "type": "image",
+                "required": true
+              },
+              "price": {
+                "type": "number",
+                "required": true
+              },
+              "meetsLearningNeeds": {
+                "type": "boolean",
+                "required": true
+              },
+              "warrantyMonths": {
+                "type": "number"
+              },
+              "exceedsNeeds": {
+                "type": "boolean"
+              },
+              "firstYearCost": {
+                "type": "number"
+              },
+              "inspectionRequired": {
+                "type": "boolean"
+              },
+              "trialMonths": {
+                "type": "number"
+              },
+              "shopping": {
+                "type": "object",
+                "fields": {
+                  "claim": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "app": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "battery": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "terms": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "batteryHealth": {
+                    "type": "number"
+                  },
+                  "batteryHours": {
+                    "type": "number"
+                  },
+                  "batteryReplacementCost": {
+                    "type": "number"
+                  },
+                  "batteryTest": {
+                    "type": "string"
+                  }
+                },
+                "required": true
+              },
+              "monthlySubscription": {
+                "type": "number"
+              },
+              "billedMonthsFirstYear": {
+                "type": "number"
+              },
+              "firstYearCostIfCancelled": {
+                "type": "number"
+              },
+              "firstYearCostIfKept": {
+                "type": "number"
+              }
+            }
+          },
+          "required": true
+        },
+        "config": {
+          "type": "object",
+          "fields": {
+            "ariaLabel": {
+              "type": "string",
+              "required": true
+            },
+            "eyebrow": {
+              "type": "string",
+              "required": true
+            },
+            "heading": {
+              "type": "string",
+              "required": true
+            },
+            "tagline": {
+              "type": "string",
+              "required": true
+            },
+            "brief": {
+              "type": "string",
+              "required": true
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "required": true
+            },
+            "checkTokens": {
+              "type": "number",
+              "required": true
+            },
+            "passMinScore": {
+              "type": "number",
+              "required": true
+            },
+            "trialDeadlineDay": {
+              "type": "number",
+              "required": true
+            },
+            "inspections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "label": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "icon": {
+                    "type": "string",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "invoiceExtra": {
+              "type": "object",
+              "fields": {
+                "id": {
+                  "type": "string",
+                  "required": true
+                },
+                "label": {
+                  "type": "string",
+                  "required": true
+                },
+                "amount": {
+                  "type": "number",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "ledger": {
+              "type": "object",
+              "fields": {
+                "phone": {
+                  "type": "string",
+                  "required": true
+                },
+                "subscription": {
+                  "type": "string",
+                  "required": true
+                },
+                "battery": {
+                  "type": "string",
+                  "required": true
+                },
+                "fee": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "aftercare": {
+              "type": "object",
+              "fields": {
+                "cancelled": {
+                  "type": "string",
+                  "required": true
+                },
+                "notCancelled": {
+                  "type": "string",
+                  "required": true
+                },
+                "batteryReplaced": {
+                  "type": "string",
+                  "required": true
+                },
+                "batteryKept": {
+                  "type": "string",
+                  "required": true
+                },
+                "batteryUnmanaged": {
+                  "type": "string",
+                  "required": true
+                },
+                "noSubscription": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "criteria": {
+              "type": "object",
+              "fields": {
+                "needs": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "budget": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "passed": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "failed": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "reasonExceedsNeeds": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "reasonHiddenCosts": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "evidence": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "detail": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "incomplete": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "complete": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "rights": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "feePaid": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "feeRemoved": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "decision": {
+              "type": "object",
+              "fields": {
+                "subscription": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "text": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "label": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "placeholder": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "fields": {
+                          "value": {
+                            "type": "string",
+                            "required": true
+                          },
+                          "label": {
+                            "type": "string",
+                            "required": true
+                          }
+                        }
+                      },
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "battery": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "text": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "check": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "checked": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "meterLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "planLegend": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "keep": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "replace": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "note": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "features": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "text": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "balanceLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfall": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "texts": {
+              "type": "object",
+              "fields": {
+                "attempt": {
+                  "type": "string",
+                  "required": true
+                },
+                "wallet": {
+                  "type": "string",
+                  "required": true
+                },
+                "reserve": {
+                  "type": "string",
+                  "required": true
+                },
+                "stepsLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "investigateTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "investigateText": {
+                  "type": "string",
+                  "required": true
+                },
+                "tokensLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "tokens": {
+                  "type": "string",
+                  "required": true
+                },
+                "phoneAlt": {
+                  "type": "string",
+                  "required": true
+                },
+                "claim": {
+                  "type": "string",
+                  "required": true
+                },
+                "quoteNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "reread": {
+                  "type": "string",
+                  "required": true
+                },
+                "costsCheck": {
+                  "type": "string",
+                  "required": true
+                },
+                "selected": {
+                  "type": "string",
+                  "required": true
+                },
+                "select": {
+                  "type": "string",
+                  "required": true
+                },
+                "lockNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "lockIn": {
+                  "type": "string",
+                  "required": true
+                },
+                "lockPhone": {
+                  "type": "string",
+                  "required": true
+                },
+                "lockPhoneNone": {
+                  "type": "string",
+                  "required": true
+                },
+                "checkoutTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "checkoutText": {
+                  "type": "string",
+                  "required": true
+                },
+                "invoiceEyebrow": {
+                  "type": "string",
+                  "required": true
+                },
+                "invoiceTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "savedQuote": {
+                  "type": "string",
+                  "required": true
+                },
+                "savedQuoteAfter": {
+                  "type": "string",
+                  "required": true
+                },
+                "invoiceCheck": {
+                  "type": "string",
+                  "required": true
+                },
+                "invoiceChecked": {
+                  "type": "string",
+                  "required": true
+                },
+                "disputeLegend": {
+                  "type": "string",
+                  "required": true
+                },
+                "noDispute": {
+                  "type": "string",
+                  "required": true
+                },
+                "invoiceTotal": {
+                  "type": "string",
+                  "required": true
+                },
+                "disputeNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "savedFiles": {
+                  "type": "string",
+                  "required": true
+                },
+                "noHints": {
+                  "type": "string",
+                  "required": true
+                },
+                "pay": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultEyebrow": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultPerfect": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultImperfect": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultSubtitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "ledgerTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "actualTotal": {
+                  "type": "string",
+                  "required": true
+                },
+                "walletLeft": {
+                  "type": "string",
+                  "required": true
+                },
+                "reserveNeeded": {
+                  "type": "string",
+                  "required": true
+                },
+                "passed": {
+                  "type": "string",
+                  "required": true
+                },
+                "failed": {
+                  "type": "string",
+                  "required": true
+                },
+                "retryNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "retry": {
+                  "type": "string",
+                  "required": true
+                },
+                "finish": {
+                  "type": "string",
+                  "required": true
+                },
+                "simulationNote": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        },
+        "instruction": {
+          "type": "string",
+          "required": true
+        },
+        "budget": {
+          "type": "number",
+          "required": true
+        },
+        "reserve": {
+          "type": "number",
+          "required": true
+        },
+        "firstYearBudget": {
+          "type": "number",
+          "required": true
+        },
+        "estimatedMinutes": {
+          "type": "number",
+          "required": true
+        },
+        "maxScore": {
+          "type": "number",
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "COMPOUND_TIMELINE": {
+      "phase": "A",
+      "label": "Dòng thời gian lãi kép",
+      "frame": "CompoundTimelineMiniGame",
+      "legacyIds": [
+        "COMPOUND_TIMELINE_CH05"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "onComplete": {
+          "type": "object",
+          "fields": {
+            "setFlags": {
+              "type": "object",
+              "fields": {
+                "mini_game_completed": {
+                  "type": "boolean",
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        },
+        "config": {
+          "type": "object",
+          "fields": {
+            "eyebrow": {
+              "type": "string",
+              "required": true
+            },
+            "heading": {
+              "type": "string",
+              "required": true
+            },
+            "intro": {
+              "type": "string",
+              "required": true
+            },
+            "howto": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "required": true
+            },
+            "timeline": {
+              "type": "object",
+              "fields": {
+                "principal": {
+                  "type": "number",
+                  "required": true
+                },
+                "ratePercent": {
+                  "type": "number",
+                  "required": true
+                },
+                "years": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "competencies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "required": true
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "label": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "mission": {
+                    "type": "object",
+                    "fields": {
+                      "title": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "text": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      }
+                    },
+                    "required": true
+                  },
+                  "view": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "caption": {
+                    "type": "string"
+                  },
+                  "cards": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "fields": {
+                        "image": {
+                          "type": "image",
+                          "required": true
+                        },
+                        "title": {
+                          "type": "string",
+                          "required": true
+                        },
+                        "amount": {
+                          "type": "string",
+                          "required": true
+                        },
+                        "note": {
+                          "type": "string",
+                          "required": true
+                        }
+                      }
+                    }
+                  },
+                  "mustVisitYears": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "intro": {
+                    "type": "string"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "help": {
+                    "type": "object",
+                    "fields": {
+                      "title": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "hint": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "fields": {
+                            "number": {
+                              "type": "string",
+                              "required": true
+                            },
+                            "title": {
+                              "type": "string",
+                              "required": true
+                            },
+                            "text": {
+                              "type": "string",
+                              "required": true
+                            },
+                            "strong": {
+                              "type": "string",
+                              "required": true
+                            }
+                          }
+                        },
+                        "required": true
+                      },
+                      "tip": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "facts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "fields": {
+                        "id": {
+                          "type": "string",
+                          "required": true
+                        },
+                        "image": {
+                          "type": "image",
+                          "required": true
+                        },
+                        "label": {
+                          "type": "string",
+                          "required": true
+                        },
+                        "text": {
+                          "type": "string",
+                          "required": true
+                        }
+                      }
+                    }
+                  },
+                  "yearLabel": {
+                    "type": "string"
+                  },
+                  "reference": {
+                    "type": "object",
+                    "fields": {
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      },
+                      "eyebrow": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "title": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "text": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "formula": {
+                    "type": "object",
+                    "fields": {
+                      "title": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "paragraphs": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "required": true
+                      }
+                    }
+                  }
+                }
+              },
+              "required": true
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "round": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "competency": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "answer": {
+                    "type": "any",
+                    "required": true
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "texts": {
+              "type": "object",
+              "fields": {
+                "progressLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "missionEyebrow": {
+                  "type": "string",
+                  "required": true
+                },
+                "howtoLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "yearButton": {
+                  "type": "string",
+                  "required": true
+                },
+                "answerEyebrow": {
+                  "type": "string",
+                  "required": true
+                },
+                "answeredCount": {
+                  "type": "string",
+                  "required": true
+                },
+                "moneyLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "moneyPlaceholder": {
+                  "type": "string",
+                  "required": true
+                },
+                "moneyPreview": {
+                  "type": "string",
+                  "required": true
+                },
+                "correct": {
+                  "type": "string",
+                  "required": true
+                },
+                "retry": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundAllCorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundSomeWrong": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundLocked": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskChecked": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskVisitYears": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskYear": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskYearJoin": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskOpenFacts": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskAnswer": {
+                  "type": "string",
+                  "required": true
+                },
+                "taskReady": {
+                  "type": "string",
+                  "required": true
+                },
+                "back": {
+                  "type": "string",
+                  "required": true
+                },
+                "check": {
+                  "type": "string",
+                  "required": true
+                },
+                "next": {
+                  "type": "string",
+                  "required": true
+                },
+                "finish": {
+                  "type": "string",
+                  "required": true
+                },
+                "note": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        }
+      },
+      "inferredFrom": 1
+    },
+    "LOAN_DETECTIVE": {
+      "phase": "A",
+      "label": "Thám tử khoản vay",
+      "frame": "LoanDetectiveMiniGame",
+      "legacyIds": [
+        "LOAN_OFFERS_CH06",
+        "LOAN_REPAYMENT_CH06"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "required": true
+        },
+        "config": {
+          "type": "object",
+          "fields": {
+            "eyebrow": {
+              "type": "string",
+              "required": true
+            },
+            "heading": {
+              "type": "string",
+              "required": true
+            },
+            "subheading": {
+              "type": "string",
+              "required": true
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "view": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "neutral": {
+                    "type": "boolean"
+                  },
+                  "title": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "picture": {
+                    "type": "image",
+                    "required": true
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "idleFeedback": {
+                    "type": "string",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "round": {
+                    "type": "number",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "offers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "periods": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "installment": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "upfront": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "principal": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "received": {
+                    "type": "number",
+                    "required": true
+                  },
+                  "intervalMonths": {
+                    "type": "number",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "offerImage": {
+              "type": "image",
+              "required": true
+            },
+            "intervalLabels": {
+              "type": "map",
+              "values": {
+                "type": "string"
+              },
+              "required": true
+            },
+            "totals": {
+              "type": "object",
+              "fields": {
+                "inputLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "placeholder": {
+                  "type": "string",
+                  "required": true
+                },
+                "explanation": {
+                  "type": "string",
+                  "required": true
+                },
+                "notes": {
+                  "type": "map",
+                  "values": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "review": {
+                  "type": "string",
+                  "required": true
+                },
+                "helpTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "help": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "comparison": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "sort": {
+              "type": "object",
+              "fields": {
+                "targets": {
+                  "type": "map",
+                  "values": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "trays": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "help": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "reasons": {
+                  "type": "map",
+                  "values": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "budgetNote": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "placedCount": {
+                  "type": "string",
+                  "required": true
+                },
+                "lockedStatus": {
+                  "type": "string",
+                  "required": true
+                },
+                "holdingStatus": {
+                  "type": "string",
+                  "required": true
+                },
+                "idleStatus": {
+                  "type": "string",
+                  "required": true
+                },
+                "allPlaced": {
+                  "type": "string",
+                  "required": true
+                },
+                "removeCard": {
+                  "type": "string",
+                  "required": true
+                },
+                "placeHere": {
+                  "type": "string",
+                  "required": true
+                },
+                "placeMore": {
+                  "type": "string",
+                  "required": true
+                },
+                "emptyTray": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "answersTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "yourTray": {
+                  "type": "string",
+                  "required": true
+                },
+                "correctTray": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "card": {
+              "type": "object",
+              "fields": {
+                "perPeriod": {
+                  "type": "string",
+                  "required": true
+                },
+                "received": {
+                  "type": "string",
+                  "required": true
+                },
+                "total": {
+                  "type": "string",
+                  "required": true
+                },
+                "schedule": {
+                  "type": "string",
+                  "required": true
+                },
+                "apr": {
+                  "type": "string",
+                  "required": true
+                },
+                "holding": {
+                  "type": "string",
+                  "required": true
+                },
+                "placed": {
+                  "type": "string",
+                  "required": true
+                },
+                "idle": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "cart": {
+              "type": "object",
+              "fields": {
+                "months": {
+                  "type": "number",
+                  "required": true
+                },
+                "available": {
+                  "type": "number",
+                  "required": true
+                },
+                "otherDue": {
+                  "type": "map",
+                  "values": {
+                    "type": "number"
+                  },
+                  "required": true
+                },
+                "requiredItemId": {
+                  "type": "string",
+                  "required": true
+                },
+                "minItems": {
+                  "type": "number",
+                  "required": true
+                },
+                "budgetNote": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      },
+                      "price": {
+                        "type": "number",
+                        "required": true
+                      },
+                      "installment": {
+                        "type": "number",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "price": {
+                  "type": "string",
+                  "required": true
+                },
+                "installment": {
+                  "type": "string",
+                  "required": true
+                },
+                "remove": {
+                  "type": "string",
+                  "required": true
+                },
+                "add": {
+                  "type": "string",
+                  "required": true
+                },
+                "basketTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "basketJoin": {
+                  "type": "string",
+                  "required": true
+                },
+                "basketEmpty": {
+                  "type": "string",
+                  "required": true
+                },
+                "monthlyLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "month": {
+                  "type": "string",
+                  "required": true
+                },
+                "have": {
+                  "type": "string",
+                  "required": true
+                },
+                "payment": {
+                  "type": "string",
+                  "required": true
+                },
+                "other": {
+                  "type": "string",
+                  "required": true
+                },
+                "remaining": {
+                  "type": "string",
+                  "required": true
+                },
+                "short": {
+                  "type": "string",
+                  "required": true
+                },
+                "needOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "needBad": {
+                  "type": "string",
+                  "required": true
+                },
+                "budgetOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "budgetBad": {
+                  "type": "string",
+                  "required": true
+                },
+                "example": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "statement": {
+              "type": "object",
+              "fields": {
+                "wallet": {
+                  "type": "number",
+                  "required": true
+                },
+                "debt": {
+                  "type": "number",
+                  "required": true
+                },
+                "living": {
+                  "type": "number",
+                  "required": true
+                },
+                "interestRate": {
+                  "type": "number",
+                  "required": true
+                },
+                "maxInterest": {
+                  "type": "number",
+                  "required": true
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "amount": {
+                        "type": "number",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "question": {
+                  "type": "string",
+                  "required": true
+                },
+                "facts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "value": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "goalsTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "goals": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "any"
+                    }
+                  },
+                  "required": true
+                },
+                "ruleTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "rule": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "ruleNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "optionIcon": {
+                  "type": "string",
+                  "required": true
+                },
+                "confirm": {
+                  "type": "string",
+                  "required": true
+                },
+                "todayTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "walletStart": {
+                  "type": "string",
+                  "required": true
+                },
+                "walletStartValue": {
+                  "type": "string",
+                  "required": true
+                },
+                "pay": {
+                  "type": "string",
+                  "required": true
+                },
+                "payValue": {
+                  "type": "string",
+                  "required": true
+                },
+                "walletLeft": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingNeed": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingShort": {
+                  "type": "string",
+                  "required": true
+                },
+                "reveal": {
+                  "type": "string",
+                  "required": true
+                },
+                "debtTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "debtLeft": {
+                  "type": "string",
+                  "required": true
+                },
+                "interest": {
+                  "type": "string",
+                  "required": true
+                },
+                "interestValue": {
+                  "type": "string",
+                  "required": true
+                },
+                "nextDebt": {
+                  "type": "string",
+                  "required": true
+                },
+                "noteOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "noteShort": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingResultOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "livingResultBad": {
+                  "type": "string",
+                  "required": true
+                },
+                "costResultOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "costResultBad": {
+                  "type": "string",
+                  "required": true
+                },
+                "summary": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "texts": {
+              "type": "object",
+              "fields": {
+                "stepsLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "notSubmitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "howto": {
+                  "type": "string",
+                  "required": true
+                },
+                "offerName": {
+                  "type": "string",
+                  "required": true
+                },
+                "correct": {
+                  "type": "string",
+                  "required": true
+                },
+                "incorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerDone": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerIdle": {
+                  "type": "string",
+                  "required": true
+                },
+                "finish": {
+                  "type": "string",
+                  "required": true
+                },
+                "next": {
+                  "type": "string",
+                  "required": true
+                },
+                "note": {
+                  "type": "string",
+                  "required": true
+                },
+                "feedback": {
+                  "type": "object",
+                  "fields": {
+                    "totals": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "sorted": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "sortChecked": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "cart": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "statementConfirmed": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "statementRevealed": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        },
+        "reference": {
+          "type": "object",
+          "fields": {
+            "buttonText": {
+              "type": "string",
+              "required": true
+            },
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "label": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "text": {
+                    "type": "any"
+                  },
+                  "image": {
+                    "type": "image",
+                    "required": true
+                  },
+                  "facts": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "shared": {
+              "type": "object",
+              "fields": {
+                "label": {
+                  "type": "string",
+                  "required": true
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          }
+        }
+      },
+      "inferredFrom": 2
+    },
+    "SCAM_OR_SAFE": {
+      "phase": "A",
+      "label": "Bảo hiểm và lừa đảo",
+      "frame": "ScamOrSafeMiniGame",
+      "legacyIds": [
+        "INSURANCE_DESK_CH07",
+        "SCAM_OR_SAFE_CH07"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "required": true
+        },
+        "config": {
+          "type": "object",
+          "fields": {
+            "eyebrow": {
+              "type": "string",
+              "required": true
+            },
+            "heading": {
+              "type": "string",
+              "required": true
+            },
+            "subheading": {
+              "type": "string",
+              "required": true
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "title": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "image": {
+                    "type": "image",
+                    "required": true
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "insurance": {
+              "type": "object",
+              "fields": {
+                "note": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "referenceButton": {
+                  "type": "string",
+                  "required": true
+                },
+                "paymentQuestion": {
+                  "type": "string",
+                  "required": true
+                },
+                "payments": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "required": true
+                },
+                "correctPayment": {
+                  "type": "number",
+                  "required": true
+                },
+                "documentQuestion": {
+                  "type": "string",
+                  "required": true
+                },
+                "documents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "requiredDocuments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "documentSelected": {
+                  "type": "string",
+                  "required": true
+                },
+                "documentPick": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "feedback": {
+                  "type": "string",
+                  "required": true
+                },
+                "paymentLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "paymentExplanation": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "packetLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "packetExplanation": {
+                  "type": "string",
+                  "required": true
+                },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "inbox": {
+              "type": "object",
+              "fields": {
+                "navLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "navItem": {
+                  "type": "string",
+                  "required": true
+                },
+                "statusCorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "statusIncorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "statusPicked": {
+                  "type": "string",
+                  "required": true
+                },
+                "statusOpen": {
+                  "type": "string",
+                  "required": true
+                },
+                "image": {
+                  "type": "image",
+                  "required": true
+                },
+                "counter": {
+                  "type": "string",
+                  "required": true
+                },
+                "contextLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "answerOrder": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "answerLabels": {
+                  "type": "object",
+                  "fields": {
+                    "check": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "continue": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "youChose": {
+                  "type": "string",
+                  "required": true
+                },
+                "progress": {
+                  "type": "string",
+                  "required": true
+                },
+                "progressDone": {
+                  "type": "string",
+                  "required": true
+                },
+                "progressOpen": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "feedback": {
+                  "type": "string",
+                  "required": true
+                },
+                "messages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "channel": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "text": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "context": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "answer": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "explanation": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "response": {
+              "type": "object",
+              "fields": {
+                "note": {
+                  "type": "array",
+                  "items": {
+                    "type": "any"
+                  },
+                  "required": true
+                },
+                "title": {
+                  "type": "string",
+                  "required": true
+                },
+                "slots": {
+                  "type": "number",
+                  "required": true
+                },
+                "remove": {
+                  "type": "string",
+                  "required": true
+                },
+                "removeLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "emptySlot": {
+                  "type": "string",
+                  "required": true
+                },
+                "placed": {
+                  "type": "string",
+                  "required": true
+                },
+                "add": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "feedback": {
+                  "type": "string",
+                  "required": true
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "grading": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "positions": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "required": true
+                      },
+                      "review": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "reviewTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "reviewSummary": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "texts": {
+              "type": "object",
+              "fields": {
+                "stepsLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "roundTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "submittedBadge": {
+                  "type": "string",
+                  "required": true
+                },
+                "openBadge": {
+                  "type": "string",
+                  "required": true
+                },
+                "howto": {
+                  "type": "string",
+                  "required": true
+                },
+                "correct": {
+                  "type": "string",
+                  "required": true
+                },
+                "incorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "verdictLine": {
+                  "type": "string",
+                  "required": true
+                },
+                "defaultFeedback": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerDone": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerOpen": {
+                  "type": "string",
+                  "required": true
+                },
+                "next": {
+                  "type": "string",
+                  "required": true
+                },
+                "finish": {
+                  "type": "string",
+                  "required": true
+                },
+                "note": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        },
+        "reference": {
+          "type": "object",
+          "fields": {
+            "buttonText": {
+              "type": "string",
+              "required": true
+            },
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "label": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "image": {
+                    "type": "image",
+                    "required": true
+                  },
+                  "facts": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "shared": {
+              "type": "object",
+              "fields": {
+                "label": {
+                  "type": "string",
+                  "required": true
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          }
+        }
+      },
+      "inferredFrom": 2
+    },
+    "FUTURE_PLAN": {
+      "phase": "A",
+      "label": "Kế hoạch tương lai",
+      "frame": "FuturePlanMiniGame",
+      "legacyIds": [
+        "PORTFOLIO_CH08",
+        "CLAIM_REVIEW_CH08",
+        "LIFE_PLAN_CH08"
+      ],
+      "graded": true,
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "config": {
+          "type": "object",
+          "fields": {
+            "mode": {
+              "type": "string",
+              "required": true
+            },
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "required": true
+            },
+            "texts": {
+              "type": "object",
+              "fields": {
+                "eyebrow": {
+                  "type": "string",
+                  "required": true
+                },
+                "referenceButton": {
+                  "type": "string",
+                  "required": true
+                },
+                "decrease": {
+                  "type": "string",
+                  "required": true
+                },
+                "increase": {
+                  "type": "string",
+                  "required": true
+                },
+                "correct": {
+                  "type": "string",
+                  "required": true
+                },
+                "incorrect": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerDone": {
+                  "type": "string",
+                  "required": true
+                },
+                "footerOpen": {
+                  "type": "string",
+                  "required": true
+                },
+                "finish": {
+                  "type": "string",
+                  "required": true
+                },
+                "disclaimer": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "portfolio": {
+              "type": "object",
+              "fields": {
+                "heroImage": {
+                  "type": "image",
+                  "required": true
+                },
+                "intro": {
+                  "type": "string",
+                  "required": true
+                },
+                "toolbar": {
+                  "type": "string",
+                  "required": true
+                },
+                "startingAmount": {
+                  "type": "number",
+                  "required": true
+                },
+                "pointValue": {
+                  "type": "number",
+                  "required": true
+                },
+                "totalPoints": {
+                  "type": "number",
+                  "required": true
+                },
+                "step": {
+                  "type": "number",
+                  "required": true
+                },
+                "unit": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearAsset": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearMinPoints": {
+                  "type": "number",
+                  "required": true
+                },
+                "courseCost": {
+                  "type": "number",
+                  "required": true
+                },
+                "spreadAssets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                },
+                "assets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "image": {
+                        "type": "image",
+                        "required": true
+                      },
+                      "description": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "market": {
+                  "type": "object",
+                  "fields": {
+                    "period": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "maxMove": {
+                      "type": "number",
+                      "required": true
+                    },
+                    "fixed": {
+                      "type": "object",
+                      "fields": {
+                        "cash": {
+                          "type": "number",
+                          "required": true
+                        }
+                      },
+                      "required": true
+                    },
+                    "drawn": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "required": true
+                    },
+                    "legacy": {
+                      "type": "object",
+                      "fields": {
+                        "period": {
+                          "type": "string",
+                          "required": true
+                        },
+                        "cash": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "bonds": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "equity": {
+                          "type": "number",
+                          "required": true
+                        }
+                      },
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "settlement": {
+                  "type": "object",
+                  "fields": {
+                    "resultFrom": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "fitFlag": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "fitAllocation": {
+                      "type": "object",
+                      "fields": {
+                        "cash": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "bonds": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "equity": {
+                          "type": "number",
+                          "required": true
+                        }
+                      },
+                      "required": true
+                    },
+                    "otherAllocation": {
+                      "type": "object",
+                      "fields": {
+                        "cash": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "bonds": {
+                          "type": "number",
+                          "required": true
+                        },
+                        "equity": {
+                          "type": "number",
+                          "required": true
+                        }
+                      },
+                      "required": true
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "noteTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "noteText": {
+                  "type": "string",
+                  "required": true
+                },
+                "poolLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultsTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultsIntro": {
+                  "type": "string",
+                  "required": true
+                },
+                "resultsFine": {
+                  "type": "string",
+                  "required": true
+                },
+                "marketRow": {
+                  "type": "string",
+                  "required": true
+                },
+                "before": {
+                  "type": "string",
+                  "required": true
+                },
+                "after": {
+                  "type": "string",
+                  "required": true
+                },
+                "change": {
+                  "type": "string",
+                  "required": true
+                },
+                "changeLead": {
+                  "type": "string",
+                  "required": true
+                },
+                "changeMid": {
+                  "type": "string",
+                  "required": true
+                },
+                "changeEnd": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearLine": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearOk": {
+                  "type": "string",
+                  "required": true
+                },
+                "nearShort": {
+                  "type": "string",
+                  "required": true
+                },
+                "spreadTitle": {
+                  "type": "string",
+                  "required": true
+                },
+                "spreadText": {
+                  "type": "string",
+                  "required": true
+                },
+                "closing": {
+                  "type": "string",
+                  "required": true
+                },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "claims": {
+              "type": "object",
+              "fields": {
+                "heroImage": {
+                  "type": "image",
+                  "required": true
+                },
+                "intro": {
+                  "type": "string",
+                  "required": true
+                },
+                "toolbar": {
+                  "type": "string",
+                  "required": true
+                },
+                "pickCount": {
+                  "type": "number",
+                  "required": true
+                },
+                "ad": {
+                  "type": "object",
+                  "fields": {
+                    "image": {
+                      "type": "image",
+                      "required": true
+                    },
+                    "eyebrow": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "text": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "question": {
+                  "type": "string",
+                  "required": true
+                },
+                "instruction": {
+                  "type": "string",
+                  "required": true
+                },
+                "checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "detail": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "correct": {
+                        "type": "boolean",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "chosen": {
+                  "type": "string",
+                  "required": true
+                },
+                "notChosen": {
+                  "type": "string",
+                  "required": true
+                },
+                "selected": {
+                  "type": "string",
+                  "required": true
+                },
+                "select": {
+                  "type": "string",
+                  "required": true
+                },
+                "submit": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitted": {
+                  "type": "string",
+                  "required": true
+                }
+              },
+              "required": true
+            },
+            "planner": {
+              "type": "object",
+              "fields": {
+                "heroImage": {
+                  "type": "image",
+                  "required": true
+                },
+                "intro": {
+                  "type": "string",
+                  "required": true
+                },
+                "toolbar": {
+                  "type": "string",
+                  "required": true
+                },
+                "step": {
+                  "type": "number",
+                  "required": true
+                },
+                "goal": {
+                  "type": "object",
+                  "fields": {
+                    "amount": {
+                      "type": "number",
+                      "required": true
+                    },
+                    "label": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "description": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "goalLine": {
+                  "type": "string",
+                  "required": true
+                },
+                "goalIntro": {
+                  "type": "string",
+                  "required": true
+                },
+                "howto": {
+                  "type": "string",
+                  "required": true
+                },
+                "monthsLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "months": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "fields": {
+                      "id": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "label": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "income": {
+                        "type": "number",
+                        "required": true
+                      },
+                      "essential": {
+                        "type": "number",
+                        "required": true
+                      },
+                      "description": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "prompt": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "yearCount": {
+                        "type": "number",
+                        "required": true
+                      },
+                      "yearLabel": {
+                        "type": "string",
+                        "required": true
+                      },
+                      "reviewImage": {
+                        "type": "image",
+                        "required": true
+                      }
+                    }
+                  },
+                  "required": true
+                },
+                "incomeLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "essentialLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "remainingLabel": {
+                  "type": "string",
+                  "required": true
+                },
+                "essentialNote": {
+                  "type": "string",
+                  "required": true
+                },
+                "goalBox": {
+                  "type": "object",
+                  "fields": {
+                    "image": {
+                      "type": "image",
+                      "required": true
+                    },
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "counter": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "flexibleBox": {
+                  "type": "object",
+                  "fields": {
+                    "image": {
+                      "type": "image",
+                      "required": true
+                    },
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "counter": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "balanceShort": {
+                  "type": "string",
+                  "required": true
+                },
+                "balanceExact": {
+                  "type": "string",
+                  "required": true
+                },
+                "balanceSpare": {
+                  "type": "string",
+                  "required": true
+                },
+                "balanceFormula": {
+                  "type": "string",
+                  "required": true
+                },
+                "submitMonth": {
+                  "type": "string",
+                  "required": true
+                },
+                "monthSubmitted": {
+                  "type": "string",
+                  "required": true
+                },
+                "nextMonth": {
+                  "type": "string",
+                  "required": true
+                },
+                "feedback": {
+                  "type": "object",
+                  "fields": {
+                    "summary": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "sum": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "over": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "exact": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "spare": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "noGoal": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "withGoal": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "year": {
+                  "type": "object",
+                  "fields": {
+                    "title": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "intro": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "goalLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "progressLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "projected": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "infeasibleTitle": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "infeasibleOverspent": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "infeasibleNoSaving": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "infeasibleEnd": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfallLead": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfallMid": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfallMonths": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfallEnd": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "enough": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "detailsSummary": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "monthLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "closing": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "review": {
+                  "type": "object",
+                  "fields": {
+                    "incomeLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "goalLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "flexibleLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "missingLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "spareLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "sharedLabel": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "goalLine": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "infeasible": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "shortfall": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "enough": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                },
+                "projectionFlags": {
+                  "type": "object",
+                  "fields": {
+                    "feasible": {
+                      "type": "string",
+                      "required": true
+                    },
+                    "yearSavings": {
+                      "type": "string",
+                      "required": true
+                    }
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          },
+          "required": true
+        },
+        "reference": {
+          "type": "object",
+          "fields": {
+            "buttonText": {
+              "type": "string",
+              "required": true
+            },
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "fields": {
+                  "id": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "label": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "image": {
+                    "type": "image",
+                    "required": true
+                  },
+                  "facts": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "required": true
+                  }
+                }
+              },
+              "required": true
+            },
+            "shared": {
+              "type": "object",
+              "fields": {
+                "label": {
+                  "type": "string",
+                  "required": true
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "required": true
+                }
+              },
+              "required": true
+            }
+          }
+        }
+      },
+      "inferredFrom": 3
+    }
   },
   "stepKinds": {
-    "SORT": { "phase": "B", "label": "Phân loại thẻ vào nhóm" },
-    "ALLOCATE": { "phase": "B", "label": "Chia vào ô" },
-    "MULTIPLE_CHOICE": { "phase": "B", "label": "Chọn một đáp án" },
-    "MULTI_SELECT": { "phase": "B", "label": "Chọn mọi đáp án đúng" },
-    "NUMERIC": { "phase": "B", "label": "Nhập số" },
-    "THRESHOLD_CLASSIFY": { "phase": "B", "label": "Xếp theo ngưỡng" },
-    "SIMULATION": { "phase": "B", "label": "Mô phỏng (không vào điểm)" },
-    "INFO": { "phase": "B", "label": "Xem thông tin" }
+    "SORT": {
+      "phase": "B",
+      "label": "Phân loại thẻ vào nhóm"
+    },
+    "ALLOCATE": {
+      "phase": "B",
+      "label": "Chia vào ô"
+    },
+    "MULTIPLE_CHOICE": {
+      "phase": "B",
+      "label": "Chọn một đáp án"
+    },
+    "MULTI_SELECT": {
+      "phase": "B",
+      "label": "Chọn mọi đáp án đúng"
+    },
+    "NUMERIC": {
+      "phase": "B",
+      "label": "Nhập số"
+    },
+    "THRESHOLD_CLASSIFY": {
+      "phase": "B",
+      "label": "Xếp theo ngưỡng"
+    },
+    "SIMULATION": {
+      "phase": "B",
+      "label": "Mô phỏng (không vào điểm)"
+    },
+    "INFO": {
+      "phase": "B",
+      "label": "Xem thông tin"
+    }
   }
 }
