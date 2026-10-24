@@ -55,6 +55,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/swagger/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // Trang lỗi của Tomcat (24/10): ngoại lệ không phải lỗi token ném ra từ filter (vd DB chết lúc decoder tra
+                // tài khoản) được chuyển tới /error. Chặn /error thì request đó thành ẩn danh bị từ chối → 401/3003 → FE
+                // tưởng hết phiên, đăng xuất người dùng. Mở thì lỗi thật ra đúng 5xx. /error chỉ hiện trạng thái, không lộ gì.
+                .requestMatchers("/error").permitAll()
                 // Cửa vào phải mở, còn lại phải có token.
                 // /verify là link người dùng bấm từ hộp thư — không thể có token ở đó.
                 // Bảo vệ của nó là bản thân token ngẫu nhiên 32 byte trên URL, dùng một lần.

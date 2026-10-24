@@ -71,7 +71,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true",
         // Cố ý chọn email mà có email khác là CHUỖI CON của nó: min@fifteen.com nằm trong
         // admin@fifteen.com. Ca 10 dùng đúng cái bẫy này.
-        "app.admin-emails=admin@fifteen.com,gg-admin@gmail.com"})
+        "app.admin-emails=admin@fifteen.com,gg-admin@gmail.com",
+        // Ca 31, 32 đếm tới lượt thứ 6; production mặc định 30 (24/10, phòng chung NAT).
+        "app.ratelimit.mail-per-window=5"})
 @AutoConfigureMockMvc
 class AuthFlowTest {
 
@@ -687,8 +689,10 @@ class AuthFlowTest {
                                 + "\"displayName\":\"Chu That\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+        // Đăng ký lại trong 1 phút không gửi thêm mail (24/10): không thì đăng ký lặp là dội mail vào hộp thư người khác.
+        assertThat(mailCatcher.sent.stream().filter(m -> m.to().equals(email)).count()).isEqualTo(1);
 
-        verify(tokenFromMail()); // chủ hộp thư nhập mã MỚI NHẤT
+        verify(tokenFromMail()); // chủ hộp thư nhập mã đang sống (mã của lá mail duy nhất)
         mvc.perform(login(email, "chuthat456")).andExpect(status().isOk());
         mvc.perform(login(email, "matkhau123"))
                 .andExpect(status().isUnauthorized())

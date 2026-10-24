@@ -63,7 +63,7 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
     private final CorsConfigurationSource cors;
     private final ConcurrentHashMap<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 
-    public IpRateLimitFilter(@Value("${app.ratelimit.mail-per-window:5}") int limit,
+    public IpRateLimitFilter(@Value("${app.ratelimit.mail-per-window:30}") int limit,
                              @Value("${app.ratelimit.window-seconds:900}") long windowSeconds,
                              ObjectMapper mapper, Clock clock,
                              @Qualifier("corsConfigurationSource") CorsConfigurationSource cors) {
