@@ -48,6 +48,8 @@ public class ContentSchema {
     private final Set<String> positions = new HashSet<>();
     private final Set<String> gameKinds = new HashSet<>();
     private final Map<String, String> kindByLegacyId = new HashMap<>();
+    /** Cấu hình từng loại mini-game (minigameKinds.KIND.fields — sinh từ mini-game thật bằng ops/finteen-assets/sinh_khuon_minigame.py). */
+    private final Map<String, Map<String, JsonNode>> kindFields = new HashMap<>();
 
     public ContentSchema(ObjectMapper objectMapper) {
         try (InputStream in = new ClassPathResource("content/scene-schema.json").getInputStream()) {
@@ -81,6 +83,9 @@ public class ContentSchema {
             schema.path(group).fields().forEachRemaining(e -> {
                 gameKinds.add(e.getKey());
                 e.getValue().path("legacyIds").forEach(id -> kindByLegacyId.put(id.asText(), e.getKey()));
+                if (e.getValue().path("fields").isObject()) {
+                    kindFields.put(e.getKey(), defsOf(e.getValue().path("fields")));
+                }
             });
         }
     }
@@ -350,10 +355,38 @@ public class ContentSchema {
                     if (!v.isArray()) {
                         throw fail(p, "phải là mảng");
                     }
+                    if (def.has("items")) {
+                        for (int i = 0; i < v.size(); i++) {
+                            if (!v.get(i).isNull()) {
+                                value(v.get(i), def.get("items"), p + "[" + i + "]");
+                            }
+                        }
+                    }
                 }
                 case "object" -> {
                     if (!v.isObject()) {
                         throw fail(p, "phải là object");
+                    }
+                    if (def.has("fields")) {
+                        fields(v, defsOf(def.get("fields")), p);
+                    }
+                }
+                case "map" -> {   // object khoá là mã (A / B / "1"…), mọi giá trị cùng một kiểu
+                    if (!v.isObject()) {
+                        throw fail(p, "phải là object {mã: giá trị}");
+                    }
+                    if (def.has("values")) {
+                        v.properties().forEach(e -> value(e.getValue(), def.get("values"), p + "." + e.getKey()));
+                    }
+                }
+                case "number" -> {
+                    if (!v.isNumber()) {
+                        throw fail(p, "phải là số");
+                    }
+                }
+                case "boolean" -> {
+                    if (!v.isBoolean()) {
+                        throw fail(p, "phải là true / false");
                     }
                 }
                 case "characters" -> characters(v, p);
@@ -551,6 +584,10 @@ public class ContentSchema {
             if (!gameKinds.contains(kind)) {
                 throw fail(p + ".kind", "loại mini-game '" + kind + "' không có trong bộ khuôn " + new TreeSet<>(gameKinds));
             }
+            Map<String, JsonNode> config = kindFields.get(kind);
+            if (config != null) {
+                fields(v, config, p);
+            }
         }
     }
 
@@ -582,9 +619,16 @@ public class ContentSchema {
         if (!problems.isEmpty()) {
             throw fail(problems.get(0).split(":")[0], problems.get(0).substring(problems.get(0).indexOf(':') + 1).trim());
         }
-        if (ids.isEmpty()) {
+        boolean playOnly = !schema.path("minigameKinds").path(game.path("kind").asText()).path("graded").asBoolean(true);
+        if (ids.isEmpty() && !playOnly) {   // loại khuôn khai graded:false (Đua tiết kiệm) thì không chấm là đúng
             c.warn(p + ": mini-game không có câu chấm điểm (grade) — không vào điểm báo cáo");
         }
+    }
+
+    private static Map<String, JsonNode> defsOf(JsonNode fields) {
+        Map<String, JsonNode> defs = new LinkedHashMap<>();
+        fields.properties().forEach(e -> defs.put(e.getKey(), e.getValue()));
+        return defs;
     }
 
     /** Điều kiện kiểu khuôn ({all|any} / {var}) — khác dạng cũ (chuỗi, {type: ALWAYS_UNLOCKED}…). */

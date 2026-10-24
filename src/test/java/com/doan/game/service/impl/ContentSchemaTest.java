@@ -210,4 +210,48 @@ class ContentSchemaTest {
         ((ObjectNode) c.path("scenes").get(1)).set("game", json.readTree("{\"kind\":\"SORT\"}"));
         assertThat(schema.validate(c)).anyMatch(w -> w.contains("không có câu chấm điểm"));
     }
+
+    /** Bọc một cảnh mini-game thành chương tối thiểu (cảnh mini-game → kết) để kiểm riêng phần game. */
+    private ObjectNode chapterOf(JsonNode minigameScene) {
+        ObjectNode scene = minigameScene.deepCopy();
+        scene.put("nextSceneId", "end");
+        scene.remove("onPassSceneId");
+        ObjectNode ch = json.createObjectNode();
+        ch.put("id", "t");
+        ch.put("title", "t");
+        ch.putArray("scenes").add(scene).add(json.createObjectNode().put("id", "end").put("type", "ending"));
+        return ch;
+    }
+
+    @Test
+    void everyRealMiniGamePassesItsKindTemplate() throws Exception {
+        JsonNode games;
+        try (InputStream in = getClass().getResourceAsStream("/grading/games.json")) {
+            games = json.readTree(in);
+        }
+        assertThat(games).hasSize(13);
+        for (JsonNode g : games) {
+            assertThat(schema.validate(chapterOf(g.path("scene"))))
+                    .as("mini-game %s", g.path("scene").path("game").path("id").asText())
+                    .noneMatch(w -> w.contains("game.kind"));
+        }
+    }
+
+    @Test
+    void miniGameConfigIsCheckedAgainstItsKind() throws Exception {
+        JsonNode shop = null;
+        try (InputStream in = getClass().getResourceAsStream("/grading/games.json")) {
+            for (JsonNode g : json.readTree(in)) {
+                if ("SMART_SHOPPING".equals(g.path("scene").path("game").path("kind").asText())) {
+                    shop = g.path("scene");
+                }
+            }
+        }
+        ObjectNode missing = chapterOf(shop);
+        ((ObjectNode) missing.path("scenes").get(0).path("game")).remove("phones");
+        assertThatThrownBy(() -> schema.validate(missing)).hasMessageContaining("game.phones").hasMessageContaining("bắt buộc");
+        ObjectNode wrongType = chapterOf(shop);
+        ((ObjectNode) wrongType.path("scenes").get(0).path("game").path("phones").get(1)).put("price", "1.300.000đ");
+        assertThatThrownBy(() -> schema.validate(wrongType)).hasMessageContaining("game.phones[1].price").hasMessageContaining("số");
+    }
 }
