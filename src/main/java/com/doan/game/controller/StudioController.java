@@ -26,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import com.doan.game.DTO.response.VoiceSuggestResponse;
+import com.doan.game.service.impl.VoiceSuggestService;
 
 /**
  * Studio (PR B, 21/10): cổng mở cho ADMIN và ba vai Editor / Reviewer / Manager; ai làm được việc gì thì service
@@ -37,6 +39,7 @@ import java.util.UUID;
 public class StudioController {
 
     private final ContentService contentService;
+    private final VoiceSuggestService voiceSuggestService;
 
     /** Body = nguyên object chương theo hình dạng FE (chapterNV2GameData). Lưu đè bản nháp của chương. */
     @PutMapping("/chapters/{code}/draft")
@@ -56,6 +59,15 @@ public class StudioController {
     @GetMapping("/chapters/{code}/draft")
     public ApiResponse<DraftContentResponse> draft(@PathVariable String code) {
         return ApiResponse.ok(contentService.draftContent(code.trim().toUpperCase()));
+    }
+
+    /**
+     * Gợi ý cách đọc cho giọng đọc: câu thoại có người nói của nháp mới nhất, lọc câu dễ đọc sai, gọi AI MỘT lần cho cả chương.
+     * Không lưu — người soạn bấm Nhận thì ghi spokenText vào nháp. Không có khoá AI → 409 / 9003; AI lỗi → 502 / 9004.
+     */
+    @PostMapping("/chapters/{code}/voice/suggest")
+    public ApiResponse<VoiceSuggestResponse> suggestVoice(@PathVariable String code) {
+        return ApiResponse.ok(voiceSuggestService.suggest(code.trim().toUpperCase()));
     }
 
     /** Trạng thái nháp mới nhất của mọi chương (không kèm nội dung). */

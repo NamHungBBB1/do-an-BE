@@ -139,7 +139,9 @@ public enum ErrorCode {
 
     // 9xxx — AI (24/10): khoá nhà cung cấp, hàng đợi việc AI nhiều tầng.
     AI_KEY_INVALID(9001, "Khoá AI không hợp lệ", HttpStatus.BAD_REQUEST),
-    AI_KEY_ALIAS_TAKEN(9002, "Tên gợi nhớ khoá đã có — chọn tên khác", HttpStatus.CONFLICT);
+    AI_KEY_ALIAS_TAKEN(9002, "Tên gợi nhớ khoá đã có — chọn tên khác", HttpStatus.CONFLICT),
+    AI_KEY_MISSING(9003, "Chưa có khoá AI nào đang bật và thử đạt — vào Quản trị → Khoá AI", HttpStatus.CONFLICT),
+    AI_UNAVAILABLE(9004, "AI chưa trả lời được — thử lại sau", HttpStatus.BAD_GATEWAY);
 
     private final int code;
     private final String message;
