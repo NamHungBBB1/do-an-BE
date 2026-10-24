@@ -79,11 +79,87 @@ class ContentSchemaTest {
                 {"id":"c","title":"t","scenes":[
                   {"id":"a","type":"choice","text":"?","options":[
                      {"id":"o1","text":"A","nextSceneId":"b","deltaStats":{"SAVING":5},
-                      "condition":{"all":[{"var":"money","op":">=","value":100},{"var":"flag:x","op":"==","value":true}]}},
+                      "condition":{"all":[{"var":"money","op":">=","value":100},{"var":"flag:x","op":"==","value":true}]},
+                      "lockedReason":"Chưa đủ tiền"},
                      {"id":"o2","label":"B","nextSceneId":"b"}]},
                   {"id":"b","type":"minigame","game":{"kind":"SORT"},"nextSceneId":"e"},
                   {"id":"e","type":"ending"}]}
                 """);
+    }
+
+    /** Khoá lựa chọn: một cơ chế = condition theo khuôn + câu nhắn cho trẻ (Hưng 24/10). requires cũ chỉ cảnh báo. */
+    @Test
+    void lockNeedsReasonAndOldRequiresWarns() throws Exception {
+        ObjectNode c = minimal();
+        ((ObjectNode) c.path("scenes").get(0).path("options").get(0)).remove("lockedReason");
+        assertThatThrownBy(() -> schema.validate(c)).hasMessageContaining("options[0].lockedReason");
+
+        ObjectNode d = minimal();
+        ((ObjectNode) d.path("scenes").get(0).path("options").get(1)).putObject("requires").put("minMoney", 100);
+        assertThat(schema.validate(d)).anyMatch(w -> w.contains("options[1].requires") && w.contains("dạng cũ"));
+    }
+
+    /** Ghi nhớ lựa chọn theo "quyết định": choice:<nhóm> phải trỏ câu hỏi có thật và mã lựa chọn có thật; inspected:<thẻ> lạ chỉ nhắc. */
+    @Test
+    void choiceAndInspectedVariables() throws Exception {
+        ObjectNode ok = minimal();
+        setCondition(ok, "{\"var\":\"choice:a\",\"op\":\"==\",\"value\":\"o1\"}");
+        assertThat(schema.validate(ok)).isEmpty();
+
+        ObjectNode badValue = minimal();
+        setCondition(badValue, "{\"var\":\"choice:a\",\"op\":\"==\",\"value\":\"o9\"}");
+        assertThatThrownBy(() -> schema.validate(badValue)).hasMessageContaining("'o9' không phải lựa chọn của 'a'");
+
+        ObjectNode badGroup = minimal();
+        setCondition(badGroup, "{\"var\":\"choice:khong-co\",\"op\":\"==\",\"value\":\"o1\"}");
+        assertThatThrownBy(() -> schema.validate(badGroup)).hasMessageContaining("nhóm quyết định 'khong-co'");
+
+        ObjectNode unknownCard = minimal();
+        setCondition(unknownCard, "{\"var\":\"inspected:the-la\",\"op\":\"==\",\"value\":true}");
+        assertThat(schema.validate(unknownCard)).anyMatch(w -> w.contains("thẻ xem 'the-la'"));
+    }
+
+    private void setCondition(ObjectNode chapter, String leaf) throws Exception {
+        ((ObjectNode) chapter.path("scenes").get(0).path("options").get(0)).set("condition", json.readTree(leaf));
+    }
+
+    /** "Chưa đạt" chỉ tính vào điểm — onFailSceneId là trường thừa (Hưng 24/10 bỏ hẳn), còn trong dữ liệu cũ thì nhắc. */
+    @Test
+    void onFailSceneIdIsLeftoverWarning() throws Exception {
+        ObjectNode c = minimal();
+        ((ObjectNode) c.path("scenes").get(1)).put("onFailSceneId", "a");
+        assertThat(schema.validate(c)).anyMatch(w -> w.contains("scenes[1].onFailSceneId") && w.contains("thừa"));
+    }
+
+    /** Đường đi chưa trọn: lưu nháp chỉ cảnh báo (đang soạn dở), gửi duyệt thì chặn. */
+    @Test
+    void brokenFlowWarnsOnSaveAndBlocksOnSubmit() throws Exception {
+        ObjectNode c = minimal();
+        ((com.fasterxml.jackson.databind.node.ArrayNode) c.path("scenes")).add(json.readTree("""
+                {"id":"lac","type":"dialogue","text":"không ai tới"}"""));
+        List<String> warnings = schema.validate(c);
+        assertThat(warnings).anyMatch(w -> w.contains("lac: không đường nào từ cảnh đầu tới được"));
+        assertThat(warnings).anyMatch(w -> w.contains("scenes[3]: chưa chọn cảnh kế tiếp"));
+        assertThatThrownBy(() -> schema.requireCompleteFlow(c)).hasMessageContaining("đường đi");
+        schema.requireCompleteFlow(minimal());   // chương trọn vẹn thì qua
+    }
+
+    /** Chương "chốt quyết định": chọn xong mà còn đường quay lại chính câu hỏi → trẻ kẹt. Lựa chọn chỉ dẫn đường (deferLedger) thì được. */
+    @Test
+    void lockDecisionsLoopIsCaught() throws Exception {
+        ObjectNode c = minimal();
+        c.putObject("metadata").put("lockDecisions", true);
+        ((ObjectNode) c.path("scenes").get(1)).put("nextSceneId", "a");   // mini-game quay lại câu hỏi
+        ((ObjectNode) c.path("scenes").get(0).path("options").get(1)).put("nextSceneId", "e");
+        assertThat(schema.validate(c)).anyMatch(w -> w.contains("options[0]") && w.contains("kẹt"));
+        ((ObjectNode) c.path("scenes").get(0).path("options").get(0)).put("deferLedger", true);
+        assertThat(schema.validate(c)).noneMatch(w -> w.contains("kẹt"));
+    }
+
+    @Test
+    void choiceGroupDefaultsToSceneId() throws Exception {
+        assertThat(ContentSchema.choiceGroupOf(json.readTree("{\"id\":\"s1\"}"))).isEqualTo("s1");
+        assertThat(ContentSchema.choiceGroupOf(json.readTree("{\"id\":\"s1\",\"choiceGroup\":\"g\"}"))).isEqualTo("g");
     }
 
     @Test

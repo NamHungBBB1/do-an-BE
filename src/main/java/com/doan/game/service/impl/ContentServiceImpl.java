@@ -362,6 +362,12 @@ public class ContentServiceImpl implements ContentService {
         if (req == null || req.changeClass() == null) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "changeClass: PATCH, MINOR hoặc MAJOR");
         }
+        // Bản đưa người duyệt phải chơi được từ đầu tới Kết: lưu nháp cho soạn dở, gửi duyệt thì chặn đường đi chưa trọn.
+        try {
+            contentSchema.requireCompleteFlow(objectMapper.readTree(draft.getContent()));
+        } catch (JsonProcessingException e) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "content: nháp không đọc được");
+        }
         draft.setChangeClass(req.changeClass());
         if (req.note() != null && !req.note().isBlank()) {
             draft.setChangeNote(req.note().trim());
@@ -557,16 +563,12 @@ public class ContentServiceImpl implements ContentService {
         return Integer.parseInt(m.group(1));
     }
 
-    /**
-     * Kiểm phần BE phải hiểu: scenes[] không rỗng, id không trùng, mọi tham chiếu cảnh (nextSceneId, onPass /
-     * onFail, ifTrue / ifFalse, options[].nextSceneId) trỏ tới cảnh có thật. Đây chính là ràng buộc "next trỏ
-     * phong-ngủ không tồn tại" trong bài CMS 08/10. Phần còn lại giữ nguyên, không đoán.
-     */
+    /** Nội dung đã kiểm theo bộ khuôn ({@link ContentSchema}) + cảnh báo trả cho Studio. */
     record Normalized(String json, List<String> warnings) {
     }
 
     Normalized validateAndNormalize(JsonNode root) {
-        // Bộ khuôn (24/10, K1): loại cảnh, trường bắt buộc, link cảnh, lựa chọn, chỉ số, điều kiện, mini-game kind.
+        // Bộ khuôn: loại cảnh, trường, link cảnh, lựa chọn + khoá, chỉ số, điều kiện, mini-game kind; đường đi chưa trọn chỉ cảnh báo.
         List<String> warnings = contentSchema.validate(root);
         String json;
         try {
