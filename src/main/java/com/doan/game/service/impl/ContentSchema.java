@@ -106,7 +106,8 @@ public class ContentSchema {
     /** Một lượt kiểm: giữ tập id cảnh, id lựa chọn đã gặp và danh sách cảnh báo. */
     private final class Check {
         final Set<String> sceneIds;
-        final Set<String> optionIds = new HashSet<>();
+        // id lựa chọn → cảnh đầu tiên dùng; BE chơi tìm lựa chọn theo (cảnh, id) nên trùng giữa các cảnh chỉ nhắc.
+        final Map<String, String> optionScenes = new HashMap<>();
         final List<String> warnings = new ArrayList<>();
 
         Check(Set<String> sceneIds) {
@@ -243,6 +244,7 @@ public class ContentSchema {
             }
             Map<String, JsonNode> defs = new LinkedHashMap<>();
             schema.path("optionFields").fields().forEachRemaining(e -> defs.put(e.getKey(), e.getValue()));
+            Set<String> ids = new HashSet<>();
             for (int i = 0; i < v.size(); i++) {
                 JsonNode o = v.get(i);
                 // Dữ liệu FE cũ có lựa chọn chỉ ghi "label" — chấp nhận, không sửa nội dung.
@@ -251,8 +253,12 @@ public class ContentSchema {
                 }
                 fields(o, defs, p + "[" + i + "]");
                 String id = o.path("id").asText();
-                if (!optionIds.add(id)) {
-                    throw fail(p + "[" + i + "].id", "mã lựa chọn trùng trong chương: " + id);
+                if (!ids.add(id)) {
+                    throw fail(p + "[" + i + "].id", "mã lựa chọn trùng trong cảnh: " + id);
+                }
+                String first = optionScenes.putIfAbsent(id, p);
+                if (first != null) {
+                    warn(p + "[" + i + "].id: mã '" + id + "' đã dùng ở " + first + " — nên đặt mã riêng");
                 }
             }
         }

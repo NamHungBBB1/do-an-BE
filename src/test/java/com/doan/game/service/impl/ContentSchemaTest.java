@@ -49,6 +49,19 @@ class ContentSchemaTest {
     }
 
     @Test
+    void optionIdReusedAcrossScenesIsWarnedButSameSceneIsRejected() throws Exception {
+        // CH04 dùng lại CH04_SC03_A/B ở 3 cảnh; BE chơi tìm lựa chọn theo (cảnh, id) nên chỉ nhắc.
+        ObjectNode c = minimal();
+        ((ObjectNode) c.path("scenes").get(1)).removeAll().put("id", "b").put("type", "choice").put("text", "?")
+                .set("options", json.readTree("[{\"id\":\"o1\",\"text\":\"A\",\"nextSceneId\":\"e\"},{\"id\":\"o3\",\"text\":\"C\",\"nextSceneId\":\"e\"}]"));
+        assertThat(schema.validate(c)).containsExactly("scenes[1].options[0].id: mã 'o1' đã dùng ở scenes[0].options — nên đặt mã riêng");
+
+        ObjectNode d = minimal();
+        ((ObjectNode) d.path("scenes").get(0).path("options").get(1)).put("id", "o1");
+        assertThatThrownBy(() -> schema.validate(d)).hasMessageContaining("scenes[0].options[1].id: mã lựa chọn trùng trong cảnh: o1");
+    }
+
+    @Test
     void uppercasePositionIsKeptAndWarned() throws Exception {
         JsonNode ch = chapter("CH01.json");
         assertThat(schema.validate(ch)).anyMatch(w -> w.contains(".position: 'LEFT'"));
