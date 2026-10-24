@@ -223,6 +223,11 @@ public class AuthServiceImpl implements AuthService {
         credentialRepo.save(c);
 
         log.info("Đăng ký đè lên tài khoản chưa xác minh {}", a.getId());
+        // Cùng hạn 1 mail / phút như gửi lại mã (24/10): thiếu dòng này thì đăng ký lại liên tục là dội mail vào
+        // hộp thư người khác, chỉ còn giới hạn IP chặn. Bỏ qua thì mã cũ (vừa gửi < 1 phút) vẫn dùng được.
+        if (isResendTooSoon(a, TokenPurpose.VERIFY_EMAIL)) {
+            return AccountMapper.toResponse(a);
+        }
         sendVerificationMail(a, createOtp(a, TokenPurpose.VERIFY_EMAIL));
         return AccountMapper.toResponse(a);
     }
