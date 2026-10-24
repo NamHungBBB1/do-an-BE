@@ -51,6 +51,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -784,6 +785,40 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.code").value(1005));
         // Gọi nội bộ (không header, loopback) không bị ảnh hưởng.
         register("khac-ip-" + System.nanoTime() + "@test.local");
+    }
+
+    /**
+     * Sự cố 24/10: qua đường hầm cloudflared, phần tử cuối X-Forwarded-For luôn là 127.0.0.1 → phải tách người dùng theo
+     * CF-Connecting-IP, không thì cả hệ thống chung một bộ đếm. 429 phải có header CORS để FE đọc được câu báo.
+     */
+    @Test
+    void tunnelUsersAreCountedByCloudflareIpAnd429CarriesCors() throws Exception {
+        String a = "198.51.100." + (System.nanoTime() % 200 + 1);
+        String b = "192.0.2." + (System.nanoTime() % 200 + 1);
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(post("/api/auth/register")
+                            .header("X-Forwarded-For", a + ", 127.0.0.1")
+                            .header("CF-Connecting-IP", a)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(registerJson("tunnel-a-" + System.nanoTime() + "-" + i + "@test.local")))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", a + ", 127.0.0.1")
+                        .header("CF-Connecting-IP", a)
+                        .header("Origin", "http://localhost:5173")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson("tunnel-a-cuoi-" + System.nanoTime() + "@test.local")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value(1005))
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+        // Người khác cũng qua đường hầm (cùng 127.0.0.1) vẫn đăng ký được.
+        mvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", b + ", 127.0.0.1")
+                        .header("CF-Connecting-IP", b)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson("tunnel-b-" + System.nanoTime() + "@test.local")))
+                .andExpect(status().isOk());
     }
 
     private void register(String email) throws Exception {
