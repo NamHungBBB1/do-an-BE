@@ -42,10 +42,11 @@ class ContentSchemaTest {
     }
 
     @Test
-    void singleOptionChoiceIsAllowedWithWarning() throws Exception {
+    void singleOptionChoiceIsAllowedWithoutWarning() throws Exception {
+        // 1 lựa chọn = màn "Tiếp tục" có thật (CH04, CH05) — hợp lệ, không nhắc nữa (Hưng 24/10: lưu nháp sạch cảnh báo).
         ObjectNode c = minimal();
         ((com.fasterxml.jackson.databind.node.ArrayNode) c.path("scenes").get(0).path("options")).remove(1);
-        assertThat(schema.validate(c)).containsExactly("scenes[0].options: chỉ 1 lựa chọn — như nút tiếp tục");
+        assertThat(schema.validate(c)).isEmpty();
     }
 
     @Test
@@ -54,7 +55,12 @@ class ContentSchemaTest {
         ObjectNode c = minimal();
         ((ObjectNode) c.path("scenes").get(1)).removeAll().put("id", "b").put("type", "choice").put("text", "?")
                 .set("options", json.readTree("[{\"id\":\"o1\",\"text\":\"A\",\"nextSceneId\":\"e\"},{\"id\":\"o3\",\"text\":\"C\",\"nextSceneId\":\"e\"}]"));
-        assertThat(schema.validate(c)).containsExactly("scenes[1].options[0].id: mã 'o1' đã dùng ở scenes[0].options — nên đặt mã riêng");
+        assertThat(schema.validate(c)).containsExactly("scenes[1].options[0].id: mã 'o1' đã dùng ở scenes[0].options (câu hỏi khác) — nên đặt mã riêng");
+
+        // Cùng nhóm quyết định (các phiên bản của một câu hỏi, như CH04_RECEIPT) dùng chung mã là đúng → không nhắc.
+        ((ObjectNode) c.path("scenes").get(0)).put("choiceGroup", "G");
+        ((ObjectNode) c.path("scenes").get(1)).put("choiceGroup", "G");
+        assertThat(schema.validate(c)).isEmpty();
 
         ObjectNode d = minimal();
         ((ObjectNode) d.path("scenes").get(0).path("options").get(1)).put("id", "o1");

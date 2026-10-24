@@ -289,8 +289,10 @@ public class ContentSchema {
         final Set<String> sceneIds;
         final Map<String, Set<String>> optionsByGroup;
         final Set<String> inspectIds;
-        // id lựa chọn → cảnh đầu tiên dùng; BE chơi tìm lựa chọn theo (cảnh, id) nên trùng giữa các cảnh chỉ nhắc.
-        final Map<String, String> optionScenes = new HashMap<>();
+        // id lựa chọn → (nhóm quyết định, cảnh đầu tiên dùng). Cùng nhóm (các phiên bản của một câu hỏi, vd CH04_RECEIPT) dùng chung
+        // mã là đúng; khác nhóm mới nhắc — BE chơi tìm lựa chọn theo (cảnh, id) nên trùng chỉ nhắc.
+        final Map<String, String[]> optionScenes = new HashMap<>();
+        String currentGroup;
         final List<String> warnings = new ArrayList<>();
 
         Check(Set<String> sceneIds, Map<String, Set<String>> optionsByGroup, Set<String> inspectIds) {
@@ -312,6 +314,7 @@ public class ContentSchema {
             if (!type.equals(raw)) {
                 warn(path + ".type: tên cũ '" + raw + "' — tên mới là '" + type + "'");
             }
+            currentGroup = choiceGroupOf(s);
             fields(s, sceneFields.get(type), path);
             if (s.hasNonNull("onFailSceneId")) {
                 warn(path + ".onFailSceneId: trường thừa — game không dùng, \"chưa đạt\" chỉ tính vào điểm (Hưng 24/10 bỏ hẳn)");
@@ -472,9 +475,9 @@ public class ContentSchema {
                 if (!ids.add(id)) {
                     throw fail(q + ".id", "mã lựa chọn trùng trong cảnh: " + id);
                 }
-                String first = optionScenes.putIfAbsent(id, p);
-                if (first != null) {
-                    warn(q + ".id: mã '" + id + "' đã dùng ở " + first + " — nên đặt mã riêng");
+                String[] first = optionScenes.putIfAbsent(id, new String[] {currentGroup, p});
+                if (first != null && !first[0].equals(currentGroup)) {
+                    warn(q + ".id: mã '" + id + "' đã dùng ở " + first[1] + " (câu hỏi khác) — nên đặt mã riêng");
                 }
                 // Khoá lựa chọn: MỘT cơ chế = condition theo khuôn + câu nhắn cho trẻ (Hưng 24/10 "cách 2").
                 if (isStructured(o.get("condition")) && o.path("lockedReason").asText("").isBlank()) {

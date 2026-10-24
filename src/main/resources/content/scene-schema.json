@@ -38,8 +38,19 @@
     "WEALTH",
     "flag:*",
     "inspected:*",
-    "choice:*"
+    "choice:*",
+    "choicePercent",
+    "learningScore",
+    "evidenceScore",
+    "reflectionScore",
+    "miniGameCompleted",
+    "miniGameGoalEligible",
+    "miniGameNeedsPractice",
+    "reflectionCompleted",
+    "coreCalculationsCorrect",
+    "gameFlag"
   ],
+  "endingVariablesNote": "Biến kết chương (chỉ có nghĩa trong endingRules.endings[].condition — FE tính lúc tới cảnh kết, Hưng 24/10: kết chương / báo cáo cuối chương cho trẻ là việc FE): choicePercent, learningScore (0–100), evidenceScore (tổng I+C+P), reflectionScore, miniGameCompleted, miniGameGoalEligible (≥ 75 %), miniGameNeedsPractice (< 50 %), reflectionCompleted, coreCalculationsCorrect (đúng / sai), gameFlag (chữ — cờ kế hoạch của mini-game CH02). Kết dự phòng: \"fallback\": true, không cần condition.",
   "variablesNote": "flag:<tên> = cờ việc không phải lựa chọn (đã mở thẻ, đã kiểm nguồn…); inspected:<mã thẻ> = trẻ đã mở thẻ / vật đó; choice:<nhóm> = lựa chọn cuối của một câu hỏi (nhóm = choiceGroup, không có thì = mã cảnh), so sánh == / != với mã lựa chọn (Hưng 24/10).",
   "conditionOps": [
     "==",
@@ -178,7 +189,6 @@
           "type": "options",
           "required": true,
           "minItems": 1,
-          "warnBelowItems": 2,
           "label": "Các lựa chọn"
         }
       }
