@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,6 +47,7 @@ import java.util.UUID;
  * tin số client gửi. Một @Transactional; gửi lại vô hại (chương đã trong chaptersDone thì không ghi).
  * 5 chỉ số ẩn chỉ nằm ở RunState, không bao giờ lọt ra response cho token SLOT.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlayServiceImpl implements PlayService {
@@ -161,13 +165,13 @@ public class PlayServiceImpl implements PlayService {
             m.setSlot(slot);
             m.setChapter(req.chapter());
             m.setAttemptIndex(attempt);
-            m.setGameId(row.dto().gameId());
-            m.setItemId(row.dto().itemId());
+            m.setGameId(row.gameId());
+            m.setItemId(row.itemId());
             m.setConcept(row.concept());
-            m.setChosen(row.dto().chosen());
+            m.setChosen(row.chosen());
             m.setCorrect(row.correct());
             m.setBuildVersion(req.releaseVersion());
-            m.setPlayedAt(row.dto().playedAt());
+            m.setPlayedAt(row.playedAt());
             m.setReceivedAt(now);
             miniGameResultRepo.save(m);
         }
@@ -217,7 +221,9 @@ public class PlayServiceImpl implements PlayService {
 
     private record ChoiceRow(ChoiceDto dto, String sceneId, String optionId, JsonNode deltaStats) {}
 
-    private record MiniRow(MiniGameDto dto, boolean correct, String concept) {}
+    /** Một dòng MiniGameResult sẽ ghi: itemId = mã câu (khuôn v3) hoặc thẻ / câu (bản cũ). */
+    private record MiniRow(String gameId, String itemId, String chosen, boolean correct, String concept,
+                           Instant playedAt) {}
 
     /** Mỗi dòng: cảnh phải type=choice, option phải có trong cảnh; hai dòng cùng nhóm → 1001. */
     private List<ChoiceRow> validateChoices(JsonNode scenes, List<ChoiceDto> choices) {
@@ -255,36 +261,53 @@ public class PlayServiceImpl implements PlayService {
     }
 
     /**
-     * Tìm game theo id trong scenes[].game rồi chấm theo hình dạng JSON (bảng chấm play.md 12/10).
-     * Cơ chế mới (chương 4 trở đi) thêm nhánh tại đây, FE không đổi contract.
+     * Gom dòng theo mini-game rồi chấm. Mini-game có câu {@code grade} (khuôn v3) → {@link MiniGameGrader}: chấm MỌI câu của
+     * cảnh (mẫu số từ JSON), ô thiếu → câu sai, ô lạ → bỏ qua + log. Không có câu {@code grade} (bản 1.1.0 đóng băng) → luật cũ
+     * theo hình dạng JSON (bảng chấm play.md 12/10). gameId không có trong chương → 7002 (lỗi lập trình FE, hiện ngay khi dev).
      */
     private List<MiniRow> validateMiniGames(JsonNode scenes, List<MiniGameDto> miniGames) {
-        List<MiniRow> rows = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
+        Map<String, Map<String, MiniGameDto>> byGame = new LinkedHashMap<>();
         for (MiniGameDto m : miniGames) {
             if (m == null || m.gameId() == null || m.gameId().isBlank()
                     || m.itemId() == null || m.itemId().isBlank()
-                    || m.chosen() == null || m.chosen().isBlank()) {
+                    || m.chosen() == null || m.chosen().isNull()
+                    || (m.chosen().isTextual() && m.chosen().asText().isBlank())) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED,
                         "miniGames[]: thieu gameId / itemId / chosen");
             }
-            // Câu trả lời đầu tiên trẻ bấm Kiểm tra thắng — gửi lại (trùng id) bỏ qua dòng đó.
-            if (!seen.add(m.gameId() + "|" + m.itemId())) {
-                continue;
-            }
-            JsonNode scene = findGameScene(scenes, m.gameId());
+            // Câu trả lời đầu tiên thắng — gửi lại (trùng id) bỏ qua dòng đó.
+            byGame.computeIfAbsent(m.gameId(), k -> new LinkedHashMap<>()).putIfAbsent(m.itemId(), m);
+        }
+        List<MiniRow> rows = new ArrayList<>();
+        byGame.forEach((gameId, items) -> {
+            JsonNode scene = findGameScene(scenes, gameId);
             if (scene == null) {
                 throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
-                        "mini-game '" + m.gameId() + "' khong co trong chuong nay");
+                        "mini-game '" + gameId + "' khong co trong chuong nay");
             }
-            boolean correct = score(scene.path("game"), m);
-            rows.add(new MiniRow(m, correct, conceptOf(scene)));
-        }
+            Instant playedAt = items.values().iterator().next().playedAt();
+            if (!MiniGameGrader.questions(scene).isEmpty()) {
+                Map<String, JsonNode> inputs = new LinkedHashMap<>();
+                items.forEach((input, m) -> inputs.put(input, m.chosen()));
+                Set<String> unknown = new LinkedHashSet<>(inputs.keySet());
+                unknown.removeAll(MiniGameGrader.inputsUsed(scene));
+                if (!unknown.isEmpty()) {
+                    log.warn("mini-game {}: bo qua o nhap khong cau nao dung {}", gameId, unknown);
+                }
+                for (MiniGameGrader.Graded g : MiniGameGrader.grade(scene, inputs)) {
+                    rows.add(new MiniRow(gameId, g.questionId(), g.chosen(), g.correct(), g.concept(), playedAt));
+                }
+                return;
+            }
+            items.values().forEach(m -> rows.add(new MiniRow(gameId, m.itemId(), m.chosen().asText(),
+                    score(scene.path("game"), m), MiniGameGrader.singleConcept(scene), m.playedAt())));
+        });
         return rows;
     }
 
     /** BE chấm đúng / sai từ JSON chương — client gửi correct gì cũng bị bỏ qua. */
-    private static boolean score(JsonNode game, MiniGameDto m) {
+    private static boolean score(JsonNode game, MiniGameDto dto) {
+        Legacy m = new Legacy(dto.gameId(), dto.itemId(), dto.chosen().asText());
         // DRAG_AND_DROP có dropZones[].expectedValue (Phong bì, CH02): itemId = ô, chosen = thẻ đã thả.
         JsonNode zones = game.path("dropZones");
         if (zones.isArray() && !zones.isEmpty()) {
@@ -346,17 +369,11 @@ public class PlayServiceImpl implements PlayService {
                 "game '" + m.gameId() + "' khong co itemId '" + m.itemId() + "' de cham");
     }
 
+    /** Một dòng bản cũ: chosen luôn là chữ. */
+    private record Legacy(String gameId, String itemId, String chosen) {}
+
     private static boolean isNonEmptyArray(JsonNode node) {
         return node != null && node.isArray() && !node.isEmpty();
-    }
-
-    /** Mã khái niệm theo CẢNH: đúng 1 phần thì lấy, nhiều / không khai → null. */
-    private static String conceptOf(JsonNode scene) {
-        JsonNode units = scene.path("knowledgeUnits");
-        if (units.isArray() && units.size() == 1) {
-            return units.get(0).asText();
-        }
-        return null;
     }
 
     // ---------------------------------------------------------- chỉ số / chaptersDone

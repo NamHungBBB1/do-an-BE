@@ -147,6 +147,45 @@ class PlayFlowTest {
         assertThat(res.getContentAsString(StandardCharsets.UTF_8)).doesNotContain("wealth");
     }
 
+    // ------------------------------------------------------------------ 1a. khuôn v3 — câu `grade`, hàm chấm chung
+    /**
+     * Mini-game có câu {@code grade}: FE gửi theo Ô NHẬP (giá trị JSON bất kỳ), BE chấm MỌI câu của cảnh — ô thiếu → câu sai,
+     * ô lạ → bỏ qua; chosen dài (mảng / object) lưu được (cột TEXT); khái niệm theo câu, mặc định theo cảnh.
+     */
+    @Test
+    void gradedMiniGameScoresEveryQuestionFromInputs() throws Exception {
+        releaseVersion();
+        String child = newChild("playv3");
+        String batch = "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + version + "\",\"choices\":[],\"miniGames\":["
+                + "{\"gameId\":\"SHOP_V3\",\"itemId\":\"phone\",\"chosen\":\"A\"},"
+                + "{\"gameId\":\"SHOP_V3\",\"itemId\":\"inspected\",\"chosen\":[\"A:app-store-reviews\","
+                + "\"A:battery-health-report\",\"A:terms-and-conditions\"]},"
+                + "{\"gameId\":\"SHOP_V3\",\"itemId\":\"cancelDay\",\"chosen\":30},"
+                + "{\"gameId\":\"SHOP_V3\",\"itemId\":\"phone\",\"chosen\":\"B\"},"
+                + "{\"gameId\":\"SHOP_V3\",\"itemId\":\"junk\",\"chosen\":{\"x\":1}}]}";
+        mvc.perform(batchRequest(child, batch)).andExpect(status().isOk());
+        var minis = miniGameResultRepo.findBySlot_IdAndChapterAndAttemptIndex(UUID.fromString(subject(child)), 1, 1);
+        assertThat(minis).extracting(m -> m.getItemId()).containsExactlyInAnyOrder("budget", "evidence", "Q_RATE");
+        assertThat(minis).allSatisfy(m -> assertThat(m.getGameId()).isEqualTo("SHOP_V3"))
+                .anySatisfy(m -> {   // phone lần đầu = A (dòng B gửi sau bị bỏ), huỷ ngày 30 > 29 → vượt ngân sách
+                    assertThat(m.getItemId()).isEqualTo("budget");
+                    assertThat(m.isCorrect()).isFalse();
+                    assertThat(m.getChosen()).isEqualTo("{\"phone\":\"A\",\"cancelDay\":30}");
+                    assertThat(m.getConcept()).isEqualTo("D03.04");
+                })
+                .anySatisfy(m -> {
+                    assertThat(m.getItemId()).isEqualTo("evidence");
+                    assertThat(m.isCorrect()).isTrue();
+                    assertThat(m.getChosen()).hasSizeGreaterThan(64).contains("A:terms-and-conditions");
+                })
+                .anySatisfy(m -> {   // không gửi ô Q_RATE → sai, chosen null; khái niệm khai riêng ở câu
+                    assertThat(m.getItemId()).isEqualTo("Q_RATE");
+                    assertThat(m.isCorrect()).isFalse();
+                    assertThat(m.getChosen()).isNull();
+                    assertThat(m.getConcept()).isEqualTo("D03.09");
+                });
+    }
+
     // ------------------------------------------------------------------ 1b. CAREER_MATCH
     /** Game có CẢ jobs lẫn questions (Kidz review 12/10): itemId là việc hay câu hỏi đều chấm được — một job fit, một job over, một câu đúng, một câu sai. */
     @Test
@@ -395,7 +434,7 @@ class PlayFlowTest {
                     "game":{"id":"NEEDS_OR_WANTS_CH01","mechanic":"DRAG_AND_DROP","items":[
                       {"id":"ITEM_MEAL","category":"NEEDS","text":"Bua an"},
                       {"id":"ITEM_UPGRADE","category":"WANTS","text":"Nang cap tai nghe"}]}},
-                   {"id":"game-2","type":"minigame","nextSceneId":"end",
+                   {"id":"game-2","type":"minigame","nextSceneId":"game-3",
                     "game":{"id":"CAREER_MATCH_CH03","mechanic":"MATCH_AND_CALCULATE","weeklyLimit":20,
                      "jobs":[
                        {"id":"JOB_DAY","hours":10,"text":"Viec ngay"},
@@ -403,6 +442,13 @@ class PlayFlowTest {
                      "questions":[
                        {"id":"Q_NET","options":[{"id":"OPT_HIGH"},{"id":"OPT_LOW"}],"correctId":"OPT_HIGH"},
                        {"id":"Q_PROFIT","options":[{"id":"OPT_UP"},{"id":"OPT_DOWN"}],"correctId":"OPT_UP"}]}},
+                   {"id":"game-3","type":"minigame","knowledgeUnits":["D03.04"],"nextSceneId":"end",
+                    "game":{"id":"SHOP_V3","config":{"criteria":{
+                      "budget":{"title":"Ngan sach","grade":{"id":"budget","rule":{"any":[{"input":"phone","eq":"B"},
+                        {"all":[{"input":"phone","eq":"A"},{"input":"cancelDay","min":1,"max":29}]}]}}},
+                      "evidence":{"title":"Bang chung","grade":{"id":"evidence","rule":{"all":[{"input":"phone","eq":"A"},
+                        {"input":"inspected","has":["A:app-store-reviews","A:battery-health-report","A:terms-and-conditions"]}]}}}},
+                     "questions":[{"id":"Q_RATE","grade":{"concept":"D03.09","rule":{"eq":5}}}]}}},
                    {"id":"end","type":"ending"}
                  ],
                  "endingRules":{"priorityOrder":["x"],"endings":[]}}

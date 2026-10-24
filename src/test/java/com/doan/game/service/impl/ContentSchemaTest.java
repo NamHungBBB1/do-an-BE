@@ -82,7 +82,7 @@ class ContentSchemaTest {
                       "condition":{"all":[{"var":"money","op":">=","value":100},{"var":"flag:x","op":"==","value":true}]},
                       "lockedReason":"Chưa đủ tiền"},
                      {"id":"o2","label":"B","nextSceneId":"b"}]},
-                  {"id":"b","type":"minigame","game":{"kind":"SORT"},"nextSceneId":"e"},
+                  {"id":"b","type":"minigame","game":{"kind":"SORT","items":[{"id":"i1","grade":{"rule":{"eq":"NEEDS"}}}]},"nextSceneId":"e"},
                   {"id":"e","type":"ending"}]}
                 """);
     }
@@ -196,5 +196,18 @@ class ContentSchemaTest {
         ObjectNode i = (ObjectNode) json.readTree("""
                 {"scenes":[{"id":"a","type":"inspect","inspect":{"hotspot":{"x":120}}}]}""");
         assertThatThrownBy(() -> schema.validate(i)).hasMessageContaining("hotspot.x");
+    }
+
+    @Test
+    void miniGameGradesAreCheckedOnSave() throws Exception {
+        ObjectNode c = minimal();
+        ObjectNode item = (ObjectNode) c.path("scenes").get(1).path("game").path("items").get(0);
+        ((ObjectNode) item.path("grade")).set("rule", json.readTree("{\"like\":\"NEEDS\"}"));
+        assertThatThrownBy(() -> schema.validate(c)).hasMessageContaining("'like'");
+        ((ObjectNode) item.path("grade")).set("rule", json.readTree("{\"eq\":\"NEEDS\"}"));
+        ((com.fasterxml.jackson.databind.node.ArrayNode) c.path("scenes").get(1).path("game").path("items")).add(item.deepCopy());
+        assertThatThrownBy(() -> schema.validate(c)).hasMessageContaining("trùng");
+        ((ObjectNode) c.path("scenes").get(1)).set("game", json.readTree("{\"kind\":\"SORT\"}"));
+        assertThat(schema.validate(c)).anyMatch(w -> w.contains("không có câu chấm điểm"));
     }
 }
