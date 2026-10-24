@@ -541,6 +541,7 @@ public class ContentSchema {
             if (!v.isObject()) {
                 throw fail(p, "phải là object");
             }
+            gradesOf(v, p, this);
             String kind = v.path("kind").asText("");
             if (kind.isEmpty()) {
                 String guess = kindByLegacyId.get(v.path("id").asText());
@@ -550,6 +551,39 @@ public class ContentSchema {
             if (!gameKinds.contains(kind)) {
                 throw fail(p + ".kind", "loại mini-game '" + kind + "' không có trong bộ khuôn " + new TreeSet<>(gameKinds));
             }
+        }
+    }
+
+    /**
+     * Câu chấm điểm ({@code grade}) trong mini-game: có mã, mã không trùng, luật đúng ngữ pháp ({@link MiniGameGrader}).
+     * Không có câu nào → cảnh báo "không vào điểm" (đúng với game chỉ để chơi như Đua tiết kiệm).
+     */
+    private void gradesOf(JsonNode game, String p, Check c) {
+        Set<String> ids = new HashSet<>();
+        List<String> problems = new ArrayList<>();
+        MiniGameGrader.collect(game, (node, grade) -> {
+            String id = grade.path("id").isValueNode() ? grade.path("id").asText("") : "";
+            if (id.isBlank()) {
+                id = node.path("id").isValueNode() ? node.path("id").asText("") : "";
+            }
+            if (id.isBlank()) {
+                problems.add(p + ": câu chấm điểm thiếu mã (grade.id)");
+                return;
+            }
+            if (!ids.add(id)) {
+                problems.add(p + ": mã câu '" + id + "' trùng trong mini-game");
+            }
+            JsonNode part = grade.get("part");
+            if (part != null && !part.isValueNode()) {
+                problems.add(p + " câu '" + id + "'.grade.part: phải là số hoặc chữ");
+            }
+            problems.addAll(MiniGameGrader.ruleProblems(grade.get("rule"), p + " câu '" + id + "'.grade.rule"));
+        });
+        if (!problems.isEmpty()) {
+            throw fail(problems.get(0).split(":")[0], problems.get(0).substring(problems.get(0).indexOf(':') + 1).trim());
+        }
+        if (ids.isEmpty()) {
+            c.warn(p + ": mini-game không có câu chấm điểm (grade) — không vào điểm báo cáo");
         }
     }
 

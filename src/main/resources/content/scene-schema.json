@@ -100,16 +100,44 @@
     "setFlags": { "type": "flags", "label": "Bật / tắt cờ {tên: true|false} — chỉ cho việc không phải lựa chọn; ghi nhớ lựa chọn dùng choice:<nhóm>" },
     "evidenceScores": { "type": "object", "label": "Điểm bằng chứng I / C / P" }
   },
+  "grading": {
+    "note": "Câu chấm điểm = đối tượng có trường grade nằm trong game của cảnh mini-game; BE chấm bằng một hàm chung (spec build/spec-cham-minigame-be-2026-10-24.md). FE gửi trẻ nhập gì ở từng ô nhập (miniGames[].itemId = mã ô, chosen = giá trị JSON), không gửi đúng / sai.",
+    "fields": {
+      "id": { "type": "string", "label": "Mã câu — mặc định = id của đối tượng chứa grade; không trùng trong một mini-game" },
+      "input": { "type": "string", "label": "Mã ô nhập FE gửi — mặc định = mã câu" },
+      "part": { "type": "string|number", "label": "Câu thuộc vòng / phần nào — cảnh chỉ chấm câu thuộc game.rounds hoặc game.config.mode" },
+      "concept": { "type": "string", "label": "Khái niệm (mã knowledgeUnit) — mặc định = knowledgeUnits của cảnh nếu cảnh có đúng 1 mã" },
+      "rule": { "type": "rule", "label": "Đáp án / luật — một lá hoặc all / any" }
+    },
+    "comparators": {
+      "eq": "bằng (đáp án số so theo giá trị: \"15\" = 15)",
+      "in": "thuộc một trong các giá trị",
+      "sets": "mảng trẻ chọn, coi như tập, bằng đúng một trong các tập",
+      "has": "mảng trẻ chọn chứa đủ các giá trị",
+      "at": "{item, in: [vị trí]} — vị trí của item trong mảng thứ tự",
+      "count": "{min, max} — số phần tử của mảng",
+      "min": "số ≥",
+      "max": "số ≤"
+    },
+    "modifiers": {
+      "input": "lá đọc ô nhập khác ô của câu",
+      "field": "lấy một trường của giá trị object",
+      "sum": "cộng các trường của giá trị object",
+      "sumOf": "{from: đường dẫn mảng trong game, field} — giá trị là mảng id, cộng trường của các món đó"
+    },
+    "groups": { "all": "tất cả luật con đúng", "any": "ít nhất một luật con đúng" },
+    "example": { "id": "ITEM_MEAL", "label": "Bữa ăn", "category": "NEEDS", "grade": { "concept": "D01.02", "rule": { "eq": "NEEDS" } } }
+  },
   "minigameKinds": {
     "NEED_WANT": { "phase": "A", "label": "Phân loại Cần / Muốn", "frame": "NeedWantMiniGame", "legacyIds": ["NEEDS_OR_WANTS_CH01"], "graded": true },
     "BUDGET_BUILDER": { "phase": "A", "label": "Chia tiền vào phong bì", "frame": "BudgetBuilderMiniGame", "legacyIds": ["BUDGET_BUILDER_CH02"], "graded": true },
     "SAVINGS_RACE": { "phase": "A", "label": "Đua tiết kiệm (mô phỏng)", "frame": "SavingsRaceMiniGame", "legacyIds": ["SAVINGS_RACE_CH02"], "graded": false },
     "CAREER_MATCH": { "phase": "A", "label": "Ghép việc làm thêm + tính giờ", "frame": "CareerMatchMiniGame", "legacyIds": ["CAREER_MATCH_CH03"], "graded": true },
-    "SMART_SHOPPING": { "phase": "A", "label": "Mua sắm thông minh", "frame": "SmartShoppingMiniGame", "legacyIds": ["SMART_SHOPPING_CH04"], "graded": false },
-    "COMPOUND_TIMELINE": { "phase": "A", "label": "Dòng thời gian lãi kép", "frame": "CompoundTimelineMiniGame", "legacyIds": ["COMPOUND_TIMELINE_CH05"], "graded": false },
-    "LOAN_DETECTIVE": { "phase": "A", "label": "Thám tử khoản vay", "frame": "LoanDetectiveMiniGame", "legacyIds": ["LOAN_OFFERS_CH06", "LOAN_REPAYMENT_CH06"], "graded": false },
-    "SCAM_OR_SAFE": { "phase": "A", "label": "Bảo hiểm và lừa đảo", "frame": "ScamOrSafeMiniGame", "legacyIds": ["INSURANCE_DESK_CH07", "SCAM_OR_SAFE_CH07"], "graded": false },
-    "FUTURE_PLAN": { "phase": "A", "label": "Kế hoạch tương lai", "frame": "FuturePlanMiniGame", "legacyIds": ["PORTFOLIO_CH08", "CLAIM_REVIEW_CH08", "LIFE_PLAN_CH08"], "graded": false }
+    "SMART_SHOPPING": { "phase": "A", "label": "Mua sắm thông minh", "frame": "SmartShoppingMiniGame", "legacyIds": ["SMART_SHOPPING_CH04"], "graded": true },
+    "COMPOUND_TIMELINE": { "phase": "A", "label": "Dòng thời gian lãi kép", "frame": "CompoundTimelineMiniGame", "legacyIds": ["COMPOUND_TIMELINE_CH05"], "graded": true },
+    "LOAN_DETECTIVE": { "phase": "A", "label": "Thám tử khoản vay", "frame": "LoanDetectiveMiniGame", "legacyIds": ["LOAN_OFFERS_CH06", "LOAN_REPAYMENT_CH06"], "graded": true },
+    "SCAM_OR_SAFE": { "phase": "A", "label": "Bảo hiểm và lừa đảo", "frame": "ScamOrSafeMiniGame", "legacyIds": ["INSURANCE_DESK_CH07", "SCAM_OR_SAFE_CH07"], "graded": true },
+    "FUTURE_PLAN": { "phase": "A", "label": "Kế hoạch tương lai", "frame": "FuturePlanMiniGame", "legacyIds": ["PORTFOLIO_CH08", "CLAIM_REVIEW_CH08", "LIFE_PLAN_CH08"], "graded": true }
   },
   "stepKinds": {
     "SORT": { "phase": "B", "label": "Phân loại thẻ vào nhóm" },

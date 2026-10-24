@@ -47,7 +47,7 @@ public class MiniGameResult {
     @Column(name = "concept", length = 40)
     private String concept;
 
-    @Column(name = "chosen", length = 64)
+    @Column(name = "chosen", columnDefinition = "text")
     private String chosen;
 
     @Column(name = "correct", nullable = false, columnDefinition = "boolean default false not null")
