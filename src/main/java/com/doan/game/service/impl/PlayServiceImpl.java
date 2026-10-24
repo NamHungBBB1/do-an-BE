@@ -242,11 +242,8 @@ public class PlayServiceImpl implements PlayService {
                 throw new AppException(ErrorCode.SCENE_ITEM_NOT_IN_CHAPTER,
                         "lua chon '" + c.optionId() + "' khong co trong canh '" + c.sceneId() + "'");
             }
-            // Một dòng cho mỗi nhóm: scene.choiceGroup, không có thì = scene.id.
-            String group = scene.path("choiceGroup").asText("");
-            if (group.isBlank()) {
-                group = c.sceneId();
-            }
+            // Một dòng cho mỗi nhóm quyết định — cùng luật với bộ khuôn.
+            String group = ContentSchema.choiceGroupOf(scene);
             if (!groups.add(group)) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED,
                         "hai dong cung nhom lua chon '" + group + "'");

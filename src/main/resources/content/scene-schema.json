@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "note": "Bộ khuôn nội dung game — BE quyết khung (Hưng 24/10). Spec build/spec-bo-khuon-noi-dung-2026-10-24.md. Studio dựng form từ đây; BE kiểm nháp theo đây; FE game chọn khung theo type / game.kind, không theo id.",
   "stats": [
     { "key": "SAVING", "label": "Tiết kiệm", "initial": 50 },
@@ -8,9 +8,10 @@
     { "key": "GOAL", "label": "Mục tiêu", "initial": 50 },
     { "key": "WEALTH", "label": "Tài sản", "initial": 0 }
   ],
-  "variables": ["money", "miniGameScore", "SAVING", "HAPPINESS", "RISK", "GOAL", "WEALTH", "flag:*"],
+  "variables": ["money", "miniGameScore", "SAVING", "HAPPINESS", "RISK", "GOAL", "WEALTH", "flag:*", "inspected:*", "choice:*"],
+  "variablesNote": "flag:<tên> = cờ việc không phải lựa chọn (đã mở thẻ, đã kiểm nguồn…); inspected:<mã thẻ> = trẻ đã mở thẻ / vật đó; choice:<nhóm> = lựa chọn cuối của một câu hỏi (nhóm = choiceGroup, không có thì = mã cảnh), so sánh == / != với mã lựa chọn (Hưng 24/10).",
   "conditionOps": ["==", "!=", ">", ">=", "<", "<="],
-  "conditionExample": { "all": [ { "var": "money", "op": ">=", "value": 500000 }, { "any": [ { "var": "miniGameScore", "op": ">=", "value": 5 }, { "var": "flag:goal_gap", "op": "==", "value": true } ] } ] },
+  "conditionExample": { "all": [ { "var": "money", "op": ">=", "value": 500000 }, { "any": [ { "var": "choice:CH04_SC02", "op": "==", "value": "CH04_SC02_A" }, { "var": "inspected:ch04_compare", "op": "==", "value": true } ] } ] },
   "positions": ["left", "center", "right"],
   "commonSceneFields": {
     "id": { "type": "string", "required": true, "label": "Mã cảnh" },
@@ -55,8 +56,7 @@
       "label": "Mini-game",
       "fields": {
         "game": { "type": "game", "required": true, "label": "Mini-game" },
-        "onPassSceneId": { "type": "sceneRef", "label": "Đạt thì sang" },
-        "onFailSceneId": { "type": "sceneRef", "label": "Chưa đạt thì sang" },
+        "onPassSceneId": { "type": "sceneRef", "label": "Làm xong thì sang (tên cũ của nextSceneId)" },
         "nextSceneId": { "type": "sceneRef", "label": "Cảnh kế tiếp" }
       }
     },
@@ -93,10 +93,11 @@
     "id": { "type": "string", "required": true, "label": "Mã lựa chọn" },
     "text": { "type": "string", "requiredOneOf": ["text", "label"], "label": "Chữ lựa chọn" },
     "nextSceneId": { "type": "sceneRef", "label": "Chọn xong sang" },
-    "condition": { "type": "condition", "label": "Điều kiện mở" },
+    "condition": { "type": "condition", "label": "Điều kiện mở (chưa đủ thì lựa chọn bị khoá)" },
+    "lockedReason": { "type": "string", "label": "Câu nhắn cho trẻ khi bị khoá (bắt buộc nếu có điều kiện mở)" },
     "deltaStats": { "type": "stats", "label": "Cộng / trừ chỉ số" },
     "moneyEvents": { "type": "array", "label": "Thay đổi tiền" },
-    "setFlags": { "type": "flags", "label": "Bật / tắt cờ {tên: true|false}" },
+    "setFlags": { "type": "flags", "label": "Bật / tắt cờ {tên: true|false} — chỉ cho việc không phải lựa chọn; ghi nhớ lựa chọn dùng choice:<nhóm>" },
     "evidenceScores": { "type": "object", "label": "Điểm bằng chứng I / C / P" }
   },
   "minigameKinds": {

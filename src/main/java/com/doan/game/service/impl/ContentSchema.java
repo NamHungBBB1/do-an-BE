@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -18,20 +20,30 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
- * Bộ khuôn nội dung game (24/10, K1 — spec build/spec-bo-khuon-noi-dung-2026-10-24.md). Hưng chốt: không gán cứng, BE quyết khung.
+ * Bộ khuôn nội dung game (24/10 — spec build/spec-bo-khuon-noi-dung-2026-10-24.md). Hưng chốt: không gán cứng, BE quyết khung.
  * Một nguồn duy nhất: resources/content/scene-schema.json — phát cho Studio (GET /api/studio/scene-schema) và dùng để kiểm nháp.
  *
- * Hai mức: sai rõ ràng → 400 / 1001 kèm đường dẫn trường; dạng CŨ còn trong CH01–08 (điều kiện chuỗi, mini-game thiếu kind, chỉ số FIQ…)
- * → cảnh báo, không chặn, cho tới khi chuyển xong (spec mục 9–10). Chuẩn hoá tại chỗ: characters[].position về chữ thường.
+ * Ba mức: sai rõ ràng → 400 / 1001 kèm đường dẫn trường; dạng CŨ còn trong CH01–08 (điều kiện chuỗi, mini-game thiếu kind, requires,
+ * onFailSceneId…) → cảnh báo, không chặn, cho tới khi chuyển xong; lỗi ĐƯỜNG ĐI (cảnh không ai tới được, thiếu "đi tiếp tới đâu", không tới
+ * được Kết, kẹt ở chương chốt quyết định) → cảnh báo khi lưu nháp (đang soạn dở), CHẶN khi gửi duyệt ({@link #requireCompleteFlow}).
+ * Không sửa nội dung người soạn (Hưng 24/10: tách rồi ghép phải y bản cũ).
+ *
+ * Đường đi tính đúng như game đang chạy (luồng thật đo 24/10, hub #/nhanh-truyen): lựa chọn → nextSceneId; rẽ tự động → ifTrue / ifFalse;
+ * mini-game → nextSceneId || onPassSceneId (không có hướng "chưa đạt" — Hưng 24/10 bỏ hẳn onFailSceneId); nút xem lại → reviewAction.targetSceneId.
  */
 @Component
 public class ContentSchema {
 
     private final JsonNode schema;
     private final Map<String, String> typeByName = new HashMap<>();   // tên hoặc tên cũ → loại chuẩn
+    private final Map<String, Map<String, JsonNode>> sceneFields = new HashMap<>();   // loại chuẩn → trường chung + trường riêng
+    private final Map<String, JsonNode> optionFields = new LinkedHashMap<>();
     private final Set<String> stats = new HashSet<>();
+    private final Set<String> variables = new HashSet<>();
+    private final Set<String> variablePrefixes = new HashSet<>();   // "flag:*" → "flag:"
     private final Set<String> ops = new HashSet<>();
     private final Set<String> positions = new HashSet<>();
     private final Set<String> gameKinds = new HashSet<>();
@@ -43,11 +55,26 @@ public class ContentSchema {
         } catch (IOException e) {
             throw new IllegalStateException("không đọc được content/scene-schema.json", e);
         }
+        // Dựng sẵn một lần: chương 150 cảnh không phải chép lại bảng trường 150 lần.
+        Map<String, JsonNode> common = new LinkedHashMap<>();
+        schema.path("commonSceneFields").fields().forEachRemaining(e -> common.put(e.getKey(), e.getValue()));
         schema.path("sceneTypes").fields().forEachRemaining(e -> {
             typeByName.put(e.getKey(), e.getKey());
             e.getValue().path("aliases").forEach(a -> typeByName.put(a.asText(), e.getKey()));
+            Map<String, JsonNode> defs = new LinkedHashMap<>(common);
+            e.getValue().path("fields").fields().forEachRemaining(f -> defs.put(f.getKey(), f.getValue()));
+            sceneFields.put(e.getKey(), defs);
         });
+        schema.path("optionFields").fields().forEachRemaining(e -> optionFields.put(e.getKey(), e.getValue()));
         schema.path("stats").forEach(s -> stats.add(s.path("key").asText()));
+        schema.path("variables").forEach(v -> {
+            String name = v.asText();
+            if (name.endsWith(":*")) {
+                variablePrefixes.add(name.substring(0, name.length() - 1));
+            } else {
+                variables.add(name);
+            }
+        });
         schema.path("conditionOps").forEach(o -> ops.add(o.asText()));
         schema.path("positions").forEach(p -> positions.add(p.asText()));
         for (String group : List.of("minigameKinds", "stepKinds")) {
@@ -63,8 +90,30 @@ public class ContentSchema {
         return schema;
     }
 
-    /** Kiểm một chương; ném 400 / 1001 khi sai, trả danh sách cảnh báo dạng cũ. Sửa tại chỗ phần chuẩn hoá được. */
+    /** Nhóm quyết định của một cảnh lựa chọn: choiceGroup, không có thì = mã cảnh. Một luật cho cả khuôn lẫn BE chấm lô. */
+    public static String choiceGroupOf(JsonNode scene) {
+        String group = scene.path("choiceGroup").asText("");
+        return group.isBlank() ? scene.path("id").asText() : group;
+    }
+
+    /** Kiểm một chương khi LƯU NHÁP; ném 400 / 1001 khi sai, trả cảnh báo (dạng cũ + đường đi chưa trọn). */
     public List<String> validate(JsonNode root) {
+        Check c = check(root);
+        c.warnings.addAll(flowProblems(root));
+        return c.warnings;
+    }
+
+    /** Khi GỬI DUYỆT: kiểm như lưu nháp, rồi chặn nếu đường đi chưa trọn — bản đưa người duyệt phải chơi được từ đầu tới Kết. */
+    public void requireCompleteFlow(JsonNode root) {
+        check(root);
+        List<String> problems = flowProblems(root);
+        if (!problems.isEmpty()) {
+            throw fail("đường đi", String.join("; ", problems.subList(0, Math.min(5, problems.size())))
+                    + (problems.size() > 5 ? "; … còn " + (problems.size() - 5) + " chỗ" : ""));
+        }
+    }
+
+    private Check check(JsonNode root) {
         if (root == null || !root.isObject()) {
             throw fail("content", "phải là JSON object của một chương");
         }
@@ -73,16 +122,27 @@ public class ContentSchema {
             throw fail("scenes", "phải là mảng không rỗng");
         }
         Set<String> ids = new HashSet<>();
+        Map<String, Set<String>> optionsByGroup = new HashMap<>();
+        Set<String> inspectIds = new HashSet<>();
         for (int i = 0; i < scenes.size(); i++) {
-            String id = scenes.get(i).path("id").asText(null);
+            JsonNode s = scenes.get(i);
+            String id = s.path("id").asText(null);
             if (id == null || id.isBlank()) {
                 throw fail("scenes[" + i + "].id", "mỗi cảnh phải có id");
             }
             if (!ids.add(id)) {
                 throw fail("scenes[" + i + "].id", "id trùng " + id);
             }
+            if (s.path("options").isArray()) {
+                Set<String> g = optionsByGroup.computeIfAbsent(choiceGroupOf(s), k -> new HashSet<>());
+                s.path("options").forEach(o -> g.add(o.path("id").asText()));
+            }
+            String inspectId = s.path("inspect").path("id").asText("");
+            if (!inspectId.isBlank()) {
+                inspectIds.add(inspectId);
+            }
         }
-        Check c = new Check(ids);
+        Check c = new Check(ids, optionsByGroup, inspectIds);
         root.path("initialStats").fieldNames().forEachRemaining(k -> {
             if (!stats.contains(k)) {
                 c.warn("initialStats." + k + ": chỉ số không có trong bộ khuôn (" + stats + ") — BE bỏ qua");
@@ -96,22 +156,142 @@ public class ContentSchema {
             c.condition(endings.get(i).get("condition"), "endingRules.endings[" + i + "].condition");
             c.position(endings.get(i), "endingRules.endings[" + i + "]");
         }
-        return c.warnings;
+        return c;
     }
 
     private static AppException fail(String path, String message) {
         return new AppException(ErrorCode.VALIDATION_FAILED, path + ": " + message);
     }
 
-    /** Một lượt kiểm: giữ tập id cảnh, id lựa chọn đã gặp và danh sách cảnh báo. */
+    // ------------------------------------------------------------------ đường đi
+
+    /** Các hướng đi ra của một cảnh, đúng như game đang chạy. Thiếu đích thì ghi vào missing (game sẽ rơi sang cảnh kế trong mảng). */
+    private static List<String> exits(JsonNode s, List<String> missing, String path) {
+        List<String> out = new ArrayList<>();
+        switch (s.path("type").asText()) {
+            case "ending" -> { }
+            case "choice" -> {
+                JsonNode opts = s.path("options");
+                for (int i = 0; i < opts.size(); i++) {
+                    String t = opts.get(i).path("nextSceneId").asText("");
+                    if (t.isBlank()) {
+                        missing.add(path + ".options[" + i + "]: chưa chọn đi tiếp tới cảnh nào");
+                    } else {
+                        out.add(t);
+                    }
+                }
+            }
+            case "conditional" -> {
+                out.add(s.path("ifTrueSceneId").asText(""));
+                out.add(s.path("ifFalseSceneId").asText(""));
+            }
+            case "minigame" -> {
+                String t = s.path("nextSceneId").asText(s.path("onPassSceneId").asText(""));
+                if (t.isBlank()) {
+                    missing.add(path + ": mini-game chưa chọn chơi xong thì sang cảnh nào");
+                } else {
+                    out.add(t);
+                }
+            }
+            default -> {
+                String t = s.path("nextSceneId").asText("");
+                if (t.isBlank()) {
+                    missing.add(path + ": chưa chọn cảnh kế tiếp");
+                } else {
+                    out.add(t);
+                }
+            }
+        }
+        String review = s.path("reviewAction").path("targetSceneId").asText("");
+        if (!review.isBlank()) {
+            out.add(review);
+        }
+        out.removeIf(String::isBlank);
+        return out;
+    }
+
+    private List<String> flowProblems(JsonNode root) {
+        JsonNode scenes = root.path("scenes");
+        Map<String, Integer> index = new HashMap<>();
+        for (int i = 0; i < scenes.size(); i++) {
+            index.put(scenes.get(i).path("id").asText(), i);
+        }
+        List<String> problems = new ArrayList<>();
+        Map<String, List<String>> out = new HashMap<>();
+        Map<String, List<String>> in = new HashMap<>();
+        Set<String> endings = new HashSet<>();
+        for (int i = 0; i < scenes.size(); i++) {
+            JsonNode s = scenes.get(i);
+            String id = s.path("id").asText();
+            List<String> exits = exits(s, problems, "scenes[" + i + "]");
+            out.put(id, exits);
+            exits.forEach(t -> in.computeIfAbsent(t, k -> new ArrayList<>()).add(id));
+            if ("ending".equals(s.path("type").asText())) {
+                endings.add(id);
+            }
+        }
+        if (endings.isEmpty()) {
+            problems.add("chương chưa có cảnh Kết");
+        }
+        Set<String> fromStart = reach(List.of(scenes.get(0).path("id").asText()), out);
+        Set<String> toEnding = reach(endings, in);
+        for (int i = 0; i < scenes.size(); i++) {
+            String id = scenes.get(i).path("id").asText();
+            if (!fromStart.contains(id)) {
+                problems.add("scenes[" + i + "] " + id + ": không đường nào từ cảnh đầu tới được");
+            } else if (!toEnding.contains(id)) {
+                problems.add("scenes[" + i + "] " + id + ": từ đây không tới được cảnh Kết (ngõ cụt hoặc vòng lặp không lối ra)");
+            }
+        }
+        // Chương "chốt quyết định": đã chọn (có ghi sổ) thì quay lại câu hỏi đó cũng không chọn được nữa → trẻ kẹt.
+        if (root.path("metadata").path("lockDecisions").asBoolean(false)) {
+            for (int i = 0; i < scenes.size(); i++) {
+                JsonNode s = scenes.get(i);
+                if (!"choice".equals(s.path("type").asText())) {
+                    continue;
+                }
+                String id = s.path("id").asText();
+                JsonNode opts = s.path("options");
+                for (int j = 0; j < opts.size(); j++) {
+                    JsonNode o = opts.get(j);
+                    String t = o.path("nextSceneId").asText("");
+                    if (!o.path("deferLedger").asBoolean(false) && index.containsKey(t) && reach(List.of(t), out).contains(id)) {
+                        problems.add("scenes[" + i + "].options[" + j + "]: chọn xong vẫn có đường quay lại câu hỏi này — chương chốt quyết định nên trẻ sẽ kẹt");
+                    }
+                }
+            }
+        }
+        return problems;
+    }
+
+    private static Set<String> reach(Iterable<String> starts, Map<String, List<String>> edges) {
+        Set<String> seen = new HashSet<>();
+        Deque<String> q = new ArrayDeque<>();
+        starts.forEach(q::add);
+        while (!q.isEmpty()) {
+            String x = q.poll();
+            if (seen.add(x)) {
+                q.addAll(edges.getOrDefault(x, List.of()));
+            }
+        }
+        return seen;
+    }
+
+    // ------------------------------------------------------------------ từng cảnh
+
+    /** Một lượt kiểm: tập id cảnh, nhóm quyết định → mã lựa chọn, mã thẻ xem, mã lựa chọn đã gặp và cảnh báo. */
     private final class Check {
         final Set<String> sceneIds;
+        final Map<String, Set<String>> optionsByGroup;
+        final Set<String> inspectIds;
         // id lựa chọn → cảnh đầu tiên dùng; BE chơi tìm lựa chọn theo (cảnh, id) nên trùng giữa các cảnh chỉ nhắc.
         final Map<String, String> optionScenes = new HashMap<>();
         final List<String> warnings = new ArrayList<>();
 
-        Check(Set<String> sceneIds) {
+        Check(Set<String> sceneIds, Map<String, Set<String>> optionsByGroup, Set<String> inspectIds) {
             this.sceneIds = sceneIds;
+            this.optionsByGroup = optionsByGroup;
+            this.inspectIds = inspectIds;
         }
 
         void warn(String w) {
@@ -122,15 +302,19 @@ public class ContentSchema {
             String raw = s.path("type").asText("");
             String type = typeByName.get(raw);
             if (type == null) {
-                throw fail(path + ".type", "loại cảnh '" + raw + "' không có trong bộ khuôn " + new java.util.TreeSet<>(typeByName.keySet()));
+                throw fail(path + ".type", "loại cảnh '" + raw + "' không có trong bộ khuôn " + new TreeSet<>(typeByName.keySet()));
             }
             if (!type.equals(raw)) {
                 warn(path + ".type: tên cũ '" + raw + "' — tên mới là '" + type + "'");
             }
-            Map<String, JsonNode> defs = new LinkedHashMap<>();
-            schema.path("commonSceneFields").fields().forEachRemaining(e -> defs.put(e.getKey(), e.getValue()));
-            schema.path("sceneTypes").path(type).path("fields").fields().forEachRemaining(e -> defs.put(e.getKey(), e.getValue()));
-            fields(s, defs, path);
+            fields(s, sceneFields.get(type), path);
+            if (s.hasNonNull("onFailSceneId")) {
+                warn(path + ".onFailSceneId: trường thừa — game không dùng, \"chưa đạt\" chỉ tính vào điểm (Hưng 24/10 bỏ hẳn)");
+            }
+            JsonNode review = s.path("reviewAction").path("targetSceneId");
+            if (!review.isMissingNode() && !sceneIds.contains(review.asText())) {
+                throw fail(path + ".reviewAction.targetSceneId", "cảnh '" + review.asText() + "' không tồn tại");
+            }
         }
 
         void fields(JsonNode node, Map<String, JsonNode> defs, String path) {
@@ -146,11 +330,11 @@ public class ContentSchema {
                     }
                     continue;
                 }
-                value(node, name, v, def, p);
+                value(v, def, p);
             }
         }
 
-        void value(JsonNode parent, String name, JsonNode v, JsonNode def, String p) {
+        void value(JsonNode v, JsonNode def, String p) {
             switch (def.path("type").asText()) {
                 case "string", "image" -> {
                     if (!v.isTextual()) {
@@ -242,23 +426,29 @@ public class ContentSchema {
             if (v.size() < def.path("warnBelowItems").asInt(0)) {
                 warn(p + ": chỉ " + v.size() + " lựa chọn — như nút tiếp tục");
             }
-            Map<String, JsonNode> defs = new LinkedHashMap<>();
-            schema.path("optionFields").fields().forEachRemaining(e -> defs.put(e.getKey(), e.getValue()));
             Set<String> ids = new HashSet<>();
             for (int i = 0; i < v.size(); i++) {
                 JsonNode o = v.get(i);
+                String q = p + "[" + i + "]";
                 // Dữ liệu FE cũ có lựa chọn chỉ ghi "label" — chấp nhận, không sửa nội dung.
                 if (!o.hasNonNull("text") && !o.hasNonNull("label")) {
-                    throw fail(p + "[" + i + "].text", "bắt buộc");
+                    throw fail(q + ".text", "bắt buộc");
                 }
-                fields(o, defs, p + "[" + i + "]");
+                fields(o, optionFields, q);
                 String id = o.path("id").asText();
                 if (!ids.add(id)) {
-                    throw fail(p + "[" + i + "].id", "mã lựa chọn trùng trong cảnh: " + id);
+                    throw fail(q + ".id", "mã lựa chọn trùng trong cảnh: " + id);
                 }
                 String first = optionScenes.putIfAbsent(id, p);
                 if (first != null) {
-                    warn(p + "[" + i + "].id: mã '" + id + "' đã dùng ở " + first + " — nên đặt mã riêng");
+                    warn(q + ".id: mã '" + id + "' đã dùng ở " + first + " — nên đặt mã riêng");
+                }
+                // Khoá lựa chọn: MỘT cơ chế = condition theo khuôn + câu nhắn cho trẻ (Hưng 24/10 "cách 2").
+                if (isStructured(o.get("condition")) && o.path("lockedReason").asText("").isBlank()) {
+                    throw fail(q + ".lockedReason", "bắt buộc khi lựa chọn có điều kiện mở — câu trẻ thấy lúc bị khoá");
+                }
+                if (o.has("requires")) {
+                    warn(q + ".requires: khoá dạng cũ — chuyển sang condition + lockedReason");
                 }
             }
         }
@@ -304,11 +494,7 @@ public class ContentSchema {
                 }
             }
             if (v.has("var")) {
-                String var = v.path("var").asText();
-                boolean known = var.startsWith("flag:") || containsText(schema.path("variables"), var);
-                if (!known) {
-                    throw fail(p + ".var", "biến '" + var + "' không có trong bộ khuôn");
-                }
+                variable(v, p);
                 if (!ops.contains(v.path("op").asText())) {
                     throw fail(p + ".op", "phép so sánh phải là " + ops);
                 }
@@ -324,6 +510,33 @@ public class ContentSchema {
             throw fail(p, "điều kiện không hiểu — dùng {all|any:[…]} hoặc {var, op, value}");
         }
 
+        void variable(JsonNode v, String p) {
+            String var = v.path("var").asText();
+            if (variables.contains(var)) {
+                return;
+            }
+            String prefix = variablePrefixes.stream().filter(x -> var.startsWith(x) && var.length() > x.length()).findFirst()
+                    .orElseThrow(() -> fail(p + ".var", "biến '" + var + "' không có trong bộ khuôn"));
+            String name = var.substring(prefix.length());
+            switch (prefix) {
+                case "choice:" -> {
+                    Set<String> optionIds = optionsByGroup.get(name);
+                    if (optionIds == null) {
+                        throw fail(p + ".var", "không có câu hỏi / nhóm quyết định '" + name + "'");
+                    }
+                    if (!optionIds.contains(v.path("value").asText())) {
+                        throw fail(p + ".value", "'" + v.path("value").asText() + "' không phải lựa chọn của '" + name + "' " + new TreeSet<>(optionIds));
+                    }
+                }
+                case "inspected:" -> {
+                    if (!inspectIds.contains(name)) {
+                        warn(p + ".var: không cảnh nào có thẻ xem '" + name + "' — điều kiện sẽ không bao giờ đúng");
+                    }
+                }
+                default -> { }
+            }
+        }
+
         void game(JsonNode v, String p) {
             if (!v.isObject()) {
                 throw fail(p, "phải là object");
@@ -335,17 +548,13 @@ public class ContentSchema {
                 return;
             }
             if (!gameKinds.contains(kind)) {
-                throw fail(p + ".kind", "loại mini-game '" + kind + "' không có trong bộ khuôn " + new java.util.TreeSet<>(gameKinds));
+                throw fail(p + ".kind", "loại mini-game '" + kind + "' không có trong bộ khuôn " + new TreeSet<>(gameKinds));
             }
         }
     }
 
-    private static boolean containsText(JsonNode array, String value) {
-        for (JsonNode n : array) {
-            if (n.asText().equals(value)) {
-                return true;
-            }
-        }
-        return false;
+    /** Điều kiện kiểu khuôn ({all|any} / {var}) — khác dạng cũ (chuỗi, {type: ALWAYS_UNLOCKED}…). */
+    private static boolean isStructured(JsonNode c) {
+        return c != null && c.isObject() && (c.has("all") || c.has("any") || c.has("var"));
     }
 }
