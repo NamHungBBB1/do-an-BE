@@ -14,6 +14,9 @@ public interface RunStateRepository extends JpaRepository<RunState, UUID> {
     /** Một slot đúng một dòng RunState (UNIQUE slot_id) — trỏ nhanh từ token SLOT. */
     Optional<RunState> findBySlot_Id(UUID slotId);
 
+    /** Tiến độ của nhiều slot trong một truy vấn (danh sách tài khoản của admin, 25/10). */
+    List<RunState> findBySlot_IdIn(java.util.Collection<UUID> slotIds);
+
     /** Báo cáo nhóm: RunState của mọi slot trong nhóm (≤ 40 dòng) — một câu thay vì N+1. */
     List<RunState> findBySlot_Group_Id(UUID groupId);
 }

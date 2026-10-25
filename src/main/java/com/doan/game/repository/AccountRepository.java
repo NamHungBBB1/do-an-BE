@@ -32,6 +32,14 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     boolean existsByEmailIgnoreCase(String email);
 
+    /** Danh sách mọi tài khoản cho trang phân quyền (25/10): xếp theo email, phân trang. */
+    java.util.List<Account> findAllByOrderByEmailAsc(org.springframework.data.domain.Pageable p);
+
+    /** Như trên nhưng lọc: email hoặc tên hiển thị chứa q (q đã viết thường, đã bọc %). */
+    @Query("select a from Account a where lower(a.email) like :q or lower(coalesce(a.displayName, '')) like :q "
+            + "order by a.email")
+    java.util.List<Account> search(@Param("q") String q, org.springframework.data.domain.Pageable p);
+
     /**
      * Sai mật khẩu: tăng bộ đếm bằng MỘT câu UPDATE trong DB — N request song song không thể cùng đọc 0
      * rồi cùng ghi 1 (rà soát 09/10, S-04). Đủ max thì về 0 và khoá tới lockUntil.

@@ -2,10 +2,18 @@ package com.doan.game;
 
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.LearnerGroup;
+import com.doan.game.entity.LearnerSlot;
+import com.doan.game.entity.RunState;
+import com.doan.game.enums.LearningContext;
 import com.doan.game.entity.RoleGrantLog;
 import com.doan.game.enums.Role;
+import com.doan.game.enums.SlotStatus;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.LearnerGroupRepository;
+import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.RunStateRepository;
 import com.doan.game.repository.RoleGrantLogRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,6 +61,9 @@ class AdminRoleFlowTest {
     @Autowired AccountRepository accountRepo;
     @Autowired AccountRoleRepository accountRoleRepo;
     @Autowired RoleGrantLogRepository roleGrantLogRepo;
+    @Autowired LearnerGroupRepository groupRepo;
+    @Autowired LearnerSlotRepository slotRepo;
+    @Autowired RunStateRepository runStateRepo;
 
     @Test
     void grantThenRevokeChangesMeAndWritesLog() throws Exception {
@@ -224,6 +235,82 @@ class AdminRoleFlowTest {
         assertTrue(ids.indexOf(lan.getId().toString()) < ids.indexOf(nam.getId().toString()));
 
         mvc.perform(get("/api/admin/roles").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    @Test
+    void listsAllAccountsWithSlotsButNoChildDetails() throws Exception {
+        Account admin = account("admin");
+        String tag = "ds" + System.nanoTime();
+        Account parent = account(tag + "-a");
+        Account editor = account(tag + "-b");   // không gói, không slot → vẫn có mặt
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+        mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(editor.getId(), "GAME_EDITOR", "soan")))
+                .andExpect(status().isOk());
+
+        LearnerGroup g = new LearnerGroup();
+        g.setOwner(parent);
+        g.setContext(LearningContext.FAMILY);
+        g.setOpenContext(LearningContext.FAMILY);
+        g.setName("Nha test");
+        g.setSlotLimit(4);
+        g.setOpenedAt(Instant.now());
+        g = groupRepo.save(g);
+        LearnerSlot s = new LearnerSlot();
+        s.setGroup(g);
+        s.setCode("K" + (System.nanoTime() % 1_000_000_000L));
+        s.setPinHash("x");
+        s.setDisplayName("Ten Cua Be");
+        s.setBadge("huy-hieu");
+        s.setStatus(SlotStatus.ACTIVE);
+        s.setFailedAttempts(0);
+        s.setCreatedAt(Instant.now());
+        s = slotRepo.save(s);
+        RunState run = new RunState();
+        run.setSlot(s);
+        run.setChaptersDone("[1,2]");
+        run.setAttemptIndex(1);
+        run.setUpdatedAt(Instant.parse("2026-10-25T10:00:00Z"));
+        runStateRepo.save(run);
+
+        // q lọc theo email, không phân biệt hoa thường; xếp theo email.
+        String json = mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag.toUpperCase(Locale.ROOT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(2))
+                .andExpect(jsonPath("$.result[0].id").value(parent.getId().toString()))
+                .andExpect(jsonPath("$.result[0].slots[0].id").value(s.getId().toString()))
+                .andExpect(jsonPath("$.result[0].slots[0].groupId").value(g.getId().toString()))
+                .andExpect(jsonPath("$.result[0].slots[0].context").value("FAMILY"))
+                .andExpect(jsonPath("$.result[0].slots[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.result[0].slots[0].locked").value(false))
+                .andExpect(jsonPath("$.result[0].slots[0].chaptersDone[1]").value(2))   // trẻ chơi tới đâu
+                .andExpect(jsonPath("$.result[0].slots[0].attemptIndex").value(1))
+                .andExpect(jsonPath("$.result[0].slots[0].lastPlayedAt").value("2026-10-25T10:00:00Z"))
+                .andExpect(jsonPath("$.result[0].roles").isEmpty())
+                .andExpect(jsonPath("$.result[1].id").value(editor.getId().toString()))
+                .andExpect(jsonPath("$.result[1].roles[0]").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result[1].slots").isEmpty())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        // Thông tin cá nhân của trẻ không bao giờ ra khỏi API này.
+        assertFalse(json.contains("Ten Cua Be"));
+        assertFalse(json.contains(s.getCode()));
+        assertFalse(json.contains("huy-hieu"));
+
+        // Phân trang: size 1, trang 2 = người thứ hai; trang quá cuối = rỗng.
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(1))
+                .andExpect(jsonPath("$.result[0].id").value(editor.getId().toString()));
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("page", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").isEmpty());
+        // Không q: danh sách chung vẫn chạy (DB test dùng chung nên không đếm tổng).
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").isNotEmpty());
+        mvc.perform(get("/api/admin/accounts/list").with(as(parent, "SCOPE_PARENT", "TYP_ACCOUNT")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
     }

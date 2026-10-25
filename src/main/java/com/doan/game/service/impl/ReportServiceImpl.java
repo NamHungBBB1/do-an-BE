@@ -30,7 +30,6 @@ import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.ReportService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -310,7 +309,7 @@ public class ReportServiceImpl implements ReportService {
 
     /** progress: cùng nguồn với dashboard trẻ (RunState + bản hiện tại) + attemptIndex. */
     private SlotReportResponse.Progress progressOf(RunState run, Integer totalChapters) {
-        List<Integer> done = run == null ? List.of() : parseChapters(run.getChaptersDone());
+        List<Integer> done = run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone());
         Integer continueChapter = (totalChapters != null && done.size() >= totalChapters)
                 ? null
                 : done.size() + 1;
@@ -328,7 +327,7 @@ public class ReportServiceImpl implements ReportService {
 
     private RowFigures figuresOf(RunState run, Instant lastActiveAt, int quizAssigned,
                                  QuizSlotFigures quiz) {
-        List<Integer> done = run == null ? List.of() : parseChapters(run.getChaptersDone());
+        List<Integer> done = run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone());
         return new RowFigures(done, done.size(),
                 run == null || run.getAttemptIndex() == null ? 1 : run.getAttemptIndex(),
                 lastActiveAt, indicatorsOf(run), quizAssigned,
@@ -475,22 +474,6 @@ public class ReportServiceImpl implements ReportService {
         }
     }
 
-    /** chaptersDone lưu dạng mảng JSON text; hỏng / null → mảng rỗng (chưa chơi gì). */
-    private List<Integer> parseChapters(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            List<Integer> out = new ArrayList<>();
-            if (node.isArray()) {
-                node.forEach(n -> out.add(n.asInt()));
-            }
-            return out;
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "chaptersDone hong trong DB");
-        }
-    }
 
     private String toJson(Object value) {
         try {
