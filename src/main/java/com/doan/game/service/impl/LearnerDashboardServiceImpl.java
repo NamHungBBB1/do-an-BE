@@ -19,9 +19,6 @@ import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.LearnerDashboardService;
 import com.doan.game.service.QuizService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +51,6 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
     private final ChoiceEventRepository choiceEventRepo;
     private final MiniGameResultRepository miniGameResultRepo;
     private final QuizService quizService;
-    private final ObjectMapper objectMapper;
 
     /**
      * Không readOnly: khối quizzes gọi listForLearner — đọc DANH SÁCH chính là chỗ BE tự tạo đề
@@ -88,7 +84,7 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
 
         // Đợt 2: tiến độ lấy từ RunState (token SLOT, chưa chơi → mặc định như đợt 1).
         RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
-        List<Integer> done = run == null ? List.of() : parseChapters(run.getChaptersDone());
+        List<Integer> done = run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone());
         Integer continueChapter = (totalChapters != null && done.size() >= totalChapters)
                 ? null
                 : done.size() + 1;
@@ -152,21 +148,5 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
         return out;
     }
 
-    /** chaptersDone lưu dạng mảng JSON text; hỏng / null → mảng rỗng (chưa chơi gì). */
-    private List<Integer> parseChapters(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            List<Integer> out = new ArrayList<>();
-            if (node.isArray()) {
-                node.forEach(n -> out.add(n.asInt()));
-            }
-            return out;
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "chaptersDone hong trong DB");
-        }
-    }
 
 }

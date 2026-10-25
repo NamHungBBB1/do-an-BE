@@ -121,7 +121,7 @@ public class PlayServiceImpl implements PlayService {
             applyStats(run, initialStats(release));
         } else {
             attempt = run.getAttemptIndex() == null ? 1 : run.getAttemptIndex();
-            done = parseChapters(run.getChaptersDone());
+            done = ChaptersDone.parse(run.getChaptersDone());
             if (req.attemptIndex() == attempt) {
                 // Gửi lại chương đã xong: không ghi gì, trả response hiện tại (bước 2 vẫn chạy
                 // trước — lô hỏng vẫn 7002, đúng thứ tự contract).
@@ -202,7 +202,7 @@ public class PlayServiceImpl implements PlayService {
         Integer total = current == null ? null
                 : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(current.getId()).size();
         RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
-        List<Integer> done = run == null ? List.of() : parseChapters(run.getChaptersDone());
+        List<Integer> done = run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone());
         return RunStateMapper.toResponse(run, current == null ? null : current.getVersion(), total, done);
     }
 
@@ -435,22 +435,6 @@ public class PlayServiceImpl implements PlayService {
         }
     }
 
-    /** chaptersDone lưu dạng mảng JSON text ("[1,2]"); hỏng / null → mảng rỗng. */
-    private List<Integer> parseChapters(String json) {
-        if (json == null || json.isBlank()) {
-            return new ArrayList<>();
-        }
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            List<Integer> out = new ArrayList<>();
-            if (node.isArray()) {
-                node.forEach(n -> out.add(n.asInt()));
-            }
-            return out;
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "chaptersDone hong trong DB");
-        }
-    }
 
     // ---------------------------------------------------------- dựng response
     private ChapterBatchResponse toBatchResponse(int attempt, List<Integer> done, Integer total) {

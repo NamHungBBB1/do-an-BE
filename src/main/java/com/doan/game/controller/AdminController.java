@@ -3,6 +3,7 @@ package com.doan.game.controller;
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
@@ -84,6 +85,15 @@ public class AdminController {
                                                               @RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "50") int size) {
         return ApiResponse.ok(adminService.listRoleLog(subjectId, page, size));
+    }
+
+    // ---- danh sách mọi tài khoản (Hưng 25/10, trang phân quyền) ----
+    /** Xếp theo email, q lọc email / tên; mỗi dòng kèm vai, gói, slot (không thông tin cá nhân của trẻ). Không trả tổng. */
+    @GetMapping("/accounts/list")
+    public ApiResponse<List<AdminAccountResponse>> listAccounts(@RequestParam(required = false) String q,
+                                                               @RequestParam(defaultValue = "0") int page,
+                                                               @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(adminService.listAccounts(q, page, size));
     }
 
     // ---- tra tài khoản (tối 15/10) ----

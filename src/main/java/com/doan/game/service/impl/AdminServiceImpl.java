@@ -2,10 +2,14 @@ package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountResponse;
+import com.doan.game.DTO.response.AdminSlotResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.LearnerSlot;
+import com.doan.game.entity.RunState;
 import com.doan.game.entity.RoleGrantLog;
 import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
@@ -14,6 +18,8 @@ import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
+import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.RunStateRepository;
 import com.doan.game.repository.RoleGrantLogRepository;
 import com.doan.game.repository.TransactionRepository;
 import com.doan.game.mapper.AccountMapper;
@@ -28,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -63,6 +70,8 @@ public class AdminServiceImpl implements AdminService {
     private final EntitlementRepository entitlementRepo;
     private final TransactionRepository transactionRepo;
     private final LearnerGroupRepository groupRepo;
+    private final LearnerSlotRepository slotRepo;
+    private final RunStateRepository runStateRepo;
     private final EntitlementService entitlementService;
     private final Clock clock;
 
@@ -137,6 +146,46 @@ public class AdminServiceImpl implements AdminService {
             entitlementService.activePlans(a.getId()).forEach(k -> plans.add(k.name()));
             return AccountMapper.toResponse(a, plans, rolesById.get(a.getId()));
         }).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminAccountResponse> listAccounts(String q, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        List<Account> accounts = q == null || q.isBlank()
+                ? accountRepo.findAllByOrderByEmailAsc(pageable)
+                : accountRepo.search("%" + q.trim().toLowerCase(Locale.ROOT) + "%", pageable);
+        if (accounts.isEmpty()) return List.of();
+        // Vai, gói, slot, tiến độ của cả trang: 4 truy vấn gom theo id, không tra từng người.
+        List<UUID> ids = accounts.stream().map(Account::getId).toList();
+        Map<UUID, List<String>> roles = new HashMap<>();
+        accountRoleRepo.findByAccount_IdIn(ids).forEach(r ->
+                roles.computeIfAbsent(r.getAccount().getId(), k -> new ArrayList<>()).add(r.getRole().name()));
+        Map<UUID, List<String>> plans = new HashMap<>();
+        for (Object[] row : entitlementRepo.findActivePlanKinds(ids, LocalDate.now(clock))) {
+            plans.computeIfAbsent((UUID) row[0], k -> new ArrayList<>()).add(row[1].toString());
+        }
+        Instant now = Instant.now(clock);
+        List<LearnerSlot> slotRows = slotRepo.findAllByOwnerIds(ids);
+        Map<UUID, RunState> runs = new HashMap<>();
+        if (!slotRows.isEmpty()) {
+            runStateRepo.findBySlot_IdIn(slotRows.stream().map(LearnerSlot::getId).toList())
+                    .forEach(r -> runs.put(r.getSlot().getId(), r));
+        }
+        Map<UUID, List<AdminSlotResponse>> slots = new HashMap<>();
+        for (LearnerSlot s : slotRows) {
+            RunState run = runs.get(s.getId());
+            // Không tên, không mã đăng nhập, không huy hiệu: admin chỉ cần biết tài khoản có bao nhiêu slot, ở nhóm nào, trạng thái gì.
+            slots.computeIfAbsent(s.getGroup().getOwner().getId(), k -> new ArrayList<>()).add(new AdminSlotResponse(
+                    s.getId(), s.getGroup().getId(), String.valueOf(s.getGroup().getContext()), String.valueOf(s.getStatus()),
+                    s.getLockedUntil() != null && s.getLockedUntil().isAfter(now), s.getCreatedAt(),
+                    run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone()),
+                    run == null ? null : run.getAttemptIndex(), run == null ? null : run.getUpdatedAt()));
+        }
+        return accounts.stream().map(a -> new AdminAccountResponse(a.getId(), a.getEmail(), a.getDisplayName(),
+                plans.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
+                roles.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
+                a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList();
     }
 
     @Override

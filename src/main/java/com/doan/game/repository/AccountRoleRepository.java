@@ -18,6 +18,9 @@ public interface AccountRoleRepository extends JpaRepository<AccountRole, UUID> 
     /** Vai nội bộ đang có — nguồn của scope ADMIN trong token. */
     List<AccountRole> findByAccount_Id(UUID accountId);
 
+    /** Vai của cả một trang tài khoản trong một truy vấn (danh sách tài khoản, 25/10). */
+    List<AccountRole> findByAccount_IdIn(java.util.Collection<UUID> accountIds);
+
     boolean existsByAccount_IdAndRole(UUID accountId, Role role);
 
     /** Vai nội bộ (Studio + admin). Hưng chốt 23/10: tài khoản giữ vai này là riêng, không phải khách hàng. */

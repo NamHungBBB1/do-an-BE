@@ -45,6 +45,10 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Slot của một nhóm, cũ đến mới — FE danh sách theo thứ tự mở. */
     java.util.List<LearnerSlot> findByGroup_IdOrderByCreatedAtAsc(UUID groupId);
 
+    /** Mọi slot (kèm nhóm) của cả một trang tài khoản trong một truy vấn — màn admin (25/10). */
+    @Query("select s from LearnerSlot s join fetch s.group g where g.owner.id in :ownerIds order by s.createdAt")
+    java.util.List<LearnerSlot> findAllByOwnerIds(@Param("ownerIds") java.util.Collection<UUID> ownerIds);
+
     java.util.List<LearnerSlot> findByGroup_IdAndStatus(UUID groupId, SlotStatus status);
 
     /**

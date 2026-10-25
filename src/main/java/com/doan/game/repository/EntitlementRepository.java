@@ -33,6 +33,12 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
             + "where e.account.id = :id and e.startsOn <= :today and e.expiresOn >= :today")
     Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("today") LocalDate today);
 
+    /** Như trên cho cả một trang tài khoản trong một truy vấn: mỗi dòng [accountId, kind] (25/10). */
+    @Query("select distinct e.account.id, e.kind from Entitlement e "
+            + "where e.account.id in :ids and e.startsOn <= :today and e.expiresOn >= :today")
+    java.util.List<Object[]> findActivePlanKinds(@Param("ids") java.util.Collection<UUID> accountIds,
+                                                 @Param("today") LocalDate today);
+
     /**
      * Lịch sử gói của một tài khoản, hạn mới nhất đứng trước; hai gói cùng hạn thì dòng tạo sau
      * đứng trước (createdAt) để thứ tự không phụ thuộc thứ tự ghi của CSDL. CÓ cả gói hết hạn:
