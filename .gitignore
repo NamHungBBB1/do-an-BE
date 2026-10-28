@@ -14,3 +14,6 @@ deploy/
 
 # kho ảnh chạy tại chỗ (24/10)
 local-assets/
+
+# Python (scripts/seed)
+__pycache__/
