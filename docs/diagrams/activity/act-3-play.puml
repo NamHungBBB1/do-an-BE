@@ -1,0 +1,40 @@
+@startuml
+' Activity 3: play a chapter and save progress. Transcribed from Diagram/ACTIVITY/act-3-play.drawio.
+skinparam wrapWidth 150
+|Child|
+|Game (FE)|
+|System (BE)|
+
+|Child|
+start
+:Continue the game;
+|Game (FE)|
+:Load the chapter of the current release;
+|Child|
+:Play scenes, choices and mini-games;
+|Game (FE)|
+:Give instant feedback, keep first answers;
+:Submit the chapter batch;
+|System (BE)|
+:Chapter batch; <<object>>
+switch ()
+case ([batch invalid])
+  :Reject the batch, save nothing;
+  stop
+case ([next chapter])
+  :Recompute hidden stats from the frozen chapter;
+  :Grade mini-games from first answers;
+  :Save choices, results and progress;
+case ([chapter already saved])
+endswitch
+:Return chapters done and next chapter;
+|Game (FE)|
+if () then ([chapters left])
+  :Unlock the next chapter;
+  stop
+else ([all chapters of current\nrelease done])
+  |Child|
+  :See the run COMPLETED;
+  stop
+endif
+@enduml

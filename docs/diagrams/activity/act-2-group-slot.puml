@@ -1,0 +1,35 @@
+@startuml
+' Activity 2: create a group, open a slot, child enters. Transcribed from Diagram/ACTIVITY/act-2-group-slot.drawio.
+skinparam wrapWidth 150
+|Parent / Teacher|
+|Child|
+|System (BE)|
+
+|Parent / Teacher|
+start
+:Create a group (family or class);
+if () then ([class])
+  :Confirm the parents' consent;
+else ([family])
+endif
+:Open a slot: name and 6-digit PIN;
+|System (BE)|
+if () then ([plan expired or no free slot])
+  :Refuse to open the slot;
+  stop
+else ([active plan, free slot])
+  :Create the slot and its 8-character code;
+  |Parent / Teacher|
+  :Give the code and PIN (or QR) to the child;
+endif
+|Child|
+repeat
+  :Enter the code and PIN;
+  |System (BE)|
+backward :Refuse entry; a 5th wrong PIN locks the slot 15 min;
+repeat while () is ([else]) not ([PIN correct,\nslot not locked])
+:Issue a play token;
+|Child|
+:Start playing;
+stop
+@enduml
