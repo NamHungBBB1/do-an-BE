@@ -563,6 +563,133 @@ class QuizFlowTest {
         assertThat(postTestEnabled(room.teacher(), room.groupId())).isFalse();
     }
 
+    // ------------------------------------------------------------------ 8. draft life (Q2, Q3)
+    /** Q2 DRAFT → DRAFT (edit) and Q3 DRAFT → deleted: a draft is invisible to students (8001) until published. */
+    @Test
+    void draftQuizCanBeEditedThenDeleted() throws Exception {
+        Room room = newRoom("qzdraft");
+        List<String> ids = importPool(room.teacher(), 2);
+        Kid a = newKid(room, "HS A");
+        String quizId = createQuiz(room.teacher(), room.groupId(), ids, "De nhap");
+
+        // Edit while DRAFT: new title, one question, new due date; still a draft.
+        mvc.perform(put("/api/quizzes/" + quizId).header("Authorization", "Bearer " + room.teacher())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"De nhap da sua\",\"questionIds\":[\"" + ids.get(1)
+                                + "\"],\"dueAt\":\"2026-10-04T03:00:00Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.id").value(quizId))
+                .andExpect(jsonPath("$.result.title").value("De nhap da sua"))
+                .andExpect(jsonPath("$.result.questionCount").value(1))
+                .andExpect(jsonPath("$.result.dueAt").value("2026-10-04T03:00:00Z"))
+                .andExpect(jsonPath("$.result.publishedAt").value(nullValue()));
+        mvc.perform(get("/api/quizzes/" + quizId).header("Authorization", "Bearer " + room.teacher()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.questions.length()").value(1))
+                .andExpect(jsonPath("$.result.questions[0].id").value(ids.get(1)));
+        // Edit is validated like create: past due date → 1001.
+        mvc.perform(put("/api/quizzes/" + quizId).header("Authorization", "Bearer " + room.teacher())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"De nhap\",\"questionIds\":[\"" + ids.get(1)
+                                + "\"],\"dueAt\":\"2026-10-01T03:00:00Z\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        // A draft is not visible to the class: not listed, and opening / submitting it → 8001.
+        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
+                .andExpect(jsonPath("$.result.pending").isEmpty());
+        mvc.perform(submit(a.token(), quizId, answerJson(ids.get(1), 0)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+
+        // Another teacher cannot delete it (3004); the owner can, and it is gone (8001).
+        String teacher2 = adult("qzdraftkhac", PlanKind.TEACHER);
+        mvc.perform(delete("/api/quizzes/" + quizId).header("Authorization", "Bearer " + teacher2))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(delete("/api/quizzes/" + quizId).header("Authorization", "Bearer " + room.teacher()))
+                .andExpect(status().isOk());
+        assertThat(quizRepo.findById(UUID.fromString(quizId))).isEmpty();
+        mvc.perform(get("/api/quizzes/" + quizId).header("Authorization", "Bearer " + room.teacher()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+        mvc.perform(post("/api/quizzes/" + quizId + "/publish").header("Authorization", "Bearer " + room.teacher()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+    }
+
+    // ------------------------------------------------------------------ 9. post-test off / on (Q6, Q7, 8001)
+    /** Q6 OPEN → HIDDEN: switching post-tests off hides an UNSUBMITTED post-test (submit → 8001); Q7 HIDDEN → OPEN on again. */
+    @Test
+    void postTestHiddenWhenSwitchedOffAndOpenAgainWhenOn() throws Exception {
+        releaseVersion();
+        Room room = newRoom("qzanhien");
+        Kid a = newKid(room, "HS A");
+        Kid b = newKid(room, "HS B");
+        setPostTest(room, true);
+        String q = ext("HOH");
+        importAsAdmin("[" + questionJson(q, 1, true) + "]");
+
+        play(a.token(), 1);
+        String postQuizId = MAPPER.readTree(mvc.perform(get("/api/learner/quizzes")
+                                .header("Authorization", "Bearer " + a.token()))
+                        .andExpect(jsonPath("$.result.pending.length()").value(1))
+                        .andExpect(jsonPath("$.result.pending[0].kind").value("POST_TEST"))
+                        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("result").path("pending").get(0).path("id").asText();
+        // 8001 also for a student who has not finished the chapter yet.
+        mvc.perform(submit(b.token(), postQuizId, answerJson(questionIdByExternal(q), 0)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+
+        // OFF while A has not submitted: hidden from the list, opening and submitting → 8001.
+        setPostTest(room, false);
+        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
+                .andExpect(jsonPath("$.result.pending").isEmpty())
+                .andExpect(jsonPath("$.result.completed").isEmpty());
+        mvc.perform(get("/api/learner/quizzes/" + postQuizId).header("Authorization", "Bearer " + a.token()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+        mvc.perform(submit(a.token(), postQuizId, answerJson(questionIdByExternal(q), 0)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+
+        // ON again: the SAME post-test is back (no second one created) and can be submitted.
+        setPostTest(room, true);
+        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
+                .andExpect(jsonPath("$.result.pending.length()").value(1))
+                .andExpect(jsonPath("$.result.pending[0].id").value(postQuizId));
+        mvc.perform(submit(a.token(), postQuizId, answerJson(questionIdByExternal(q), 0)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.quizId").value(postQuizId));
+    }
+
+    /** 8001 for a published class test of ANOTHER class: a student only sees quizzes of their own group. */
+    @Test
+    void studentCannotSubmitQuizOfAnotherClass() throws Exception {
+        Room room = newRoom("qzlopa");
+        Room other = newRoom("qzlopb");
+        List<String> ids = importPool(room.teacher(), 1);
+        String quizId = createQuiz(room.teacher(), room.groupId(), ids, "De lop A");
+        publishQuiz(room.teacher(), quizId);
+        Kid outsider = newKid(other, "HS lop B");
+
+        mvc.perform(get("/api/learner/quizzes/" + quizId).header("Authorization", "Bearer " + outsider.token()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+        mvc.perform(submit(outsider.token(), quizId, answerJson(ids.get(0), 0)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(8001));
+    }
+
+    private void setPostTest(Room room, boolean enabled) throws Exception {
+        mvc.perform(post("/api/groups/" + room.groupId() + "/post-test")
+                        .header("Authorization", "Bearer " + room.teacher())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":" + enabled + "}"))
+                .andExpect(status().isOk());
+        assertThat(postTestEnabled(room.teacher(), room.groupId())).isEqualTo(enabled);
+    }
+
     // ------------------------------------------------------------------ dựng dữ liệu
     /** Bản "1.0.4" của test này, idempotent: 2 chương tối giản (CH01, CH02) — chỉ để lô chơi "xong chương" chạy được. */
     private String releaseVersion() throws Exception {

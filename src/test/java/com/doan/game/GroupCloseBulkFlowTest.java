@@ -194,6 +194,38 @@ class GroupCloseBulkFlowTest {
                 .andExpect(jsonPath("$.code").value(5003));
     }
 
+    /** TCH-1: after consent a CLASS group takes a pasted list of 40 seats in one call; the 41st seat → 3006. */
+    @Test
+    void classGroupTakesFortySeatsAndRefusesTheFortyFirst() throws Exception {
+        String teacher = teacherToken("lop40");
+        String groupId = extractId(mvc.perform(openGroup(teacher, "Lop 40", "CLASS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.slotLimit").value(40))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        mvc.perform(post("/api/groups/" + groupId + "/consent").header("Authorization", "Bearer " + teacher))
+                .andExpect(status().isOk());
+
+        // 41 in one lot is refused as a whole.
+        mvc.perform(bulkRequest(teacher, groupId, 41))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3006));
+        mvc.perform(bulkRequest(teacher, groupId, 40))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(40));
+        mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + teacher))
+                .andExpect(jsonPath("$.result").value(0));
+
+        // The 41st seat, singly or in a lot of one.
+        openSlot(teacher, groupId, "Hoc sinh 41", "123456")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3006));
+        mvc.perform(bulkRequest(teacher, groupId, 1))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3006));
+        mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + teacher))
+                .andExpect(jsonPath("$.result.length()").value(40));
+    }
+
     // ------------------------------------------------------------------ kiểm gói khi mở slot
     /**
      * Hưng chốt 07/10: mở slot kiểm gói đúng loại, thiếu thì 3005.

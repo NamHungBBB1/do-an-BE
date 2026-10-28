@@ -404,6 +404,98 @@ class PlayFlowTest {
         assertThat(run.getSaving()).isEqualTo(60);
     }
 
+    // ------------------------------------------------------------------ 8. R4: a longer release reopens a finished run
+    /**
+     * R4 COMPLETED → IN_PROGRESS: the child finished every chapter of the 2-chapter release; once a 3-chapter
+     * release is current, the state offers chapter 3 in the SAME attempt. The 2-chapter release is put back as
+     * current afterwards so the other cases of this class keep their data.
+     */
+    @Test
+    void finishedRunReopensWhenCurrentReleaseHasMoreChapters() throws Exception {
+        String v = releaseVersion();
+        String child = newChild("r4");
+        mvc.perform(batchRequest(child, emptyBatch(1, 1, v))).andExpect(status().isOk());
+        mvc.perform(batchRequest(child, emptyBatch(2, 1, v)))
+                .andExpect(jsonPath("$.result.continueChapter").value(nullValue()));
+        mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + child))
+                .andExpect(jsonPath("$.result.completedChapters").value(2))
+                .andExpect(jsonPath("$.result.continueChapter").value(nullValue()));
+
+        var admin = admin();
+        mvc.perform(put("/api/studio/chapters/CH03/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                .content(chapterTwo().replace("chapter-2", "chapter-3").replace("intro2", "intro3")
+                        .replace("end2", "end3"))).andExpect(status().isOk());
+        ContentTestSupport.approve(new ContentTestSupport.Repos(releaseChapterRepo, releaseRepo, draftRepo, chapterRepo),
+                "CH03", com.doan.game.enums.ChangeClass.MAJOR, true);
+        String longer = new com.fasterxml.jackson.databind.ObjectMapper().readTree(mvc.perform(post("/api/studio/releases")
+                                .with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"them chuong 3\"}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.result.chapters.length()").value(3))
+                        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("result").path("version").asText();
+        try {
+            mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + child))
+                    .andExpect(jsonPath("$.result.releaseVersion").value(longer))
+                    .andExpect(jsonPath("$.result.attemptIndex").value(1))
+                    .andExpect(jsonPath("$.result.totalChapters").value(3))
+                    .andExpect(jsonPath("$.result.completedChapters").value(2))
+                    .andExpect(jsonPath("$.result.continueChapter").value(3));
+            mvc.perform(batchRequest(child, emptyBatch(3, 1, longer)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result.attemptIndex").value(1))
+                    .andExpect(jsonPath("$.result.chaptersDone.length()").value(3))
+                    .andExpect(jsonPath("$.result.continueChapter").value(nullValue()));
+        } finally {
+            mvc.perform(post("/api/studio/releases/" + v + "/current").with(admin)).andExpect(status().isOk());
+        }
+    }
+
+    // ------------------------------------------------------------------ 9. NFR-4: client totals ignored, batch limits
+    /** Totals / stats / deltas the client adds to the batch are ignored: the server recomputes from the frozen release. */
+    @Test
+    void clientSentStatsAreIgnored() throws Exception {
+        String v = releaseVersion();
+        String child = newChild("fakestats");
+        String forged = "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + v + "\","
+                + "\"stats\":{\"SAVING\":95,\"WEALTH\":100},\"saving\":95,\"wealth\":100,\"score\":999,"
+                + "\"choices\":[{\"sceneId\":\"choice-1\",\"optionId\":\"opt-save\",\"deltaStats\":{\"SAVING\":45}}],"
+                + "\"miniGames\":[{\"gameId\":\"NEEDS_OR_WANTS_CH01\",\"itemId\":\"ITEM_UPGRADE\",\"chosen\":\"NEEDS\","
+                + "\"correct\":true}]}";
+
+        mvc.perform(batchRequest(child, forged)).andExpect(status().isOk());
+
+        UUID slotId = UUID.fromString(subject(child));
+        var run = runStateRepo.findBySlot_Id(slotId).orElseThrow();
+        assertThat(run.getSaving()).isEqualTo(60);     // 50 initial + 10 from the release, not 95 / 95+45
+        assertThat(run.getHappiness()).isEqualTo(55);
+        assertThat(run.getWealth()).isEqualTo(0);
+        assertThat(miniGameResultRepo.findBySlot_IdAndChapterAndAttemptIndex(slotId, 1, 1))
+                .singleElement().satisfies(m -> assertThat(m.isCorrect()).isFalse());   // graded by the server
+    }
+
+    /** A batch over 100 rows → 413/2003; two rows for one choice group → 400/1001; nothing is stored. */
+    @Test
+    void oversizedOrDuplicateBatchIsRejected() throws Exception {
+        String v = releaseVersion();
+        String child = newChild("lontrao");
+        StringBuilder rows = new StringBuilder();
+        for (int i = 0; i < 101; i++) {
+            rows.append(i == 0 ? "" : ",").append("{\"gameId\":\"NEEDS_OR_WANTS_CH01\",\"itemId\":\"ITEM_MEAL\",\"chosen\":\"NEEDS\"}");
+        }
+        mvc.perform(batchRequest(child, "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + v
+                        + "\",\"choices\":[],\"miniGames\":[" + rows + "]}"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value(2003));
+
+        mvc.perform(batchRequest(child, "{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + v + "\","
+                        + "\"choices\":[{\"sceneId\":\"choice-1\",\"optionId\":\"opt-save\"},"
+                        + "{\"sceneId\":\"choice-1\",\"optionId\":\"opt-spend\"}],\"miniGames\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        assertThat(runStateRepo.findBySlot_Id(UUID.fromString(subject(child)))).isEmpty();
+    }
+
     // ------------------------------------------------------------------ dựng dữ liệu
     /**
      * Bản "1.0.2" của test này, idempotent: đã là current thì qua; nếu chạy lại trong cùng JVM
