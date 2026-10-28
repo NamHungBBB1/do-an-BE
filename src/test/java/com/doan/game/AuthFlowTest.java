@@ -89,11 +89,13 @@ class AuthFlowTest {
     @Autowired VerificationTokenRepository tokenRepo;
     @Autowired MailCatcher mailCatcher;
     @Autowired FakeGoogleDecoder price;
+    @Autowired MutableClock clock;
 
     @BeforeEach
     void resetMailbox() {
         mailCatcher.sent.clear();
         price.user = null;
+        clock.now = FIXED_CLOCK.instant();
     }
 
     // ------------------------------------------------------------------ 1
@@ -256,7 +258,7 @@ class AuthFlowTest {
 
     // ------------------------------------------------------------------ 9
     @Test
-    void treDungCodePinThiRaTokenSlotSaiPinNamLanThiKhoa() throws Exception {
+    void childLogsInWithCodeAndPinAndFiveWrongPinsLockTheSlot() throws Exception {
         String code = "MA" + (System.nanoTime() % 100000);
         slot(code, "123456", SlotStatus.ACTIVE);
 
@@ -274,6 +276,31 @@ class AuthFlowTest {
         mvc.perform(loginSlot(code, "123456"))
                 .andExpect(status().isLocked())
                 .andExpect(jsonPath("$.code").value(3008));
+    }
+
+    // ------------------------------------------------------------------ 9b
+    /** S3 LOCKED → UNLOCKED after 15 minutes: still 3008 at +14 min 59 s, the right PIN works again at +15 min. */
+    @Test
+    void lockedSlotUnlocksAfterFifteenMinutes() throws Exception {
+        String code = "MB" + (System.nanoTime() % 100000);
+        slot(code, "123456", SlotStatus.ACTIVE);
+        for (int i = 1; i <= 5; i++) {
+            mvc.perform(loginSlot(code, "99999" + i)).andExpect(jsonPath("$.code").value(3002));
+        }
+        Instant lockedAt = clock.now;
+
+        clock.now = lockedAt.plusSeconds(15 * 60 - 1);
+        mvc.perform(loginSlot(code, "123456"))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.code").value(3008));
+
+        clock.now = lockedAt.plusSeconds(15 * 60);
+        mvc.perform(loginSlot(code, "123456"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accessToken").isNotEmpty());
+        // A successful login resets the counter: one wrong PIN later does not lock again.
+        mvc.perform(loginSlot(code, "999990")).andExpect(jsonPath("$.code").value(3002));
+        mvc.perform(loginSlot(code, "123456")).andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------ 10
@@ -960,14 +987,34 @@ class AuthFlowTest {
         }
     }
 
+    /** A frozen clock a test can move forward (every test starts at FIXED_CLOCK, see resetMailbox). */
+    static class MutableClock extends Clock {
+        volatile Instant now = FIXED_CLOCK.instant();
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return ClockConfig.VN;
+        }
+
+        @Override
+        public Clock withZone(java.time.ZoneId zone) {
+            return Clock.fixed(now, zone);
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
     @TestConfiguration
     static class TestConfig {
 
-        /** Đồng hồ đóng băng để kiểm hết hạn và khoá 15 phút mà không phải chờ. */
+        /** Đồng hồ đóng băng để kiểm hết hạn và khoá 15 phút mà không phải chờ; test nào cần thì đẩy kim. */
         @Bean
         @Primary
-        Clock testClock() {
-            return FIXED_CLOCK;
+        MutableClock testClock() {
+            return new MutableClock();
         }
 
         @Bean

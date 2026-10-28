@@ -6,7 +6,14 @@ import com.doan.game.entity.Entitlement;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.entity.LearnerSlot;
+import com.doan.game.enums.AuthProvider;
+import com.doan.game.enums.TokenPurpose;
+import com.doan.game.repository.CredentialRepository;
 import com.doan.game.repository.EntitlementRepository;
+import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.VerificationTokenRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import com.doan.game.service.OutgoingMail;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -58,6 +66,10 @@ class GroupSlotFlowTest {
     @Autowired AccountRepository accountRepo;
     @Autowired EntitlementRepository entitlementRepo;
     @Autowired AuthFlowTest.MailCatcher mailCatcher;
+    @Autowired VerificationTokenRepository tokenRepo;
+    @Autowired CredentialRepository credentialRepo;
+    @Autowired LearnerSlotRepository slotRepo;
+    @Autowired PasswordEncoder encoder;
 
     @BeforeEach
     void resetMailbox() {
@@ -213,6 +225,47 @@ class GroupSlotFlowTest {
                 .andExpect(status().isOk());
         mvc.perform(slotRequest(teacher, groupId, "Be 1", "123456"))
                 .andExpect(status().isOk());
+    }
+
+    // ------------------------------------------------------------------ NFR-3: secrets stored hashed
+    /**
+     * NFR-3: the password, the e-mail OTP and the seat PIN are stored only as BCrypt hashes (salted: the same PIN
+     * twice gives two different hashes). Seat codes are stored in clear by design and are not checked here.
+     */
+    @Test
+    void passwordOtpAndPinAreStoredAsSaltedHashes() throws Exception {
+        String email = "bam-" + System.nanoTime() + "@test.local";
+        mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerJson(email)))
+                .andExpect(status().isOk());
+        String otp = tokenFromMail();
+        UUID accountId = accountRepo.findByEmailIgnoreCase(email).orElseThrow().getId();
+
+        String otpHash = tokenRepo.findTopByAccount_IdAndPurposeOrderByCreatedAtDesc(accountId, TokenPurpose.VERIFY_EMAIL)
+                .orElseThrow().getTokenHash();
+        assertBcryptOf(otpHash, otp);
+
+        String jwt = extractJwt(mvc.perform(post("/api/auth/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"otp\":\"" + otp + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        String passwordHash = credentialRepo.findByAccount_IdAndProvider(accountId, AuthProvider.PASSWORD)
+                .orElseThrow().getPasswordHash();
+        assertBcryptOf(passwordHash, "matkhau123");
+
+        grant(jwt, PlanKind.PARENT);
+        String groupId = openFamilyGroup(jwt);
+        openSlot(jwt, groupId, "Be Mot", "246810").andExpect(status().isOk());
+        openSlot(jwt, groupId, "Be Hai", "246810").andExpect(status().isOk());
+        List<String> pinHashes = slotRepo.findAll().stream()
+                .filter(sl -> sl.getGroup().getId().toString().equals(groupId))
+                .map(LearnerSlot::getPinHash).toList();
+        assertThat(pinHashes).hasSize(2).allSatisfy(h -> assertBcryptOf(h, "246810"));
+        assertThat(pinHashes.get(0)).isNotEqualTo(pinHashes.get(1));
+    }
+
+    private void assertBcryptOf(String stored, String secret) {
+        assertThat(stored).isNotNull().doesNotContain(secret).startsWith("$2").hasSize(60);   // BCrypt
+        assertThat(encoder.matches(secret, stored)).isTrue();
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu

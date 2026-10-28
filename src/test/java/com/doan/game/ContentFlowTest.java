@@ -311,6 +311,86 @@ class ContentFlowTest {
         assertThat(releaseRepo.count()).isZero();
     }
 
+    /**
+     * WF-5 / CNT-3 end to end with the REAL roles, approval through the review API (no repository shortcut):
+     * GAME_EDITOR saves + submits → GAME_REVIEWER approves → GAME_MANAGER publishes → second change → manager
+     * publishes it → manager recalls it and the game falls back to the first release.
+     */
+    @Test
+    void editorReviewerManagerPublishThenRecall() throws Exception {
+        var editor = withRole(Role.GAME_EDITOR);
+        var reviewer = withRole(Role.GAME_REVIEWER);
+        var manager = withRole(Role.GAME_MANAGER);
+
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(editor)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Bản 1", "choice-1"))).andExpect(status().isOk());
+        mvc.perform(post("/api/studio/chapters/CH01/submit").with(editor).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"changeClass\":\"MINOR\",\"note\":\"chuong moi\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+        // Not approved yet: the manager has nothing to publish.
+        mvc.perform(post("/api/studio/releases").with(manager).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6005));
+        mvc.perform(post("/api/studio/chapters/CH01/review").with(reviewer).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pass\":true,\"changeClass\":null,\"note\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("APPROVED"));
+
+        mvc.perform(post("/api/studio/releases").with(manager).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"ban dau\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.0"))
+                .andExpect(jsonPath("$.result.current").value(true));
+        mvc.perform(get("/api/content/releases/1.0.0/chapters/CH01")).andExpect(jsonPath("$.result.title").value("Bản 1"));
+        assertThat(draftRepo.findAll()).extracting(d -> d.getStatus().name()).containsExactly("RELEASED");
+
+        // Second round: a faulty change goes through the same three hands.
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(editor)
+                .contentType(MediaType.APPLICATION_JSON).content(chapter("Bản lỗi", "choice-1"))).andExpect(status().isOk());
+        mvc.perform(post("/api/studio/chapters/CH01/submit").with(editor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"changeClass\":\"PATCH\",\"note\":\"sua chu\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/studio/chapters/CH01/review").with(reviewer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"pass\":true,\"changeClass\":\"PATCH\",\"note\":null}")).andExpect(status().isOk());
+        mvc.perform(post("/api/studio/releases").with(manager).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.1"))
+                .andExpect(jsonPath("$.result.changeClass").value("PATCH"));
+        mvc.perform(get("/api/content/current")).andExpect(jsonPath("$.result.version").value("1.0.1"));
+
+        // Only the manager recalls (editor / reviewer → 3004); recall falls back to 1.0.0.
+        mvc.perform(post("/api/studio/releases/1.0.1/recall").with(editor).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(post("/api/studio/releases/1.0.1/recall").with(reviewer).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(post("/api/studio/releases/1.0.1/recall").with(manager).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"loi chu canh 1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.version").value("1.0.0"))
+                .andExpect(jsonPath("$.result.current").value(true));
+        mvc.perform(get("/api/content/current")).andExpect(jsonPath("$.result.version").value("1.0.0"));
+        mvc.perform(get("/api/content/chapters/CH01")).andExpect(jsonPath("$.result.title").value("Bản 1"));
+        assertThat(releaseRepo.findByVersion("1.0.1").orElseThrow().getRecallReason()).isEqualTo("loi chu canh 1");
+    }
+
+    /** An account holding one Studio role, recorded in account_role (services read roles from the DB). */
+    private RequestPostProcessor withRole(Role r) {
+        Account a = new Account();
+        a.setEmail(r.name().toLowerCase() + "-" + System.nanoTime() + "@test.local");
+        a.setDisplayName(r.name());
+        a.setCreatedAt(Instant.now());
+        a = accountRepo.save(a);
+        AccountRole role = new AccountRole();
+        role.setAccount(a);
+        role.setRole(r);
+        role.setGrantedAt(Instant.now());
+        accountRoleRepo.save(role);
+        String id = a.getId().toString();
+        return jwt().jwt(j -> j.subject(id)).authorities(new SimpleGrantedAuthority("SCOPE_" + r.name()));
+    }
+
     private ContentTestSupport.Repos repos() {
         return new ContentTestSupport.Repos(releaseChapterRepo, releaseRepo, draftRepo, chapterRepo);
     }
