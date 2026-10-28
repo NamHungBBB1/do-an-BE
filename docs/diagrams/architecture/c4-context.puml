@@ -1,0 +1,43 @@
+@startuml c4-context
+' FinTeen - C4 Level 1: System Context. C4-PlantUML from the PlantUML standard library (no network include).
+!include <C4/C4_Context>
+
+title FinTeen - System Context (C4 Level 1)
+
+Person(adult, "Parent / Teacher", "Adult customer account. Buys a 3-month plan, opens a group and its seats, reads learner reports.")
+Person(learner, "Learner", "Child (family group) or student (class). Signs in to a seat with a code + PIN, no account. A guest may play without a seat; nothing is recorded.")
+Person(staff, "Studio staff", "Internal roles Editor, Reviewer, Manager. Draft, review and publish game chapters.")
+Person(admin, "Administrator", "Sets plan prices, grants plans and internal roles, reconciles payments, manages AI keys.")
+
+System(finteen, "FinTeen", "Simulation-based financial literacy platform: eight story chapters with mini-games, seat-based family / class groups, adult reports, content studio with numbered immutable releases.")
+
+System_Ext(payos, "PayOS", "VietQR payment gateway. Notifies paid orders by a signed webhook.")
+System_Ext(brevo, "Brevo", "SMTP relay for transactional e-mail.")
+System_Ext(firebase, "Firebase Authentication", "Google sign-in. Issues the ID token that FinTeen verifies.")
+System_Ext(gemini, "Google Gemini API", "Language model used by the Studio to suggest how chapter lines are read aloud.")
+System_Ext(pages, "Cloudflare Pages", "Earlier host of images and narration, kept read-only as a fallback.")
+
+Rel(learner, finteen, "Plays chapters and mini-games, takes class quizzes")
+Rel(adult, finteen, "Registers, buys plans, manages seats, reads reports")
+Rel(staff, finteen, "Drafts, reviews and publishes chapter releases")
+Rel(admin, finteen, "Sets prices, grants plans and roles, reconciles payments")
+
+Rel(finteen, firebase, "Delegates Google sign-in to")
+Rel(finteen, payos, "Creates payment orders, checks their status")
+Rel_Back(finteen, payos, "Sends paid-order webhook")
+Rel(adult, payos, "Pays by scanning the VietQR code")
+Rel(finteen, brevo, "Sends one-time verification and password-reset codes", "SMTP")
+Rel(brevo, adult, "Delivers e-mail to")
+Rel(finteen, gemini, "Requests reading suggestions, one call per chapter")
+Rel(finteen, pages, "Falls back to for images and narration")
+
+Lay_R(adult, learner)
+Lay_R(learner, staff)
+Lay_R(staff, admin)
+Lay_R(payos, brevo)
+Lay_R(brevo, firebase)
+Lay_R(firebase, gemini)
+Lay_R(gemini, pages)
+
+SHOW_LEGEND()
+@enduml

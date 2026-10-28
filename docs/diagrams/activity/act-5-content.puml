@@ -1,0 +1,43 @@
+@startuml
+' Activity 5: edit, review, publish and recall content. Transcribed from Diagram/ACTIVITY/act-5-content.drawio.
+' The drawio has ONE merge that both back-edges enter; PlantUML allows one back-edge per loop,
+' so it is drawn as two nested repeat loops (two merge diamonds back to back, same meaning).
+skinparam wrapWidth 150
+|Editor|
+|System (BE)|
+|Reviewer|
+|Manager|
+
+|Editor|
+start
+repeat
+  repeat
+    :Save the chapter draft;
+    :Submit for review with a change type;
+    |System (BE)|
+    :Check every path reaches an ending;
+  repeat while () is ([a path has no ending]) not ([plays to an ending])
+  |Reviewer|
+  :Review someone else's draft;
+repeat while () is ([return with a reason]) not ([approve])
+|Manager|
+:Publish a release;
+|System (BE)|
+if () then ([publisher wrote a draft])
+  :Refuse the publish;
+  stop
+else ([else])
+  :Freeze approved drafts, set the version number;
+  :Make the new release current;
+endif
+|Manager|
+:Watch the release in play;
+if () then ([no defect])
+  stop
+else ([defect found])
+  :Recall the release with a reason;
+  |System (BE)|
+  :Make the newest older release current;
+  stop
+endif
+@enduml

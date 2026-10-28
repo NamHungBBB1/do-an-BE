@@ -1,0 +1,39 @@
+@startuml
+' Activity 1: buy a plan and activate it. Transcribed from Diagram/ACTIVITY/act-1-payment.drawio.
+skinparam wrapWidth 150
+|Parent / Teacher|
+|System (BE)|
+|PayOS|
+
+|Parent / Teacher|
+start
+:Choose a plan and buy;
+|System (BE)|
+if () then ([internal account])
+  :Refuse the purchase;
+  stop
+else ([customer])
+  :Create a PENDING order;
+  |PayOS|
+  :Create the payment link and QR (24 h);
+  |Parent / Teacher|
+  :Scan the QR in the bank app;
+  if () then ([pays])
+    |PayOS|
+    :Confirm the payment;
+  else ([cancels, link expires\nor payment fails])
+    |System (BE)|
+    :Mark the order FAILED;
+    if () then ([no payment])
+      stop
+    else ([PayOS later reports\nthe money received])
+    endif
+  endif
+endif
+|System (BE)|
+:Mark the order PAID, grant the plan;
+:Mail the receipt;
+|Parent / Teacher|
+:Use the plan's features;
+stop
+@enduml
