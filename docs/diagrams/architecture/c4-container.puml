@@ -1,0 +1,48 @@
+@startuml c4-container
+' FinTeen - C4 Level 2: Container. C4-PlantUML from the PlantUML standard library (no network include).
+!include <C4/C4_Container>
+
+LAYOUT_LEFT_RIGHT()
+
+title FinTeen - Containers (C4 Level 2)
+
+Person(learner, "Learner", "Child or student on a seat (code + PIN), or a guest.")
+Person(adult, "Parent / Teacher", "Adult customer account.")
+Person(staff, "Administrator / Studio staff", "Admin, Editor, Reviewer, Manager.")
+
+System_Boundary(ft, "FinTeen") {
+  Container(web, "Web Application", "React 19, Vite, Tailwind; hosted on Vercel", "Single-page app: game player, adult console and Studio. Runs a chapter in the browser and sends one batch of choices at the end of the chapter.")
+  Boundary(vps, "VPS (Linux, systemd)") {
+    Container(proxy, "Reverse Proxy", "Cloudflare Tunnel + nginx", "Single public entry. Forwards API calls to the API application; serves asset files directly (read-only, long cache).")
+    Container(api, "API Application", "Spring Boot 3.5, Java 17", "REST API with JWT (account and seat tokens). Recomputes play results from the frozen release, grades mini-games and quizzes, builds reports for group owners only, runs payments and the Studio draft-review-publish flow.")
+    ContainerDb(db, "Database", "PostgreSQL 16 (Docker)", "Accounts, plans, groups and seats, choice events, quizzes, chapter drafts, frozen release JSON, transactions.")
+    ContainerDb(assets, "Asset Store", "File system", "Images (WebP) and narration, file names are content hashes.")
+  }
+}
+
+System_Ext(firebase, "Firebase Authentication", "Google sign-in.")
+System_Ext(payos, "PayOS", "VietQR payment gateway.")
+System_Ext(brevo, "Brevo", "SMTP relay.")
+System_Ext(gemini, "Google Gemini API", "Language model.")
+System_Ext(gh, "GitHub Actions", "CI/CD on merge to main.")
+
+Rel(learner, web, "Plays chapters, takes quizzes", "HTTPS")
+Rel(adult, web, "Buys plans, manages seats, reads reports", "HTTPS")
+Rel(staff, web, "Admin console; drafts, reviews, publishes chapters", "HTTPS")
+
+Rel(web, firebase, "Signs in with Google, gets an ID token", "HTTPS")
+Rel(web, proxy, "API calls (JSON, Bearer JWT); loads images and narration", "HTTPS")
+Rel(proxy, api, "Forwards API requests", "HTTP")
+Rel(proxy, assets, "Serves files from")
+
+Rel(api, db, "Reads and writes", "JDBC")
+Rel(api, assets, "Stores uploaded images as WebP", "File I/O")
+Rel(api, firebase, "Verifies ID tokens with Google public keys", "HTTPS")
+Rel(api, payos, "Creates orders, checks status", "HTTPS")
+Rel_Back(api, payos, "Paid-order webhook (signed), via the reverse proxy", "HTTPS")
+Rel(api, brevo, "Sends one-time codes", "SMTP")
+Rel(api, gemini, "Reading suggestions, one call per chapter", "HTTPS")
+Rel_Back(api, gh, "Deploys after tests pass (DB dump first, auto rollback)", "SSH")
+
+SHOW_LEGEND()
+@enduml

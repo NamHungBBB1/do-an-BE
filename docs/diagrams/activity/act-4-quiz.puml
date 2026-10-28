@@ -1,0 +1,38 @@
+@startuml
+' Activity 4: teacher test and child answers. Transcribed from Diagram/ACTIVITY/act-4-quiz.drawio.
+skinparam wrapWidth 150
+|Teacher|
+|System (BE)|
+|Child|
+
+|Teacher|
+start
+:Choose the kind of test;
+if () then ([post-test])
+  :Switch on post-tests for the class;
+  |System (BE)|
+  :Create a post-test when a child finishes a chapter;
+else ([class test])
+  |Teacher|
+  :Pick 1<U+2013>100 questions from the bank;
+  :Create the test as DRAFT, due date optional;
+  :Publish the test;
+endif
+|System (BE)|
+:Show the PUBLISHED test to the children it is for;
+|Child|
+:Answer the questions;
+:Submit the answers;
+|System (BE)|
+if () then ([due date passed or\nalready submitted])
+  :Refuse the submission;
+  stop
+else ([else])
+  :Grade on the server; answers never go to the child;
+  |Child|
+  :See right or wrong for each question;
+endif
+|Teacher|
+:View the class results;
+stop
+@enduml
