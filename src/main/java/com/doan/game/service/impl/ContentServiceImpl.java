@@ -82,12 +82,13 @@ public class ContentServiceImpl implements ContentService {
     private final ContentSchema contentSchema;
     private final Clock clock;
     private final String assetBase;
+    private final VoiceKeys voiceKeys;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                               AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
                               ObjectMapper objectMapper, ContentSchema contentSchema, Clock clock,
-                              @Value("${app.assets.base-url}") String assetBase) {
+                              @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
         this.releaseRepo = releaseRepo;
@@ -98,6 +99,7 @@ public class ContentServiceImpl implements ContentService {
         this.contentSchema = contentSchema;
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
+        this.voiceKeys = voiceKeys;
     }
 
     // ------------------------------------------------------------------ đọc (công khai)
@@ -136,6 +138,8 @@ public class ContentServiceImpl implements ContentService {
     public DraftSavedResponse saveDraft(UUID callerId, String code, JsonNode content) {
         requireAnyRole(callerId, Role.ADMIN, Role.GAME_EDITOR);
         int number = parseChapterNumber(code);
+        // Giọng đọc (03/11, spec 4.3): BE tự gắn voiceUrl cho câu đã có tệp khớp khoá, gỡ câu không khớp — editor không tự ghi.
+        voiceKeys.attach(content);
         Normalized normalized = validateAndNormalize(content);
         String json = normalized.json();
         Instant now = Instant.now(clock);
@@ -214,7 +218,9 @@ public class ContentServiceImpl implements ContentService {
         // Đóng băng: chép nguyên JSON sang ReleaseChapter kèm hash; nháp sửa tiếp không ảnh hưởng.
         Set<UUID> changed = new HashSet<>();
         for (ChapterDraft d : approved) {
-            saveReleaseChapter(release, d.getChapter(), d.getContent(), sha256(d.getContent()));
+            // Đóng băng kèm giọng đã sinh tới lúc phát hành (câu chưa có giọng thì không có voiceUrl — FE hiện chữ).
+            String frozenJson = voiceKeys.attachJson(d.getContent());
+            saveReleaseChapter(release, d.getChapter(), frozenJson, sha256(frozenJson));
             d.setStatus(DraftStatus.RELEASED);
             changed.add(d.getChapter().getId());
         }
@@ -335,8 +341,9 @@ public class ContentServiceImpl implements ContentService {
         ChapterDraft d = draftRepo.findTopByChapter_IdOrderByRevisionDesc(chapter.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chương " + code + " chưa có nháp"));
         try {
+            // Gắn giọng lúc đọc: câu vừa được máy sinh nộp có voiceUrl ngay, không cần lưu lại nháp.
             return new DraftContentResponse(toDraftSummary(d),
-                    objectMapper.readTree(d.getContent().replace(ASSET_PLACEHOLDER, assetBase)));
+                    objectMapper.readTree(voiceKeys.attachJson(d.getContent()).replace(ASSET_PLACEHOLDER, assetBase)));
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "JSON nháp hỏng trong DB: " + code);
         }

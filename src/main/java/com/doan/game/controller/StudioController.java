@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.UUID;
 import com.doan.game.DTO.response.VoiceSuggestResponse;
 import com.doan.game.service.impl.VoiceSuggestService;
+import com.doan.game.service.impl.VoiceRenderService;
 
 /**
  * Studio (PR B, 21/10): cổng mở cho ADMIN và ba vai Editor / Reviewer / Manager; ai làm được việc gì thì service
@@ -40,6 +41,7 @@ public class StudioController {
 
     private final ContentService contentService;
     private final VoiceSuggestService voiceSuggestService;
+    private final VoiceRenderService voiceRenderService;
 
     /** Body = nguyên object chương theo hình dạng FE (chapterNV2GameData). Lưu đè bản nháp của chương. */
     @PutMapping("/chapters/{code}/draft")
@@ -68,6 +70,19 @@ public class StudioController {
     @PostMapping("/chapters/{code}/voice/suggest")
     public ApiResponse<VoiceSuggestResponse> suggestVoice(@PathVariable String code) {
         return ApiResponse.ok(voiceSuggestService.suggest(code.trim().toUpperCase()));
+    }
+
+    /** Giọng đọc từng câu của nháp mới nhất: READY (có tệp khớp khoá) / MISSING / PENDING (đang chờ máy sinh) / FAILED. */
+    @GetMapping("/chapters/{code}/voice")
+    public ApiResponse<VoiceRenderService.ChapterVoice> voiceStatus(@PathVariable String code) {
+        return ApiResponse.ok(voiceRenderService.status(code.trim().toUpperCase()));
+    }
+
+    /** Sinh giọng các câu còn thiếu (câu trùng khoá dùng lại tệp cũ) — xếp hàng rồi gọi GitHub Actions. ADMIN / GAME_EDITOR. */
+    @PostMapping("/chapters/{code}/voice")
+    public ApiResponse<VoiceRenderService.EnqueueResult> renderVoice(@AuthenticationPrincipal Jwt jwt,
+                                                                      @PathVariable String code) {
+        return ApiResponse.ok(voiceRenderService.enqueue(currentAccountId(jwt), code.trim().toUpperCase()));
     }
 
     /** Trạng thái nháp mới nhất của mọi chương (không kèm nội dung). */

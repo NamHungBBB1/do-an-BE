@@ -1,0 +1,522 @@
+{
+ "364b59d6f1d5c5faccc5": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC01_B1",
+  "speakerId": "ME",
+  "profile": "nu-luu-loat",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Con được tự quyết số tiền này. Nhưng nhớ nhé, con phải đóng tiền học vẽ vào ngày 28; tiền này đã bao gồm tiền tiêu vặt của con rồi nhé!",
+  "sec": 7.6,
+  "renderedAt": "2026-10-19T08:04:50"
+ },
+ "882f7d3e6a38ca724eed": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC01_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Vậy mình không thể coi toàn bộ 500.000 đồng đều là tiền tự do thích mua gì thì mua.",
+  "sec": 4.56,
+  "renderedAt": "2026-10-19T08:04:55"
+ },
+ "b914238dfe55e0181f4d": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC01_B3",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tai nghe đang giảm giá còn 250.000 đồng nè An ơi! Nhóm mình mua chung để tối nay leo rank nhé!",
+  "sec": 5.84,
+  "renderedAt": "2026-10-19T08:05:03"
+ },
+ "fa4a2140cdbd7b53bf63": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_B1",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Mua hôm nay cho kịp chơi tối nay đi! Mua online có 7 đô nghe còn rẻ hơn nữa kìa!",
+  "sec": 4.96,
+  "renderedAt": "2026-10-19T08:05:09"
+ },
+ "a71f245dc958c1911577": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "7 USD nhân 25.000 đồng cộng 25.000 đồng phí ship là 200.000 đồng. Rẻ hơn mà mua xong thì mình vẫn còn đủ 300.000 đồng đóng tiền học vẽ. Nhưng sau đó mình sẽ không còn một khoản tiết kiệm đáng kể.",
+  "sec": 11.12,
+  "renderedAt": "2026-10-19T08:05:21"
+ },
+ "e9d90f957fbea0ec87bd": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_B3",
+  "speakerId": "ME",
+  "profile": "nu-luu-loat",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Con hãy so với mục tiêu dài hạn, thời gian chờ và điều kiện mua thực tế nữa nhé.",
+  "sec": 4.8,
+  "renderedAt": "2026-10-19T08:05:25"
+ },
+ "e4773a4c409a32ce5534": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Mình phải lựa chọn...",
+  "sec": 1.2,
+  "renderedAt": "2026-10-19T08:05:27"
+ },
+ "299b5bf84d2a3506b4f3": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE_A_1",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tuyệt quá! Tối nay tha hồ chiến game nhé!",
+  "sec": 2.72,
+  "renderedAt": "2026-10-19T08:05:29"
+ },
+ "6fa47149be75d5364379": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE_A_2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tiền trong ví chỉ còn 250.000 đồng... Thiếu mất 50.000 đồng mới đủ đóng tiền học vẽ rồi.",
+  "sec": 5.04,
+  "renderedAt": "2026-10-19T08:05:35"
+ },
+ "957c0e17afbb05b603c1": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE_B_1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tai nghe cũ của mình vẫn xài tạm được. Mình giữ tiền đóng tiền học vẽ trước.",
+  "sec": 3.92,
+  "renderedAt": "2026-10-19T08:05:39"
+ },
+ "7c040aea2df328e10263": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE_B_2",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Cũng được, vậy tối nay cứ dùng tai nghe cũ leo rank tạm vậy!",
+  "sec": 3.44,
+  "renderedAt": "2026-10-19T08:05:42"
+ },
+ "e35f35e6ca6e8bf4675c": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC02_CHOICE_C_1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Giá ngoại tệ đổi ra + phí ship là 200.000 đồng. Trừ 300.000 đồng tiền học ra mình vừa đủ 200.000 đồng. Nhưng mà mình muốn để dành nên mình chưa mua đợt này.",
+  "sec": 9.12,
+  "renderedAt": "2026-10-19T08:05:52"
+ },
+ "7496bf56074a2bcb8f3e": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC03_B1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Mua hay chờ thì mình đều phải chấp nhận bỏ qua một lựa chọn khác. Cần ghi rõ điều mình đánh đổi là gì.",
+  "sec": 4.96,
+  "renderedAt": "2026-10-19T08:05:57"
+ },
+ "d17ad244fec62706990e": {
+  "chapter": "CH01",
+  "sceneId": "CH01_SC03_B2",
+  "speakerId": "ME",
+  "profile": "nu-luu-loat",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Con có thể thay đổi kế hoạch nếu muốn, nhưng phải tính rõ số tiền thiếu và thời hạn mới có thi hành được không nhé.",
+  "sec": 5.92,
+  "renderedAt": "2026-10-19T08:06:03"
+ },
+ "ec8378e1a955bcac5664": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC01_B1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chào các em! Trong bài học này, các em nhận 3.000.000 đồng thu nhập mô phỏng đầu tháng để quản lý sinh hoạt cá nhân.",
+  "sec": 6.24,
+  "renderedAt": "2026-10-19T08:06:10"
+ },
+ "af4844fee2fdf750cf12": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC01_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "3 triệu đồng cho cả tháng... Mình cần phải tính toán kĩ các khoản chi cố định trước khi tiêu xài tự do.",
+  "sec": 5.28,
+  "renderedAt": "2026-10-19T08:06:14"
+ },
+ "a649665aadbd0de96755": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC02_B1",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chi nhiều cho giải trí chút đi An! Tháng này có bao nhiêu sự kiện hay ho đang chờ tụi mình kìa!",
+  "sec": 5.28,
+  "renderedAt": "2026-10-19T08:06:18"
+ },
+ "c9f87ca9965448a6a763": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC02_B2",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Hãy đảm bảo các khoản nền cơ bản như Phòng ở, Ăn uống, Đi lại được ưu tiên trước nhé.",
+  "sec": 4.64,
+  "renderedAt": "2026-10-19T08:06:22"
+ },
+ "51606dc6d16231bee92e": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC03_B1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chiếc máy tính phục vụ học tập có giá 6.000.000 đồng. Mình cần tính xem nên chọn lộ trình tiết kiệm mấy tháng.",
+  "sec": 5.84,
+  "renderedAt": "2026-10-19T08:06:27"
+ },
+ "f42731d262b568be18c1": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC03_CHOICE",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Mình sẽ chọn lộ trình tích lũy nào?",
+  "sec": 2.08,
+  "renderedAt": "2026-10-19T08:06:29"
+ },
+ "3b6de241d451a80f4aaa": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC03_CHOICE_A_1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Quyết tâm rất tốt! 1.000.000 đồng/tháng giúp em sớm có máy tính, nhưng hãy nhớ giữ lại 200.000 đồng dự phòng nhé.",
+  "sec": 6.32,
+  "renderedAt": "2026-10-19T08:06:35"
+ },
+ "ccce91628727b0bd8069": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC03_CHOICE_B_1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Lựa chọn rất an toàn! 800.000 đồng/tháng giúp em có khoản dự phòng dư dả 400.000 đồng cho các rủi ro bất ngờ.",
+  "sec": 6.88,
+  "renderedAt": "2026-10-19T08:06:41"
+ },
+ "40f4981213a35e679f9c": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC04_B1",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Thôi xong rồi An ơi! Lốp xe đạp của cậu bị xẹp dí rồi, tiệm báo giá thay ruột với bọc lốp mất 200.000 đồng đó!",
+  "sec": 6.96,
+  "renderedAt": "2026-10-19T08:06:47"
+ },
+ "dfb0c31fc9d293da7304": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC04_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "200.000 đồng phát sinh bất ngờ... Mình sẽ lấy nguồn tiền từ đâu để chi trả đây?",
+  "sec": 4.48,
+  "renderedAt": "2026-10-19T08:06:51"
+ },
+ "f6227afb18d7e4b1bd54": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC04_CHOICE",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Cách xử lý khoản sửa xe 200.000 đồng:",
+  "sec": 2.64,
+  "renderedAt": "2026-10-19T08:06:53"
+ },
+ "bd9917521d8fe361769c": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC04_CHOICE_A_1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "May mà mình có lập Quỹ dự trù linh hoạt! Tiền tiết kiệm mua Laptop vẫn hoàn toàn nguyên vẹn.",
+  "sec": 4.88,
+  "renderedAt": "2026-10-19T08:06:57"
+ },
+ "509555d450ead490c858": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC04_CHOICE_B_1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Trừ vào tiền mua Laptop làm mình bị thiếu một khoản... Mình phải điều chỉnh lại thời hạn tiết kiệm thêm 1 tháng rồi.",
+  "sec": 5.36,
+  "renderedAt": "2026-10-19T08:07:02"
+ },
+ "585d481ffe2e6710a690": {
+  "chapter": "CH02",
+  "sceneId": "CH02_SC05_B1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Các khoản phát sinh như sửa xe luôn xuất hiện bất ngờ. Lập Quỹ dự trù chính là lá chắn bảo vệ mục tiêu tài chính của các em!",
+  "sec": 6.56,
+  "renderedAt": "2026-10-19T08:07:08"
+ },
+ "d9ad8408073875f86df0": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC01_B0",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chào mừng các em đến với Tuần lễ Hướng nghiệp! Thử thách hôm nay là tìm một công việc phù hợp với quỹ thời gian rảnh tối đa 12 tiếng/tuần và số vốn hiện có là 300.000 đồng. Bàn của cô đang có 3 tấm thẻ công việc giả định để các em tập làm quen với việc quản lý thu nhập, hãy đọc và cân nhắc thật kỹ nhé!",
+  "sec": 16.34,
+  "renderedAt": "2026-10-19T08:07:23"
+ },
+ "eadf9cd876eecb991839": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC01_JOBS",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Để mình xem qua các việc làm trước đã.",
+  "sec": 2.32,
+  "renderedAt": "2026-10-19T08:07:25"
+ },
+ "16446b13ff93d69d3978": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC01_B1",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Uầy An ơi, công việc bán hàng hưởng hoa hồng này ghi thu nhập cao nhất tận 3 triệu kìa! Chốt đơn đi ông, nghĩ nhiều làm gì!",
+  "sec": 6.72,
+  "renderedAt": "2026-10-19T08:07:31"
+ },
+ "166f1160f01611081a73": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC01_B2",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Minh nhìn kỹ lại xem nào. Con số to nhất trên quảng cáo chưa chắc là số tiền các em được cầm về tay đâu nhé. Thử nghĩ xem, nhỡ tháng đó ế khách thì sao? Hoặc lương 'gộp' có giống lương 'thực nhận' không?",
+  "sec": 10.88,
+  "renderedAt": "2026-10-19T08:07:42"
+ },
+ "964e0ab04c5853657ba8": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC01_B3",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Đúng rồi đó Minh. Giống như cái việc bán đồ này nè, mang về 1 triệu 2 nhưng mình phải bỏ tiền vốn ra mua vật liệu trước mà. Đâu phải tất cả 1 triệu 2 đó đều là tiền lãi của mình đâu.",
+  "sec": 9.44,
+  "renderedAt": "2026-10-19T08:07:52"
+ },
+ "a9135b0b141ebcec725d": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_B1",
+  "speakerId": "TU_VAN",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Đăng ký khóa này đi em trai! Chỗ anh bảo đảm 100% học xong là có việc làm ngay, lương tháng đầu dư sức bù tiền học phí!",
+  "sec": 7.2,
+  "renderedAt": "2026-10-19T08:07:58"
+ },
+ "b530a5588c1e64378c38": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chắc chắn có việc luôn ạ? Lời hứa này 'mạnh' thật đấy... Nhưng em chưa thấy chương trình học cụ thể, và yêu cầu tuyển dụng của các công ty đối tác nằm ở đâu ạ?",
+  "sec": 7.92,
+  "renderedAt": "2026-10-19T08:08:05"
+ },
+ "66b924400084d6a1992d": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_B3",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Khi ai đó cam kết quá chắc chắn, em thử đoán xem họ có được lợi ích gì khi em gật đầu không? À, còn dòng chữ nhỏ xíu ghi 'khấu trừ thuế' kia nữa, hãy nhớ thuế là khoản đóng góp để nhà nước duy trì dịch vụ công, nhưng trong các ví dụ thực hành của trung tâm thế này, em phải đọc kỹ xem đó là thuế thật hay chỉ là phí ảo nhé.",
+  "sec": 17.62,
+  "renderedAt": "2026-10-19T08:08:22"
+ },
+ "a42709f146ee0b49a7dc": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_CHOICE",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Người tư vấn hưởng hoa hồng tuyển sinh. Em sẽ làm gì với lời bảo đảm này?",
+  "sec": 3.92,
+  "renderedAt": "2026-10-19T08:08:25"
+ },
+ "037cf5064a6dee9e6f3f": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_A_R1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Trường này có dạy thiết kế thật, nhưng trên website không có văn bản nào cam kết '100% có việc làm' cả.",
+  "sec": 5.92,
+  "renderedAt": "2026-10-19T08:08:31"
+ },
+ "6988bbd9816e2f46192a": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC02_B_R1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "An ơi, em quyết định hơi vội rồi. Khi một người cố gắng thuyết phục em bằng mọi giá, rất có thể họ đang được nhận tiền hoa hồng trên chính quyết định của em đấy. Nhớ nhé, đừng bao giờ gật đầu với một lời hứa mà em chưa tự tay kiểm chứng.",
+  "sec": 12.64,
+  "renderedAt": "2026-10-19T08:08:46"
+ },
+ "ed12dd446855fcc7c412": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_B1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Nhìn lịch tuần này xem, mình rảnh tối đa có 12 tiếng thôi. Công việc bán hàng nhận hoa hồng kia yêu cầu làm tận 16 tiếng, chọn là kiểu gì cũng cấn lịch học trên trường cho xem.",
+  "sec": 9.92,
+  "renderedAt": "2026-10-19T08:08:56"
+ },
+ "ca4f19451a3237d302bd": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_B2",
+  "speakerId": "MINH",
+  "profile": "pham-tuyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Công nhận. Nhưng ông tính sao vụ làm trợ lý thiết kế? Muốn nhận việc đó thì ngay hôm nay phải bỏ ra 200.000 đồng đóng học phí khóa nhập môn trước đấy nhé!",
+  "sec": 8.48,
+  "renderedAt": "2026-10-19T08:09:06"
+ },
+ "f0fd853a504b2cffb583": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_B3",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Khoan chốt vội nhé An! Em thử mở Career Match lên để kiểm tra xem việc nào khớp với lịch rảnh và tự tính lại số tiền thực nhận xem sao. Nhớ quy tắc này: 'lương trên giấy' chưa phải là tiền trong ví, nên số dư tài khoản hiện tại sẽ chưa tăng lên đâu, nó chỉ bị trừ đi nếu em chọn việc phải đóng phí trước thôi.",
+  "sec": 17.22,
+  "renderedAt": "2026-10-19T08:09:24"
+ },
+ "e583811c6c4afb3e691b": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_CHOICE",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Không nhận lương ngay khi chọn. Mình sẽ chọn hướng nào?",
+  "sec": 2.8,
+  "renderedAt": "2026-10-19T08:09:26"
+ },
+ "9a328cbdf3fb9245ec30": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_A_R1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Chấp nhận đau ví chút vậy, tài khoản chỉ còn đúng 100.000 đồng. Nhưng bù lại, công việc này chỉ tốn 10 tiếng một tuần, mình vẫn dư sức đi học đầy đủ mà không lo trễ nải.",
+  "sec": 9.28,
+  "renderedAt": "2026-10-19T08:09:35"
+ },
+ "4a26e5e04868cc06826b": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_B_R1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Ủa chết, công việc này lẹm mất 4 tiếng vào lịch học chính trên trường rồi!",
+  "sec": 3.76,
+  "renderedAt": "2026-10-19T08:09:38"
+ },
+ "0caa1444cfb214d3b464": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_C_R1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Làm thêm là tốt, nhưng đừng để ảnh hưởng đến việc học chính nhé An. Em xem lại lịch và cân nhắc đổi phương án khác xem sao?",
+  "sec": 6.48,
+  "renderedAt": "2026-10-19T08:09:45"
+ },
+ "c8a52b2654f0abaaabea": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_REVISE",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Lịch học đang bị cấn mất 4 tiếng! Mình phải đổi phương án thôi...",
+  "sec": 3.68,
+  "renderedAt": "2026-10-19T08:09:49"
+ },
+ "c1f24337e0add8d47f74": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC03_D_R1",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tuy tiền lời ít hơn mấy việc kia thật, nhưng thời gian lại vừa khít với lịch rảnh của mình. Chậm mà chắc, chọn cái này là hợp lý nhất rồi!",
+  "sec": 6.96,
+  "renderedAt": "2026-10-19T08:09:55"
+ },
+ "f3cd6b22989535e36dd9": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC04_B1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tổng kết lại chặng đường hôm nay nào An! Sau bao nhiêu lần 'cân não', em đã rút ra được bí kíp gì khi chốt một công việc chưa? Và giả sử lỡ rơi vào những tháng 'ế khách', thu nhập sụt giảm thì em sẽ làm gì?",
+  "sec": 10.64,
+  "renderedAt": "2026-10-19T08:10:06"
+ },
+ "c8d928c03a889bd74053": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC04_B2",
+  "speakerId": "AN",
+  "profile": "adam",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Dạ, bài học nhớ đời của em là không được lóa mắt bởi những con số to đùng trên quảng cáo nữa ạ! Từ giờ chọn việc, em phải soi xem lịch làm có khớp với thời gian rảnh không, tự nhẩm xem 'lương thực nhận' cầm về túi là bao nhiêu, và tuyệt đối phảikiểm chứng thông tin chứ không nghe mấy lời hứa suông.",
+  "sec": 15.3,
+  "renderedAt": "2026-10-19T08:10:21"
+ },
+ "730a284f0988fa151246": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC04_R1",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Tóm lại, bài học rút ra ở đây là gì nhỉ? Khi cân nhắc một công việc, mình bắt buộc phải soi kỹ những cái gì?",
+  "sec": 6.4,
+  "renderedAt": "2026-10-19T08:10:27"
+ },
+ "94ec55ff6cdcbd0ade7b": {
+  "chapter": "CH03",
+  "sceneId": "CH03_SC04_R2",
+  "speakerId": "CO_LINH",
+  "profile": "ngoc-huyen",
+  "modelVersion": "v3-turbo-2026-10",
+  "text": "Nhìn lại quyết định vừa rồi, nhận ra bài học lớn nhất khi đi làm là gì nhỉ?",
+  "sec": 4.08,
+  "renderedAt": "2026-10-19T08:10:31"
+ }
+}

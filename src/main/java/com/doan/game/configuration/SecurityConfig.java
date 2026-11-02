@@ -79,6 +79,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
                 // Kho ảnh khi BE tự phục vụ (chạy tại chỗ, AssetsConfig); production nginx trả trước khi tới BE.
                 .requestMatchers(HttpMethod.GET, "/assets/**").permitAll()
+                // Máy sinh giọng (GitHub Actions, 03/11): không có JWT, controller tự kiểm header X-Voice-Worker-Key.
+                .requestMatchers("/api/voice-worker/**").permitAll()
                 // Studio mở cho BỐN vai nội bộ: kho câu hỏi (17/10) và vòng đời nháp / phát hành (PR B 21/10).
                 // Ai làm được việc gì thì service tra AccountRole: Editor sửa / gửi, Reviewer duyệt, Manager phát hành.
                 .requestMatchers("/api/studio/**").hasAnyAuthority("SCOPE_ADMIN", "SCOPE_GAME_EDITOR",
