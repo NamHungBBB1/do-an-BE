@@ -1,0 +1,5 @@
+# Máy sinh giọng (voice-render.yml). Giữ đúng bản đang dùng: đổi VieNeu / model là đổi modelVersion → mọi giọng phải sinh lại.
+vieneu==3.4.0
+onnxruntime==1.24.4
+huggingface_hub==0.36.0
+lameenc==1.8.1

@@ -37,6 +37,13 @@ public class VoiceWorkerController {
         return ApiResponse.ok(voice.jobs());
     }
 
+    /** Máy trực sẵn hết giờ: báo trước khi tắt; result = số việc còn chờ (> 0 thì ở lại làm tiếp). */
+    @PostMapping("/leaving")
+    public ApiResponse<Integer> leaving(@RequestHeader(value = HEADER, required = false) String k) {
+        voice.requireWorker(k);
+        return ApiResponse.ok(voice.leaving());
+    }
+
     @GetMapping(value = "/refs/{profile}", produces = "audio/wav")
     public byte[] ref(@RequestHeader(value = HEADER, required = false) String k, @PathVariable String profile) {
         voice.requireWorker(k);
