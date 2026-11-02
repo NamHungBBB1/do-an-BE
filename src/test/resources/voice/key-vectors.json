@@ -1,0 +1,586 @@
+[
+ {
+  "scene": {
+   "id": "CH01_SC01_B1",
+   "speakerId": "ME",
+   "text": "Con được tự quyết số tiền này. Nhưng nhớ nhé, con phải đóng tiền học vẽ vào ngày 28; tiền này đã bao gồm tiền tiêu vặt của con rồi nhé!"
+  },
+  "profile": "nu-luu-loat",
+  "readText": "Con được tự quyết số tiền này. Nhưng nhớ nhé, con phải đóng tiền học vẽ vào ngày 28; tiền này đã bao gồm tiền tiêu vặt của con rồi nhé!",
+  "key": "364b59d6f1d5c5faccc5"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC01_B2",
+   "speakerId": "AN",
+   "text": "Vậy mình không thể coi toàn bộ 500.000đ đều là tiền tự do thích mua gì thì mua."
+  },
+  "profile": "adam",
+  "readText": "Vậy mình không thể coi toàn bộ 500.000 đồng đều là tiền tự do thích mua gì thì mua.",
+  "key": "882f7d3e6a38ca724eed"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC01_B3",
+   "speakerId": "MINH",
+   "text": "Tai nghe đang giảm giá còn 250.000đ nè An ơi! Nhóm mình mua chung để tối nay leo rank nhé!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Tai nghe đang giảm giá còn 250.000 đồng nè An ơi! Nhóm mình mua chung để tối nay leo rank nhé!",
+  "key": "b914238dfe55e0181f4d"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_B1",
+   "speakerId": "MINH",
+   "text": "Mua hôm nay cho kịp chơi tối nay đi! Mua online có 7 đô nghe còn rẻ hơn nữa kìa!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Mua hôm nay cho kịp chơi tối nay đi! Mua online có 7 đô nghe còn rẻ hơn nữa kìa!",
+  "key": "fa4a2140cdbd7b53bf63"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_B2",
+   "speakerId": "AN",
+   "text": "7 USD nhân 25.000đ cộng 25.000đ phí ship là 200.000đ. Rẻ hơn mà mua xong thì mình vẫn còn đủ 300.000đ đóng tiền học vẽ. Nhưng sau đó mình sẽ không còn một khoản tiết kiệm đáng kể."
+  },
+  "profile": "adam",
+  "readText": "7 USD nhân 25.000 đồng cộng 25.000 đồng phí ship là 200.000 đồng. Rẻ hơn mà mua xong thì mình vẫn còn đủ 300.000 đồng đóng tiền học vẽ. Nhưng sau đó mình sẽ không còn một khoản tiết kiệm đáng kể.",
+  "key": "a71f245dc958c1911577"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_B3",
+   "speakerId": "ME",
+   "text": "Con hãy so với mục tiêu dài hạn, thời gian chờ và điều kiện mua thực tế nữa nhé."
+  },
+  "profile": "nu-luu-loat",
+  "readText": "Con hãy so với mục tiêu dài hạn, thời gian chờ và điều kiện mua thực tế nữa nhé.",
+  "key": "e9d90f957fbea0ec87bd"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE",
+   "speakerId": "AN",
+   "text": "Mình phải lựa chọn..."
+  },
+  "profile": "adam",
+  "readText": "Mình phải lựa chọn...",
+  "key": "e4773a4c409a32ce5534"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE_A_1",
+   "speakerId": "MINH",
+   "text": "Tuyệt quá! Tối nay tha hồ chiến game nhé!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Tuyệt quá! Tối nay tha hồ chiến game nhé!",
+  "key": "299b5bf84d2a3506b4f3"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE_A_2",
+   "speakerId": "AN",
+   "text": "Tiền trong ví chỉ còn 250.000đ... Thiếu mất 50.000đ mới đủ đóng tiền học vẽ rồi."
+  },
+  "profile": "adam",
+  "readText": "Tiền trong ví chỉ còn 250.000 đồng... Thiếu mất 50.000 đồng mới đủ đóng tiền học vẽ rồi.",
+  "key": "6fa47149be75d5364379"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE_B_1",
+   "speakerId": "AN",
+   "text": "Tai nghe cũ của mình vẫn xài tạm được. Mình giữ tiền đóng tiền học vẽ trước."
+  },
+  "profile": "adam",
+  "readText": "Tai nghe cũ của mình vẫn xài tạm được. Mình giữ tiền đóng tiền học vẽ trước.",
+  "key": "957c0e17afbb05b603c1"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE_B_2",
+   "speakerId": "MINH",
+   "text": "Cũng được, vậy tối nay cứ dùng tai nghe cũ leo rank tạm vậy!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Cũng được, vậy tối nay cứ dùng tai nghe cũ leo rank tạm vậy!",
+  "key": "7c040aea2df328e10263"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC02_CHOICE_C_1",
+   "speakerId": "AN",
+   "text": "Giá ngoại tệ đổi ra + phí ship là 200.000đ. Trừ 300.000đ tiền học ra mình vừa đủ 200.000đ. Nhưng mà mình muốn để dành nên mình chưa mua đợt này."
+  },
+  "profile": "adam",
+  "readText": "Giá ngoại tệ đổi ra + phí ship là 200.000 đồng. Trừ 300.000 đồng tiền học ra mình vừa đủ 200.000 đồng. Nhưng mà mình muốn để dành nên mình chưa mua đợt này.",
+  "key": "e35f35e6ca6e8bf4675c"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC03_B1",
+   "speakerId": "AN",
+   "text": "Mua hay chờ thì mình đều phải chấp nhận bỏ qua một lựa chọn khác. Cần ghi rõ điều mình đánh đổi là gì."
+  },
+  "profile": "adam",
+  "readText": "Mua hay chờ thì mình đều phải chấp nhận bỏ qua một lựa chọn khác. Cần ghi rõ điều mình đánh đổi là gì.",
+  "key": "7496bf56074a2bcb8f3e"
+ },
+ {
+  "scene": {
+   "id": "CH01_SC03_B2",
+   "speakerId": "ME",
+   "text": "Con có thể thay đổi kế hoạch nếu muốn, nhưng phải tính rõ số tiền thiếu và thời hạn mới có thi hành được không nhé."
+  },
+  "profile": "nu-luu-loat",
+  "readText": "Con có thể thay đổi kế hoạch nếu muốn, nhưng phải tính rõ số tiền thiếu và thời hạn mới có thi hành được không nhé.",
+  "key": "d17ad244fec62706990e"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC01_B1",
+   "speakerId": "CO_LINH",
+   "text": "Chào các em! Trong bài học này, các em nhận 3.000.000đ thu nhập mô phỏng đầu tháng để quản lý sinh hoạt cá nhân."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Chào các em! Trong bài học này, các em nhận 3.000.000 đồng thu nhập mô phỏng đầu tháng để quản lý sinh hoạt cá nhân.",
+  "key": "ec8378e1a955bcac5664"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC01_B2",
+   "speakerId": "AN",
+   "text": "3 triệu đồng cho cả tháng... Mình cần phải tính toán kĩ các khoản chi cố định trước khi tiêu xài tự do."
+  },
+  "profile": "adam",
+  "readText": "3 triệu đồng cho cả tháng... Mình cần phải tính toán kĩ các khoản chi cố định trước khi tiêu xài tự do.",
+  "key": "af4844fee2fdf750cf12"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC02_B1",
+   "speakerId": "MINH",
+   "text": "Chi nhiều cho giải trí chút đi An! Tháng này có bao nhiêu sự kiện hay ho đang chờ tụi mình kìa!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Chi nhiều cho giải trí chút đi An! Tháng này có bao nhiêu sự kiện hay ho đang chờ tụi mình kìa!",
+  "key": "a649665aadbd0de96755"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC02_B2",
+   "speakerId": "CO_LINH",
+   "text": "Hãy đảm bảo các khoản nền cơ bản như Phòng ở, Ăn uống, Đi lại được ưu tiên trước nhé."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Hãy đảm bảo các khoản nền cơ bản như Phòng ở, Ăn uống, Đi lại được ưu tiên trước nhé.",
+  "key": "c9f87ca9965448a6a763"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC03_B1",
+   "speakerId": "AN",
+   "text": "Chiếc máy tính phục vụ học tập có giá 6.000.000đ. Mình cần tính xem nên chọn lộ trình tiết kiệm mấy tháng."
+  },
+  "profile": "adam",
+  "readText": "Chiếc máy tính phục vụ học tập có giá 6.000.000 đồng. Mình cần tính xem nên chọn lộ trình tiết kiệm mấy tháng.",
+  "key": "51606dc6d16231bee92e"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC03_CHOICE",
+   "speakerId": "AN",
+   "text": "Mình sẽ chọn lộ trình tích lũy nào?"
+  },
+  "profile": "adam",
+  "readText": "Mình sẽ chọn lộ trình tích lũy nào?",
+  "key": "f42731d262b568be18c1"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC03_CHOICE_A_1",
+   "speakerId": "CO_LINH",
+   "text": "Quyết tâm rất tốt! 1.000.000đ/tháng giúp em sớm có máy tính, nhưng hãy nhớ giữ lại 200.000đ dự phòng nhé."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Quyết tâm rất tốt! 1.000.000 đồng/tháng giúp em sớm có máy tính, nhưng hãy nhớ giữ lại 200.000 đồng dự phòng nhé.",
+  "key": "3b6de241d451a80f4aaa"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC03_CHOICE_B_1",
+   "speakerId": "CO_LINH",
+   "text": "Lựa chọn rất an toàn! 800.000đ/tháng giúp em có khoản dự phòng dư dả 400.000đ cho các rủi ro bất ngờ."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Lựa chọn rất an toàn! 800.000 đồng/tháng giúp em có khoản dự phòng dư dả 400.000 đồng cho các rủi ro bất ngờ.",
+  "key": "ccce91628727b0bd8069"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC04_B1",
+   "speakerId": "MINH",
+   "text": "Thôi xong rồi An ơi! Lốp xe đạp của cậu bị xẹp dí rồi, tiệm báo giá thay ruột với bọc lốp mất 200.000đ đó!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Thôi xong rồi An ơi! Lốp xe đạp của cậu bị xẹp dí rồi, tiệm báo giá thay ruột với bọc lốp mất 200.000 đồng đó!",
+  "key": "40f4981213a35e679f9c"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC04_B2",
+   "speakerId": "AN",
+   "text": "200.000đ phát sinh bất ngờ... Mình sẽ lấy nguồn tiền từ đâu để chi trả đây?"
+  },
+  "profile": "adam",
+  "readText": "200.000 đồng phát sinh bất ngờ... Mình sẽ lấy nguồn tiền từ đâu để chi trả đây?",
+  "key": "dfb0c31fc9d293da7304"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC04_CHOICE",
+   "speakerId": "AN",
+   "text": "Cách xử lý khoản sửa xe 200.000đ:"
+  },
+  "profile": "adam",
+  "readText": "Cách xử lý khoản sửa xe 200.000 đồng:",
+  "key": "f6227afb18d7e4b1bd54"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC04_CHOICE_A_1",
+   "speakerId": "AN",
+   "text": "May mà mình có lập Quỹ dự trù linh hoạt! Tiền tiết kiệm mua Laptop vẫn hoàn toàn nguyên vẹn."
+  },
+  "profile": "adam",
+  "readText": "May mà mình có lập Quỹ dự trù linh hoạt! Tiền tiết kiệm mua Laptop vẫn hoàn toàn nguyên vẹn.",
+  "key": "bd9917521d8fe361769c"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC04_CHOICE_B_1",
+   "speakerId": "AN",
+   "text": "Trừ vào tiền mua Laptop làm mình bị thiếu một khoản... Mình phải điều chỉnh lại thời hạn tiết kiệm thêm 1 tháng rồi."
+  },
+  "profile": "adam",
+  "readText": "Trừ vào tiền mua Laptop làm mình bị thiếu một khoản... Mình phải điều chỉnh lại thời hạn tiết kiệm thêm 1 tháng rồi.",
+  "key": "509555d450ead490c858"
+ },
+ {
+  "scene": {
+   "id": "CH02_SC05_B1",
+   "speakerId": "CO_LINH",
+   "text": "Các khoản phát sinh như sửa xe luôn xuất hiện bất ngờ. Lập Quỹ dự trù chính là lá chắn bảo vệ mục tiêu tài chính của các em!"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Các khoản phát sinh như sửa xe luôn xuất hiện bất ngờ. Lập Quỹ dự trù chính là lá chắn bảo vệ mục tiêu tài chính của các em!",
+  "key": "585d481ffe2e6710a690"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC01_B0",
+   "speakerId": "CO_LINH",
+   "text": "Chào mừng các em đến với Tuần lễ Hướng nghiệp! Thử thách hôm nay là tìm một công việc phù hợp với quỹ thời gian rảnh tối đa 12 tiếng/tuần và số vốn hiện có là 300.000đ. Bàn của cô đang có 3 tấm thẻ công việc giả định để các em tập làm quen với việc quản lý thu nhập, hãy đọc và cân nhắc thật kỹ nhé!"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Chào mừng các em đến với Tuần lễ Hướng nghiệp! Thử thách hôm nay là tìm một công việc phù hợp với quỹ thời gian rảnh tối đa 12 tiếng/tuần và số vốn hiện có là 300.000 đồng. Bàn của cô đang có 3 tấm thẻ công việc giả định để các em tập làm quen với việc quản lý thu nhập, hãy đọc và cân nhắc thật kỹ nhé!",
+  "key": "d9ad8408073875f86df0"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC01_JOBS",
+   "speakerId": "AN",
+   "text": "Để mình xem qua các việc làm trước đã."
+  },
+  "profile": "adam",
+  "readText": "Để mình xem qua các việc làm trước đã.",
+  "key": "eadf9cd876eecb991839"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC01_B1",
+   "speakerId": "MINH",
+   "text": "Uầy An ơi, công việc bán hàng hưởng hoa hồng này ghi thu nhập cao nhất tận 3 triệu kìa! Chốt đơn đi ông, nghĩ nhiều làm gì!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Uầy An ơi, công việc bán hàng hưởng hoa hồng này ghi thu nhập cao nhất tận 3 triệu kìa! Chốt đơn đi ông, nghĩ nhiều làm gì!",
+  "key": "16446b13ff93d69d3978"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC01_B2",
+   "speakerId": "CO_LINH",
+   "text": "Minh nhìn kỹ lại xem nào. Con số to nhất trên quảng cáo chưa chắc là số tiền các em được cầm về tay đâu nhé. Thử nghĩ xem, nhỡ tháng đó ế khách thì sao? Hoặc lương 'gộp' có giống lương 'thực nhận' không?"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Minh nhìn kỹ lại xem nào. Con số to nhất trên quảng cáo chưa chắc là số tiền các em được cầm về tay đâu nhé. Thử nghĩ xem, nhỡ tháng đó ế khách thì sao? Hoặc lương 'gộp' có giống lương 'thực nhận' không?",
+  "key": "166f1160f01611081a73"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC01_B3",
+   "speakerId": "AN",
+   "text": "Đúng rồi đó Minh. Giống như cái việc bán đồ này nè, mang về 1 triệu 2 nhưng mình phải bỏ tiền vốn ra mua vật liệu trước mà. Đâu phải tất cả 1 triệu 2 đó đều là tiền lãi của mình đâu."
+  },
+  "profile": "adam",
+  "readText": "Đúng rồi đó Minh. Giống như cái việc bán đồ này nè, mang về 1 triệu 2 nhưng mình phải bỏ tiền vốn ra mua vật liệu trước mà. Đâu phải tất cả 1 triệu 2 đó đều là tiền lãi của mình đâu.",
+  "key": "964e0ab04c5853657ba8"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_B1",
+   "speakerId": "TU_VAN",
+   "text": "Đăng ký khóa này đi em trai! Chỗ anh bảo đảm 100% học xong là có việc làm ngay, lương tháng đầu dư sức bù tiền học phí!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Đăng ký khóa này đi em trai! Chỗ anh bảo đảm 100% học xong là có việc làm ngay, lương tháng đầu dư sức bù tiền học phí!",
+  "key": "a9135b0b141ebcec725d"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_B2",
+   "speakerId": "AN",
+   "text": "Chắc chắn có việc luôn ạ? Lời hứa này 'mạnh' thật đấy... Nhưng em chưa thấy chương trình học cụ thể, và yêu cầu tuyển dụng của các công ty đối tác nằm ở đâu ạ?"
+  },
+  "profile": "adam",
+  "readText": "Chắc chắn có việc luôn ạ? Lời hứa này 'mạnh' thật đấy... Nhưng em chưa thấy chương trình học cụ thể, và yêu cầu tuyển dụng của các công ty đối tác nằm ở đâu ạ?",
+  "key": "b530a5588c1e64378c38"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_B3",
+   "speakerId": "CO_LINH",
+   "text": "Khi ai đó cam kết quá chắc chắn, em thử đoán xem họ có được lợi ích gì khi em gật đầu không? À, còn dòng chữ nhỏ xíu ghi 'khấu trừ thuế' kia nữa, hãy nhớ thuế là khoản đóng góp để nhà nước duy trì dịch vụ công, nhưng trong các ví dụ thực hành của trung tâm thế này, em phải đọc kỹ xem đó là thuế thật hay chỉ là phí ảo nhé."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Khi ai đó cam kết quá chắc chắn, em thử đoán xem họ có được lợi ích gì khi em gật đầu không? À, còn dòng chữ nhỏ xíu ghi 'khấu trừ thuế' kia nữa, hãy nhớ thuế là khoản đóng góp để nhà nước duy trì dịch vụ công, nhưng trong các ví dụ thực hành của trung tâm thế này, em phải đọc kỹ xem đó là thuế thật hay chỉ là phí ảo nhé.",
+  "key": "66b924400084d6a1992d"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_CHOICE",
+   "speakerId": "AN",
+   "text": "Người tư vấn hưởng hoa hồng tuyển sinh. Em sẽ làm gì với lời bảo đảm này?"
+  },
+  "profile": "adam",
+  "readText": "Người tư vấn hưởng hoa hồng tuyển sinh. Em sẽ làm gì với lời bảo đảm này?",
+  "key": "a42709f146ee0b49a7dc"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_A_R1",
+   "speakerId": "AN",
+   "text": "Trường này có dạy thiết kế thật, nhưng trên website không có văn bản nào cam kết '100% có việc làm' cả."
+  },
+  "profile": "adam",
+  "readText": "Trường này có dạy thiết kế thật, nhưng trên website không có văn bản nào cam kết '100% có việc làm' cả.",
+  "key": "037cf5064a6dee9e6f3f"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC02_B_R1",
+   "speakerId": "CO_LINH",
+   "text": "An ơi, em quyết định hơi vội rồi. Khi một người cố gắng thuyết phục em bằng mọi giá, rất có thể họ đang được nhận tiền hoa hồng trên chính quyết định của em đấy. Nhớ nhé, đừng bao giờ gật đầu với một lời hứa mà em chưa tự tay kiểm chứng."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "An ơi, em quyết định hơi vội rồi. Khi một người cố gắng thuyết phục em bằng mọi giá, rất có thể họ đang được nhận tiền hoa hồng trên chính quyết định của em đấy. Nhớ nhé, đừng bao giờ gật đầu với một lời hứa mà em chưa tự tay kiểm chứng.",
+  "key": "6988bbd9816e2f46192a"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_B1",
+   "speakerId": "AN",
+   "text": "Nhìn lịch tuần này xem, mình rảnh tối đa có 12 tiếng thôi. Công việc bán hàng nhận hoa hồng kia yêu cầu làm tận 16 tiếng, chọn là kiểu gì cũng cấn lịch học trên trường cho xem."
+  },
+  "profile": "adam",
+  "readText": "Nhìn lịch tuần này xem, mình rảnh tối đa có 12 tiếng thôi. Công việc bán hàng nhận hoa hồng kia yêu cầu làm tận 16 tiếng, chọn là kiểu gì cũng cấn lịch học trên trường cho xem.",
+  "key": "ed12dd446855fcc7c412"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_B2",
+   "speakerId": "MINH",
+   "text": "Công nhận. Nhưng ông tính sao vụ làm trợ lý thiết kế? Muốn nhận việc đó thì ngay hôm nay phải bỏ ra 200.000đ đóng học phí khóa nhập môn trước đấy nhé!"
+  },
+  "profile": "pham-tuyen",
+  "readText": "Công nhận. Nhưng ông tính sao vụ làm trợ lý thiết kế? Muốn nhận việc đó thì ngay hôm nay phải bỏ ra 200.000 đồng đóng học phí khóa nhập môn trước đấy nhé!",
+  "key": "ca4f19451a3237d302bd"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_B3",
+   "speakerId": "CO_LINH",
+   "text": "Khoan chốt vội nhé An! Em thử mở Career Match lên để kiểm tra xem việc nào khớp với lịch rảnh và tự tính lại số tiền thực nhận xem sao. Nhớ quy tắc này: 'lương trên giấy' chưa phải là tiền trong ví, nên số dư tài khoản hiện tại sẽ chưa tăng lên đâu, nó chỉ bị trừ đi nếu em chọn việc phải đóng phí trước thôi."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Khoan chốt vội nhé An! Em thử mở Career Match lên để kiểm tra xem việc nào khớp với lịch rảnh và tự tính lại số tiền thực nhận xem sao. Nhớ quy tắc này: 'lương trên giấy' chưa phải là tiền trong ví, nên số dư tài khoản hiện tại sẽ chưa tăng lên đâu, nó chỉ bị trừ đi nếu em chọn việc phải đóng phí trước thôi.",
+  "key": "f0fd853a504b2cffb583"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_CHOICE",
+   "speakerId": "AN",
+   "text": "Không nhận lương ngay khi chọn. Mình sẽ chọn hướng nào?"
+  },
+  "profile": "adam",
+  "readText": "Không nhận lương ngay khi chọn. Mình sẽ chọn hướng nào?",
+  "key": "e583811c6c4afb3e691b"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_A_R1",
+   "speakerId": "AN",
+   "text": "Chấp nhận đau ví chút vậy, tài khoản chỉ còn đúng 100.000đ. Nhưng bù lại, công việc này chỉ tốn 10 tiếng một tuần, mình vẫn dư sức đi học đầy đủ mà không lo trễ nải."
+  },
+  "profile": "adam",
+  "readText": "Chấp nhận đau ví chút vậy, tài khoản chỉ còn đúng 100.000 đồng. Nhưng bù lại, công việc này chỉ tốn 10 tiếng một tuần, mình vẫn dư sức đi học đầy đủ mà không lo trễ nải.",
+  "key": "9a328cbdf3fb9245ec30"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_B_R1",
+   "speakerId": "AN",
+   "text": "Ủa chết, công việc này lẹm mất 4 tiếng vào lịch học chính trên trường rồi!"
+  },
+  "profile": "adam",
+  "readText": "Ủa chết, công việc này lẹm mất 4 tiếng vào lịch học chính trên trường rồi!",
+  "key": "4a26e5e04868cc06826b"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_C_R1",
+   "speakerId": "CO_LINH",
+   "text": "Làm thêm là tốt, nhưng đừng để ảnh hưởng đến việc học chính nhé An. Em xem lại lịch và cân nhắc đổi phương án khác xem sao?"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Làm thêm là tốt, nhưng đừng để ảnh hưởng đến việc học chính nhé An. Em xem lại lịch và cân nhắc đổi phương án khác xem sao?",
+  "key": "0caa1444cfb214d3b464"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_REVISE",
+   "speakerId": "CO_LINH",
+   "text": "Lịch học đang bị cấn mất 4 tiếng! Mình phải đổi phương án thôi..."
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Lịch học đang bị cấn mất 4 tiếng! Mình phải đổi phương án thôi...",
+  "key": "c8a52b2654f0abaaabea"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC03_D_R1",
+   "speakerId": "AN",
+   "text": "Tuy tiền lời ít hơn mấy việc kia thật, nhưng thời gian lại vừa khít với lịch rảnh của mình. Chậm mà chắc, chọn cái này là hợp lý nhất rồi!"
+  },
+  "profile": "adam",
+  "readText": "Tuy tiền lời ít hơn mấy việc kia thật, nhưng thời gian lại vừa khít với lịch rảnh của mình. Chậm mà chắc, chọn cái này là hợp lý nhất rồi!",
+  "key": "c1f24337e0add8d47f74"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC04_B1",
+   "speakerId": "CO_LINH",
+   "text": "Tổng kết lại chặng đường hôm nay nào An! Sau bao nhiêu lần 'cân não', em đã rút ra được bí kíp gì khi chốt một công việc chưa? Và giả sử lỡ rơi vào những tháng 'ế khách', thu nhập sụt giảm thì em sẽ làm gì?"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Tổng kết lại chặng đường hôm nay nào An! Sau bao nhiêu lần 'cân não', em đã rút ra được bí kíp gì khi chốt một công việc chưa? Và giả sử lỡ rơi vào những tháng 'ế khách', thu nhập sụt giảm thì em sẽ làm gì?",
+  "key": "f3cd6b22989535e36dd9"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC04_B2",
+   "speakerId": "AN",
+   "text": "Dạ, bài học nhớ đời của em là không được lóa mắt bởi những con số to đùng trên quảng cáo nữa ạ! Từ giờ chọn việc, em phải soi xem lịch làm có khớp với thời gian rảnh không, tự nhẩm xem 'lương thực nhận' cầm về túi là bao nhiêu, và tuyệt đối phảikiểm chứng thông tin chứ không nghe mấy lời hứa suông."
+  },
+  "profile": "adam",
+  "readText": "Dạ, bài học nhớ đời của em là không được lóa mắt bởi những con số to đùng trên quảng cáo nữa ạ! Từ giờ chọn việc, em phải soi xem lịch làm có khớp với thời gian rảnh không, tự nhẩm xem 'lương thực nhận' cầm về túi là bao nhiêu, và tuyệt đối phảikiểm chứng thông tin chứ không nghe mấy lời hứa suông.",
+  "key": "c8d928c03a889bd74053"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC04_R1",
+   "speakerId": "CO_LINH",
+   "text": "Tóm lại, bài học rút ra ở đây là gì nhỉ? Khi cân nhắc một công việc, mình bắt buộc phải soi kỹ những cái gì?"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Tóm lại, bài học rút ra ở đây là gì nhỉ? Khi cân nhắc một công việc, mình bắt buộc phải soi kỹ những cái gì?",
+  "key": "730a284f0988fa151246"
+ },
+ {
+  "scene": {
+   "id": "CH03_SC04_R2",
+   "speakerId": "CO_LINH",
+   "text": "Nhìn lại quyết định vừa rồi, nhận ra bài học lớn nhất khi đi làm là gì nhỉ?"
+  },
+  "profile": "ngoc-huyen",
+  "readText": "Nhìn lại quyết định vừa rồi, nhận ra bài học lớn nhất khi đi làm là gì nhỉ?",
+  "key": "94ec55ff6cdcbd0ade7b"
+ },
+ {
+  "scene": {
+   "id": "X1",
+   "speakerId": "ME",
+   "text": "Con được 500.000đ — nhớ nhé… ✨  ok"
+  },
+  "profile": "nu-luu-loat",
+  "readText": "Con được 500.000 đồng , nhớ nhé... ok",
+  "key": "fc768858e9b84a27143b"
+ },
+ {
+  "scene": {
+   "id": "X2",
+   "speakerId": "AN",
+   "text": "Giá 7 USD + 25.000 đ ship",
+   "spokenText": "Giá bảy đô la cộng hai mươi lăm nghìn đồng tiền ship"
+  },
+  "profile": "adam",
+  "readText": "Giá bảy đô la cộng hai mươi lăm nghìn đồng tiền ship",
+  "key": "f86b3e30e7354428ae34"
+ },
+ {
+  "scene": {
+   "id": "X3",
+   "speakerId": "AN",
+   "text": "Tắt giọng",
+   "voice": "off"
+  },
+  "profile": null,
+  "readText": null,
+  "key": null
+ },
+ {
+  "scene": {
+   "id": "X4",
+   "speakerId": "AN",
+   "text": "Giọng ghi đè 100đ",
+   "voice": "thuc-doan"
+  },
+  "profile": "thuc-doan",
+  "readText": "Giọng ghi đè 100 đồng",
+  "key": "aa89d0a6c85faa37d16e"
+ },
+ {
+  "scene": {
+   "id": "X5",
+   "speakerId": "MINH",
+   "text": "  nhiều  khoảng\t trắng  ",
+   "spokenText": "   "
+  },
+  "profile": "pham-tuyen",
+  "readText": "nhiều khoảng trắng",
+  "key": "a8e5e8151c25cadb8789"
+ },
+ {
+  "scene": {
+   "id": "X6",
+   "speakerId": "KHONG_CO",
+   "text": "Nhân vật chưa gán giọng"
+  },
+  "profile": null,
+  "readText": null,
+  "key": null
+ }
+]

@@ -1,0 +1,21 @@
+{
+  "engine": "vieneu",
+  "model": "pnnbao-ump/VieNeu-TTS-v3-Turbo",
+  "modelVersion": "v3-turbo-2026-10",
+  "note": "Hash tệp = engine | modelVersion | profile | chữ đã chuẩn hoá. Đổi modelVersion hay đổi giọng của nhân vật là ra tệp mới; bản phát hành cũ vẫn trỏ tệp cũ. Chỉ dùng 5 giọng Hưng duyệt 03/09/2026 sau khi nghe ~30 mẫu (D:/Talk/openmontage-control/voices.json, nhóm 'approved').",
+  "profiles": {
+    "nu-luu-loat": {"kind": "clone", "ref": "refs/nu-luu-loat.wav", "label": "Nữ · giọng Hưng chọn chính ('quá chuẩn'), người thật đã xin phép (09/09); nhân giọng bằng VieNeu, không dùng viXTTS"},
+    "adam":        {"kind": "preset", "preset": "Adam",       "label": "Nam · Nam Bộ · tự nhiên (đã duyệt 03/09, phương án giọng nam)"},
+    "pham-tuyen":  {"kind": "preset", "preset": "Phạm Tuyên", "label": "Nam · Bắc · tự nhiên (đã duyệt 03/09)"},
+    "ngoc-huyen":  {"kind": "preset", "preset": "Ngọc Huyền", "label": "Nữ · Bắc · tự nhiên (đã duyệt 03/09)"},
+    "thuc-doan":   {"kind": "preset", "preset": "Thục Đoan",  "label": "Nữ · Nam Bộ · kể chuyện (đã duyệt 03/09)"}
+  },
+  "characters": {
+    "AN":      "adam",
+    "MINH":    "pham-tuyen",
+    "CO_LINH": "ngoc-huyen",
+    "ME":      "nu-luu-loat",
+    "TU_VAN":  "pham-tuyen"
+  },
+  "defaultProfile": null
+}
