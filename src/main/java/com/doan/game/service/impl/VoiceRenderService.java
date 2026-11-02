@@ -99,6 +99,9 @@ public class VoiceRenderService {
     private final String githubRepo;
     private final String workflow;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    /** Lần cuối máy sinh hỏi việc. Máy trực sẵn hỏi mỗi 2 s → còn mới thì không gọi dựng máy thêm (03/11, cách của clawd-tts). */
+    private volatile Instant lastWorkerPoll = Instant.EPOCH;
+    static final Duration WORKER_ALIVE = Duration.ofSeconds(10);
 
     public VoiceRenderService(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo, VoiceClipRepository clipRepo,
                               AccountRepository accountRepo, AccountRoleRepository roleRepo, VoiceKeys keys,
@@ -246,6 +249,9 @@ public class VoiceRenderService {
 
     /** Gọi workflow_dispatch. Không ném lỗi: việc đã nằm trong hàng đợi, chạy tay workflow (hoặc máy Hưng) vẫn lấy được. */
     String dispatch() {
+        if (Duration.between(lastWorkerPoll, Instant.now(clock)).compareTo(WORKER_ALIVE) < 0) {
+            return "ok";   // máy sinh đang trực, tự lấy việc trong ≤ 2 s
+        }
         if (githubToken.isEmpty()) {
             return "chưa cấu hình GITHUB_VOICE_TOKEN";
         }
@@ -294,8 +300,19 @@ public class VoiceRenderService {
 
     @Transactional(readOnly = true)
     public List<Job> jobs() {
+        lastWorkerPoll = Instant.now(clock);
         return clipRepo.findTop50ByStatusOrderByRequestedAtAsc(VoiceClipStatus.PENDING).stream()
                 .map(c -> new Job(c.getClipKey(), c.getProfile(), c.getReadText())).toList();
+    }
+
+    /**
+     * Máy sinh sắp tắt (hết giờ trực). Xoá dấu "đang trực" để lần bấm sau gọi dựng máy mới; trả số việc còn chờ — &gt; 0 thì
+     * máy ở lại (việc được xếp đúng lúc máy định tắt, khi BE còn tưởng máy đang trực nên không gọi dựng máy).
+     */
+    @Transactional(readOnly = true)
+    public int leaving() {
+        lastWorkerPoll = Instant.EPOCH;
+        return clipRepo.findTop50ByStatusOrderByRequestedAtAsc(VoiceClipStatus.PENDING).size();
     }
 
     /** Tệp mẫu của giọng nhân bản (người thật) — không nằm trong repo công khai; chỉ máy sinh có khoá mới tải được. */

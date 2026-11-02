@@ -148,9 +148,18 @@ class VoiceRenderFlowTest {
         mvc.perform(get("/api/studio/chapters/CH09/draft").with(editor))
                 .andExpect(jsonPath("$.result.content.scenes[1].voiceUrl").doesNotExist());
 
-        // FAILED → bấm sinh lại thì xếp lại PENDING
-        mvc.perform(post("/api/studio/chapters/CH09/voice").with(editor)).andExpect(jsonPath("$.result.queued").value(1));
+        // FAILED → bấm sinh lại thì xếp lại PENDING; máy sinh vừa hỏi việc (đang trực) → không gọi dựng máy, vẫn coi là đã giao
+        mvc.perform(get("/api/voice-worker/jobs").header(WK, "wk-test-123")).andExpect(status().isOk());
+        mvc.perform(post("/api/studio/chapters/CH09/voice").with(editor))
+                .andExpect(jsonPath("$.result.queued").value(1))
+                .andExpect(jsonPath("$.result.dispatched").value(true));
         assertThat(clipRepo.findByClipKey(anKey).orElseThrow().getStatus()).isEqualTo(VoiceClipStatus.PENDING);
+        // máy sắp tắt: còn 1 việc → ở lại; BE quên dấu "đang trực" → lần bấm sau phải gọi dựng máy (test không có token)
+        mvc.perform(post("/api/voice-worker/leaving").header(WK, "wk-test-123")).andExpect(jsonPath("$.result").value(1));
+        mvc.perform(post("/api/voice-worker/leaving")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/studio/chapters/CH09/voice").with(editor))
+                .andExpect(jsonPath("$.result.alreadyPending").value(1))
+                .andExpect(jsonPath("$.result.dispatched").value(false));
     }
 
     @Test

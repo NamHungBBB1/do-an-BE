@@ -4,7 +4,11 @@ Lấy việc PENDING từ BE → sinh bằng VieNeu-TTS (đúng engine / model /
 BE đã tính sẵn khoá (hash) và chữ đọc; worker KHÔNG tự chuẩn hoá lại, chỉ sinh đúng readText được giao. Câu trùng khoá
 không bao giờ tới đây (BE dùng lại tệp cũ).
 
-Biến môi trường: FINTEEN_API (vd https://kidzeconomy.com.vn/finteen), VOICE_WORKER_KEY (GitHub Secret).
+Máy TRỰC SẴN (03/11, học từ clawd-tts của Hưng): dựng + nạp model MỘT lần, rồi hỏi việc mỗi 2 s trong VOICE_IDLE_MIN phút
+(mặc định 20) kể từ việc cuối → câu bấm sau chỉ tốn thời gian sinh (~4 s). Trước khi tắt báo BE (/leaving) để lần bấm sau
+dựng máy mới; còn việc thì ở lại. mp3 mã hoá bằng lameenc (pip) — không apt ffmpeg.
+
+Biến môi trường: FINTEEN_API (vd https://kidzeconomy.com.vn/finteen), VOICE_WORKER_KEY (GitHub Secret), VOICE_IDLE_MIN.
 Log công khai (repo public): chỉ in khoá + giọng + thời lượng, không in khoá bí mật.
 Chạy tay (dự phòng, máy có vieneu + ffmpeg): FINTEEN_API=... VOICE_WORKER_KEY=... python voice/worker.py
 """
@@ -12,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -34,6 +37,10 @@ def call(method: str, path: str, body: bytes | None = None, ctype: str | None = 
                                  headers={"X-Voice-Worker-Key": KEY, "User-Agent": UA, **({"Content-Type": ctype} if ctype else {})})
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.read()
+
+
+IDLE_SEC = float(os.environ.get("VOICE_IDLE_MIN", "20")) * 60
+POLL_SEC = 2
 
 
 def jobs() -> list[dict]:
@@ -80,25 +87,41 @@ class Engine:
         wav = self.tmp / "clip.wav"
         self.tts.save(self.tts.infer(text=text, voice=self.names[pid], temperature=0.8), str(wav))
         with wave.open(str(wav)) as w:
-            sec = w.getnframes() / w.getframerate()
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ac", "1", "-b:a", "64k", str(out_mp3)], check=True)
-        return sec
+            rate, channels, width, frames = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.readframes(w.getnframes())
+        if width != 2:
+            raise ValueError(f"wav {width * 8}-bit, cần 16-bit")
+        import lameenc
+        enc = lameenc.Encoder()
+        enc.set_bit_rate(64)
+        enc.set_in_sample_rate(rate)
+        enc.set_channels(channels)
+        enc.set_quality(2)
+        out_mp3.write_bytes(enc.encode(frames) + enc.flush())
+        return len(frames) / (rate * channels * width)
 
 
 def main() -> int:
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8")
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-    engine = None
-    done = failed = 0
-    for _ in range(5):                       # việc mới xếp trong lúc đang sinh → vòng sau lấy tiếp
-        todo = [j for j in jobs() if j["profile"] in cfg["profiles"]]
+    engine = Engine(cfg, set(cfg["profiles"]))     # nạp trước, kể cả khi chưa có việc → câu đầu cũng nhanh
+    done = failed = fails_in_row = 0
+    last_work = time.time()
+    while True:
+        try:
+            todo = [j for j in jobs() if j["profile"] in cfg["profiles"]]
+        except (urllib.error.URLError, TimeoutError) as e:   # BE chập chờn → thử lại, không tắt máy
+            print(f"  hỏi việc lỗi: {e}", flush=True)
+            todo = []
         if not todo:
-            break
+            if time.time() - last_work >= IDLE_SEC:
+                left = json.loads(call("POST", "/api/voice-worker/leaving", b"", "application/json"))["result"]
+                if not left:
+                    break
+                last_work = time.time()               # việc vừa được xếp lúc định tắt → ở lại
+            time.sleep(POLL_SEC)
+            continue
         print(f"{len(todo)} câu cần sinh", flush=True)
-        if engine is None:
-            engine = Engine(cfg, set(cfg["profiles"]))
-        fails_in_row = 0
         for j in todo:
             out = engine.tmp / f"{j['key']}.mp3"
             t0 = time.time()
@@ -107,16 +130,18 @@ def main() -> int:
                 submit(j["key"], out, sec)
                 done += 1
                 fails_in_row = 0
-                print(f"  {j['key']} {j['profile']:<12} {sec:5.1f}s audio, {time.time() - t0:4.0f}s", flush=True)
+                print(f"  {j['key']} {j['profile']:<12} {sec:5.1f}s audio, {time.time() - t0:4.1f}s", flush=True)
             except Exception as e:           # một câu hỏng → báo FAILED, đi tiếp; 3 câu liền hỏng = hệ thống hỏng → dừng
                 failed += 1
                 fails_in_row += 1
                 print(f"  LỖI {j['key']}: {type(e).__name__}: {e}", flush=True)
                 fail(j["key"], f"{type(e).__name__}: {e}")
                 if fails_in_row >= 3:
+                    call("POST", "/api/voice-worker/leaving", b"", "application/json")
                     print("Dừng: 3 câu lỗi liên tiếp.")
                     return 1
-    print(f"xong: sinh {done}, lỗi {failed}")
+        last_work = time.time()
+    print(f"hết giờ trực: sinh {done}, lỗi {failed}")
     return 0 if failed == 0 else 1
 
 
