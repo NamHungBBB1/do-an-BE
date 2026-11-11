@@ -34,20 +34,36 @@ import java.util.regex.Pattern;
  *   <li>{@code personalization.tokens}: {@code {"item": {"default": "chiếc tai nghe", "interest:SPORT": "đôi giày"}}} → mọi chỗ
  *       {@code {{item}}} trong chữ. Mỗi token chỉ theo MỘT chiều.</li>
  *   <li>{@code variants} trên object bất kỳ (cảnh, lựa chọn, thẻ mini-game): {@code {"age:8_10": {"text": "…"}}} → ghi đè nông các
- *       trường bề mặt ({@link #SURFACE}).</li>
+ *       trường bề mặt (mọi trường chữ trừ {@link #STRUCTURAL}).</li>
  * </ul>
  * Luật cứng: biến thể chỉ đổi bề mặt; tiền, điểm, đáp án, cây cảnh giữ nguyên ở MỌI tổ hợp — {@link #check} chặn.
  */
 @Component
 public class Personalizer {
 
-    /** Trường "bề mặt" — biến thể được đổi. Mọi trường khác (id, nextSceneId, amount, deltaStats, grade, category…) bất biến. */
-    static final Set<String> SURFACE = Set.of("text", "spokenText", "title", "label", "prompt", "description", "storyText",
-            "goalDescription", "explanation", "help", "speaker", "voice", "background", "src", "image");
+    /**
+     * Trường CẤU TRÚC / CHẤM ĐIỂM — biến thể không được đổi, token không được nằm trong. Mọi trường CHỮ khác là "bề mặt" (chương thật có
+     * hơn 100 loại trường chữ: text, dataText, facts, feedback, instruction… — danh sách cho phép sẽ luôn thiếu, demo 11/11 lộ
+     * inspect.dataText). Danh sách này lấy từ các khoá PlayServiceImpl / MiniGameGrader / ContentSchema đọc để chấm và đi đường;
+     * thêm luật chấm mới đọc khoá chữ mới thì phải thêm vào đây. Số, boolean không bao giờ là bề mặt.
+     */
+    static final Set<String> STRUCTURAL = Set.of("id", "type", "kind", "mechanic", "code", "chapterId", "version", "schemaVersion",
+            "releaseVersion", "nextSceneId", "targetSceneId", "ifTrueSceneId", "ifFalseSceneId", "onPassSceneId", "onFailSceneId",
+            "speakerId", "backgroundId", "characterId", "gameId", "itemId", "choiceGroup", "category", "value", "values",
+            "expectedValue", "correctId", "answer", "eq", "in", "all", "any", "op", "var", "expression", "condition", "requires",
+            "when", "field", "sumOf", "rule", "grade", "concept", "knowledgeUnits", "position", "mode", "part", "from", "key",
+            "check", "options", "deltaStats", "stats", "initialStats", "lockDecisions", "deferLedger", "legacyIds", "voiceUrl",
+            "variants", "personalization");
+
+    static boolean isSurface(String key) {
+        return key != null && !STRUCTURAL.contains(key);
+    }
+
     static final String BASE_KEY = "base";
     private static final Pattern TOKEN = Pattern.compile("\\{\\{([A-Za-z][A-Za-z0-9_]*)}}");
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d.,]*");
-    private static final String RESERVED_TOKEN = "ASSET_BASE";   // ContentServiceImpl.ASSET_PLACEHOLDER — thay lúc trả, không phải token
+    private static final String RESERVED_TOKEN = "ASSET_BASE";
+    private static final String RESERVED_TOKEN_FULL = "{{ASSET_BASE}}";   // ContentServiceImpl.ASSET_PLACEHOLDER — thay lúc trả, không phải token
     private static final int MAX_COMBOS = 500;
     private static final int MAX_PROBLEMS = 30;
 
@@ -179,7 +195,7 @@ public class Personalizer {
                 for (String key : new TreeSet<>(iterable(vars.fieldNames()))) {
                     if (matches(key, labels)) {
                         vars.get(key).fields().forEachRemaining(f -> {
-                            if (SURFACE.contains(f.getKey())) {
+                            if (isSurface(f.getKey()) && f.getValue().isTextual()) {
                                 o.set(f.getKey(), f.getValue().deepCopy());
                             }
                         });
@@ -294,8 +310,8 @@ public class Personalizer {
             String last = lastField(p);
             Matcher m = TOKEN.matcher(s);
             while (m.find()) {
-                if (!RESERVED_TOKEN.equals(m.group(1)) && !SURFACE.contains(last)) {
-                    problems.add(p + ": {{" + m.group(1) + "}} chỉ được dùng trong chữ / ảnh " + new TreeSet<>(SURFACE));
+                if (!RESERVED_TOKEN.equals(m.group(1)) && !isSurface(last)) {
+                    problems.add(p + ": {{" + m.group(1) + "}} không được nằm ở trường cấu trúc / chấm điểm \"" + last + "\"");
                 }
             }
         });
@@ -337,9 +353,9 @@ public class Personalizer {
                 checkLabel(e.getKey(), path + ".variants", problems);
                 String dim = e.getKey().split(":", 2)[0];
                 e.getValue().fields().forEachRemaining(f -> {
-                    if (!SURFACE.contains(f.getKey())) {
+                    if (!isSurface(f.getKey())) {
                         problems.add(path + ".variants." + e.getKey() + "." + f.getKey()
-                                + ": chỉ được đổi chữ / ảnh / người nói " + new TreeSet<>(SURFACE));
+                                + ": trường cấu trúc / chấm điểm, biến thể không được đổi");
                     } else if (!f.getValue().isTextual()) {
                         problems.add(path + ".variants." + e.getKey() + "." + f.getKey() + ": phải là chữ");
                     }
@@ -359,11 +375,29 @@ public class Personalizer {
         }
     }
 
-    /** Bản sao bỏ hết trường bề mặt: phần còn lại phải giống hệt giữa mọi tổ hợp. */
+    /** Bản sao với mọi chữ ở trường bề mặt thay bằng "" (kể cả phần tử mảng chữ như facts[]): phần còn lại phải giống hệt giữa mọi tổ hợp. */
     private static JsonNode skeleton(JsonNode n) {
-        JsonNode c = n.deepCopy();
-        walk(c, o -> SURFACE.forEach(o::remove));
-        return c;
+        return blank(n.deepCopy(), null);
+    }
+
+    private static JsonNode blank(JsonNode n, String key) {
+        if (n.isTextual()) {
+            return isSurface(key) ? TextNode.valueOf("") : n;
+        }
+        if (n instanceof ObjectNode o) {
+            for (String k : iterable(o.fieldNames())) {
+                if (isSurface(k) && o.get(k).isTextual()) {
+                    o.remove(k);   // biến thể được THÊM trường chữ (vd speaker) → bỏ hẳn khoá, không chỉ xoá chữ
+                } else {
+                    o.set(k, blank(o.get(k), k));
+                }
+            }
+        } else if (n instanceof ArrayNode a) {
+            for (int i = 0; i < a.size(); i++) {
+                a.set(i, blank(a.get(i), key));
+            }
+        }
+        return n;
     }
 
     private static List<String> numbers(String s) {
@@ -419,7 +453,9 @@ public class Personalizer {
     private static void surfaceTexts(JsonNode n, String path, TextVisitor f) {
         texts(n, path, (p, s) -> {
             String last = lastField(p);
-            if (SURFACE.contains(last) && !Set.of("image", "src", "background", "voice").contains(last)) {
+            // Ảnh / giọng là đường dẫn (hash có chữ số) — không kiểm số; còn lại là chữ người đọc.
+            if (isSurface(last) && !s.startsWith("http") && !s.startsWith(RESERVED_TOKEN_FULL)
+                    && !Set.of("image", "src", "background", "voice").contains(last)) {
                 f.visit(p, s);
             }
         });

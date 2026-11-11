@@ -165,7 +165,7 @@ class PersonalizerTest {
     @Test
     void checkBlocksTokenInGradingFieldEvenIfAllCombosAgree() throws Exception {
         String quiz = CHAPTER.replace("'grade':{'rule':{'eq':'NEEDS'}}", "'grade':{'rule':{'eq':'{{item}}'}}");
-        assertThat(p.check(json(quiz))).anyMatch(s -> s.contains("{{item}}") && s.contains("chỉ được dùng trong chữ"));
+        assertThat(p.check(json(quiz))).anyMatch(s -> s.contains("{{item}}") && s.contains("cấu trúc / chấm điểm"));
     }
 
     @Test
@@ -175,5 +175,15 @@ class PersonalizerTest {
         assertThat(p.check(json(added))).anyMatch(s -> s.contains("số trong chữ"));
         String nul = CHAPTER.replace("'variants':{'gender:FEMALE':{'speaker':'An (nữ)'}}", "'variants':{'gender:FEMALE':{'text':null}}");
         assertThat(p.check(json(nul))).anyMatch(s -> s.contains("phải là chữ"));
+    }
+
+    /** Demo 11/11: chữ hiện cho bé nằm ở hàng trăm loại trường (inspect.dataText, facts, feedback…) — mọi trường chữ trừ cấu trúc. */
+    @Test
+    void anyDisplayTextFieldIsPersonalizable() throws Exception {
+        String ch = CHAPTER.replace("{'id':'S1',", "{'id':'S1','inspect':{'dataText':'Lịch đóng {{item}} ngày 28','facts':['Có {{item}}']},");
+        assertThat(p.check(json(ch))).isEmpty();
+        JsonNode c = p.compose(json(ch), Map.of("interest", "SPORT"));
+        assertThat(c.at("/scenes/0/inspect/dataText").asText()).isEqualTo("Lịch đóng đôi giày ngày 28");
+        assertThat(c.at("/scenes/0/inspect/facts/0").asText()).isEqualTo("Có đôi giày");
     }
 }
