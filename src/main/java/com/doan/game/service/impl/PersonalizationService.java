@@ -39,6 +39,7 @@ public class PersonalizationService {
     static final String GAME = "GAME";
     /** Game chọn phụ không hỏi tuổi (spec mục 4). */
     static final List<String> GAME_DIMENSIONS = List.of("gender", "interest");
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PersonalizationService.class);
     private static final TypeReference<Map<String, Map<String, String>>> SHAPE = new TypeReference<>() {
     };
 
@@ -61,7 +62,12 @@ public class PersonalizationService {
     public PersonalizationResponse forParent(UUID callerId, UUID slotId) {
         LearnerSlot slot = requireOwned(callerId, slotId, slotRepo.findById(slotId));
         Map<String, Map<String, String>> a = read(slot);
-        return view(a, a.getOrDefault(PARENT, Map.of()));
+        PersonalizationResponse v = view(a, a.getOrDefault(PARENT, Map.of()));
+        if (slot.getGroup().getContext() != LearningContext.FAMILY) {
+            // Giáo viên chỉ thấy trạng thái (spec mục 8): nhãn của học sinh là dữ liệu cá nhân trẻ, giáo viên không cần để dạy.
+            return new PersonalizationResponse(v.status(), null, null, List.of(), List.of(), personalizer.catalog());
+        }
+        return v;
     }
 
     /** Ghi đè toàn bộ câu trả lời của phụ huynh. Giá trị null / rỗng = "không biết, để bé chọn". Chỉ nhóm gia đình (H2 chờ Hưng). */
@@ -101,7 +107,15 @@ public class PersonalizationService {
     @Transactional(readOnly = true)
     public JsonNode chapterForChild(UUID slotId, String version, String code) {
         LearnerSlot slot = requireActive(slotRepo.findById(slotId));
-        return contentService.releaseChapterFor(version, code, personalizer.resolve(read(slot)));
+        Map<String, Map<String, String>> a;
+        try {
+            a = read(slot);
+        } catch (AppException e) {
+            // Khảo sát hỏng không được chặn trẻ chơi: về bản gốc.
+            log.warn("personalization hỏng ở slot {} — trả bản gốc", slotId);
+            a = Map.of();
+        }
+        return contentService.releaseChapterFor(version, code, personalizer.resolve(a));
     }
 
     // ------------------------------------------------------------------ luật

@@ -571,6 +571,32 @@ class PlayFlowTest {
         assertThat(slotRepo.findById(UUID.fromString(slotId)).orElseThrow().getPersonalization()).isNull();
     }
 
+    /** Giáo viên (nhóm CLASS) chỉ thấy trạng thái khảo sát, không thấy nhãn / câu trả lời của học sinh, và không trả lời thay. */
+    @Test
+    void teacherSeesOnlyPersonalizationStatus() throws Exception {
+        String teacher = registerAndVerify("perso-gv-" + System.nanoTime() + "@test.local");
+        grant(teacher, PlanKind.TEACHER);
+        String groupId = openGroup(teacher, "Lop perso", "CLASS");
+        mvc.perform(post("/api/groups/" + groupId + "/consent").header("Authorization", "Bearer " + teacher))
+                .andExpect(status().isOk());
+        String slotBody = mvc.perform(slotRequest(teacher, groupId, "Hs perso", "123456"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String child = childLogin(slotBody, "123456");
+        String slotId = subject(child);
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"gender\":\"FEMALE\",\"interest\":\"MUSIC\",\"age\":\"8_10\"}}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("COMPLETED"));
+        mvc.perform(get("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + teacher))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.result.labels").value(nullValue()))
+                .andExpect(jsonPath("$.result.parent").value(nullValue()));
+        mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + teacher)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"gender\":\"MALE\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
+    }
+
     private static String personalizedChapter() {
         return """
                 {"id":"chapter-1","title":"Ca nhan hoa","version":"1.0.0",

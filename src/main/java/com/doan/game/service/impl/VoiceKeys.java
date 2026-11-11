@@ -174,7 +174,11 @@ public class VoiceKeys {
      * không có → gỡ voiceUrl (thà im còn hơn đọc sai). Editor không tự ghi được voiceUrl. Sửa tại chỗ, trả lại chính content.
      */
     public JsonNode attach(JsonNode content) {
-        Set<String> ready = readyKeys(content);
+        return attachWith(content, readyKeys(content));
+    }
+
+    /** Như {@link #attach} nhưng theo tập khoá cho sẵn (không truy vấn DB) — dùng cho chương cá nhân hoá đã đóng băng. */
+    public JsonNode attachWith(JsonNode content, Set<String> ready) {
         for (JsonNode s : content.path("scenes")) {
             if (!(s instanceof ObjectNode o)) {
                 continue;
@@ -187,6 +191,37 @@ public class VoiceKeys {
             }
         }
         return content;
+    }
+
+    /**
+     * Đóng băng lúc phát hành. Chương cá nhân hoá (spec 11/11): câu có token chỉ có giọng SAU khi ghép, nên ghi sẵn danh sách khoá
+     * đã có tệp của MỌI tổ hợp vào {@code personalization.voiceReady}; lúc phục vụ gắn giọng từ danh sách này, không hỏi DB → bản
+     * đã phát hành không đổi theo thời gian (đường công khai cache 1 năm). Chương thường: y như {@link #attachJson}.
+     */
+    public String freezeJson(String json) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
+            if (root instanceof ObjectNode o && personalizer.isPersonalized(root)) {
+                Set<String> ready = new java.util.TreeSet<>(readyKeys(root));
+                JsonNode p = o.get("personalization");
+                ObjectNode po = p instanceof ObjectNode existing ? existing : o.putObject("personalization");
+                po.set("voiceReady", objectMapper.valueToTree(ready));
+            }
+            return objectMapper.writeValueAsString(attach(root));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON chương hỏng", e);
+        }
+    }
+
+    /** Khoá giọng đã đóng băng của chương cá nhân hoá, hoặc null nếu chương không có (bản cũ / nháp). */
+    public static Set<String> frozenReady(JsonNode chapter) {
+        JsonNode r = chapter.path("personalization").path("voiceReady");
+        if (!r.isArray()) {
+            return null;
+        }
+        Set<String> out = new java.util.HashSet<>();
+        r.forEach(k -> out.add(k.asText()));
+        return out;
     }
 
     public String attachJson(String json) {

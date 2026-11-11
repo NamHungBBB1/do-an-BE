@@ -230,7 +230,7 @@ public class ContentServiceImpl implements ContentService {
         Set<UUID> changed = new HashSet<>();
         for (ChapterDraft d : approved) {
             // Đóng băng kèm giọng đã sinh tới lúc phát hành (câu chưa có giọng thì không có voiceUrl — FE hiện chữ).
-            String frozenJson = voiceKeys.attachJson(d.getContent());
+            String frozenJson = voiceKeys.freezeJson(d.getContent());
             saveReleaseChapter(release, d.getChapter(), frozenJson, sha256(frozenJson));
             d.setStatus(DraftStatus.RELEASED);
             changed.add(d.getChapter().getId());
@@ -502,7 +502,10 @@ public class ContentServiceImpl implements ContentService {
             if (raw.contains("\"personalization\"") || raw.contains("\"variants\"")) {
                 JsonNode src = objectMapper.readTree(raw);
                 variantKey = personalizer.variantKey(src, labels);
-                raw = objectMapper.writeValueAsString(voiceKeys.attach(personalizer.compose(src, labels)));
+                java.util.Set<String> ready = VoiceKeys.frozenReady(src);   // đóng băng lúc phát hành; bản cũ không có → hỏi DB
+                JsonNode composed = personalizer.compose(src, labels);
+                raw = objectMapper.writeValueAsString(
+                        ready != null ? voiceKeys.attachWith(composed, ready) : voiceKeys.attach(composed));
             }
             JsonNode node = objectMapper.readTree(raw.replace(ASSET_PLACEHOLDER, assetBase));
             ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("releaseVersion", release.getVersion());

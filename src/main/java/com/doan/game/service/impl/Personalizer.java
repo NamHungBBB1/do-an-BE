@@ -275,8 +275,8 @@ public class Personalizer {
                 problems.add(key + ": biến thể làm đổi phần không phải chữ / ảnh (id, đường đi, tiền, điểm, đáp án)");
             }
             surfaceTexts(c, "", (p, s) -> {
-                List<String> want = baseNumbers.get(p);
-                if (want != null && !want.equals(numbers(s))) {
+                List<String> want = baseNumbers.getOrDefault(p, List.of());   // biến thể THÊM chữ mới cũng không được thêm số
+                if (!want.equals(numbers(s))) {
                     problems.add(p + ": số trong chữ khác bản gốc " + want + " → " + numbers(s) + " (" + key + ")");
                 }
             });
@@ -285,6 +285,20 @@ public class Personalizer {
     }
 
     private void checkDeclarations(JsonNode chapter, Set<String> problems) {
+        // BE chấm trên JSON THÔ (PlayServiceImpl, MiniGameGrader — không ghép), nên token chỉ được nằm ở trường bề mặt. Token ở
+        // id / nextSceneId / options của quiz / grade… thì mọi tổ hợp ghép ra giống nhau (check dưới không thấy) mà chấm vẫn sai.
+        texts(chapter, "", (p, s) -> {
+            if (p.startsWith("personalization.") || s.indexOf("{{") < 0) {
+                return;
+            }
+            String last = lastField(p);
+            Matcher m = TOKEN.matcher(s);
+            while (m.find()) {
+                if (!RESERVED_TOKEN.equals(m.group(1)) && !SURFACE.contains(last)) {
+                    problems.add(p + ": {{" + m.group(1) + "}} chỉ được dùng trong chữ / ảnh " + new TreeSet<>(SURFACE));
+                }
+            }
+        });
         chapter.path("personalization").path("tokens").fields().forEachRemaining(t -> {
             String name = t.getKey();
             String at = "personalization.tokens." + name;
@@ -326,6 +340,8 @@ public class Personalizer {
                     if (!SURFACE.contains(f.getKey())) {
                         problems.add(path + ".variants." + e.getKey() + "." + f.getKey()
                                 + ": chỉ được đổi chữ / ảnh / người nói " + new TreeSet<>(SURFACE));
+                    } else if (!f.getValue().isTextual()) {
+                        problems.add(path + ".variants." + e.getKey() + "." + f.getKey() + ": phải là chữ");
                     }
                     String prev = fieldDim.putIfAbsent(f.getKey(), dim);
                     if (prev != null && !prev.equals(dim)) {
@@ -402,12 +418,17 @@ public class Personalizer {
     /** Chuỗi ở trường bề mặt (chữ người đọc), kèm đường dẫn. */
     private static void surfaceTexts(JsonNode n, String path, TextVisitor f) {
         texts(n, path, (p, s) -> {
-            String last = p.replaceAll("\\[\\d+]$", "");
-            last = last.substring(last.lastIndexOf('.') + 1);
+            String last = lastField(p);
             if (SURFACE.contains(last) && !Set.of("image", "src", "background", "voice").contains(last)) {
                 f.visit(p, s);
             }
         });
+    }
+
+    /** "scenes[2].options[0].text" → "text"; "scenes[5].options[1]" → "options". */
+    private static String lastField(String path) {
+        String p = path.replaceAll("\\[\\d+]$", "");
+        return p.substring(p.lastIndexOf('.') + 1);
     }
 
     private static <T> List<T> iterable(Iterator<T> it) {

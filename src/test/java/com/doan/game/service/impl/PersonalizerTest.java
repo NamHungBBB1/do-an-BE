@@ -160,4 +160,20 @@ class PersonalizerTest {
         String inId = CHAPTER.replace("{'id':'I1',", "{'id':'I1-{{item}}',");
         assertThat(p.check(json(inId))).anyMatch(s -> s.contains("không phải chữ / ảnh"));
     }
+
+    /** Soát 11/11: BE chấm trên JSON thô → token ở trường chấm điểm (dù mọi tổ hợp giống nhau) phải bị chặn. */
+    @Test
+    void checkBlocksTokenInGradingFieldEvenIfAllCombosAgree() throws Exception {
+        String quiz = CHAPTER.replace("'grade':{'rule':{'eq':'NEEDS'}}", "'grade':{'rule':{'eq':'{{item}}'}}");
+        assertThat(p.check(json(quiz))).anyMatch(s -> s.contains("{{item}}") && s.contains("chỉ được dùng trong chữ"));
+    }
+
+    @Test
+    void checkBlocksVariantAddingNumbersOrNonText() throws Exception {
+        String added = CHAPTER.replace("'variants':{'gender:FEMALE':{'speaker':'An (nữ)'}}",
+                "'variants':{'gender:FEMALE':{'description':'Tốn 500.000đ'}}");
+        assertThat(p.check(json(added))).anyMatch(s -> s.contains("số trong chữ"));
+        String nul = CHAPTER.replace("'variants':{'gender:FEMALE':{'speaker':'An (nữ)'}}", "'variants':{'gender:FEMALE':{'text':null}}");
+        assertThat(p.check(json(nul))).anyMatch(s -> s.contains("phải là chữ"));
+    }
 }

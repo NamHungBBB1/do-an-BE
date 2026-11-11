@@ -96,7 +96,9 @@ class PersonalizationContentFlowTest {
                 .andExpect(jsonPath("$.result.scenes[1].options[0].text").value("Mua chiếc tai nghe"))
                 .andExpect(jsonPath("$.result.releaseVersion").value(v))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertThat(res).doesNotContain("{{").doesNotContain("\"personalization\"").doesNotContain("\"variants\"");
+        assertThat(res).doesNotContain("{{").doesNotContain("\"personalization\"").doesNotContain("\"variants\"").doesNotContain("voiceReady");
+        // Đóng băng: bản phát hành lưu sẵn danh sách khoá giọng (rỗng ở test) → phục vụ không cần hỏi DB.
+        assertThat(releaseChapterRepo.findAll().get(0).getContent()).contains("\"voiceReady\"");
     }
 
     private RequestPostProcessor admin() {

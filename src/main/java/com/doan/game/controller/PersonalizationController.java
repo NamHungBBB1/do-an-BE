@@ -64,6 +64,7 @@ public class PersonalizationController {
     public ResponseEntity<ApiResponse<JsonNode>> chapter(@AuthenticationPrincipal Jwt jwt, @PathVariable String version,
                                                          @PathVariable String code) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore().cachePrivate())
-                .body(ApiResponse.ok(service.chapterForChild(UUID.fromString(jwt.getSubject()), version, code)));
+                .body(ApiResponse.ok(service.chapterForChild(UUID.fromString(jwt.getSubject()), version.trim(),
+                        code.trim().toUpperCase(java.util.Locale.ROOT))));
     }
 }
