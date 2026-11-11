@@ -1,0 +1,8 @@
+{
+  "_note": "Danh mục cá nhân hoá (spec build/spec-ca-nhan-hoa-2026-11-11.md). Chiều cố định trong code; giá trị thêm được, đã phát hành thì không xoá. Nhãn trong JSON chương viết 'chiều:GIÁ_TRỊ', vd 'interest:SPORT'.",
+  "dimensions": {
+    "gender": ["MALE", "FEMALE"],
+    "age": ["8_10", "11_14", "15_18"],
+    "interest": ["SPORT", "GAME", "MUSIC", "ANIME", "ART", "TECH", "FASHION", "TRIP"]
+  }
+}
