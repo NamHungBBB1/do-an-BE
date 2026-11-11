@@ -60,4 +60,7 @@ public class LearnerSlot {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "personalization", columnDefinition = "text")
+    private String personalization;
 }

@@ -46,10 +46,12 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -90,6 +92,7 @@ class PlayFlowTest {
     @Autowired ChoiceEventRepository choiceEventRepo;
     @Autowired MiniGameResultRepository miniGameResultRepo;
     @Autowired RunStateRepository runStateRepo;
+    @Autowired com.doan.game.repository.LearnerSlotRepository slotRepo;
     @Autowired AuthFlowTest.MailCatcher mailCatcher;
 
     @BeforeEach
@@ -501,6 +504,89 @@ class PlayFlowTest {
      * Bản "1.0.2" của test này, idempotent: đã là current thì qua; nếu chạy lại trong cùng JVM
      * (6001) thì chỉ đưa con trỏ về. JSON chương giàu deltaStats + minigame để BE chấm được.
      */
+    // ------------------------------------------------------------------ cá nhân hoá (spec 11/11)
+    /**
+     * Phụ huynh để trống sở thích → hỏi trẻ; trẻ chọn giới tính KHÁC phụ huynh → = 0 → game chọn phụ quyết; chương trẻ nhận đã ghép
+     * đúng nhãn, không cache công khai. Token người lớn không vào được cổng trẻ; xoá sạch slot thì mất khảo sát.
+     */
+    @Test
+    void personalizationParentChildGameThenComposedChapter() throws Exception {
+        String v = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(
+                releaseChapterRepo, releaseRepo, draftRepo, chapterRepo), Map.of("CH01", personalizedChapter()), "ca nhan hoa");
+        version = null;   // vừa phát hành bản khác → ca sau phải phát hành lại bản của PlayFlowTest
+        String parent = parentToken("perso");
+        String groupId = openGroup(parent, "Nha perso", "FAMILY");
+        String slotBody = mvc.perform(slotRequest(parent, groupId, "Be perso", "123456"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String child = childLogin(slotBody, "123456");
+        String slotId = subject(child);
+
+        mvc.perform(get("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("NOT_STARTED"));
+        mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"gender\":\"FEMALE\",\"interest\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("WAITING_CHILD"))
+                .andExpect(jsonPath("$.result.parent.gender").value("FEMALE"))
+                .andExpect(jsonPath("$.result.askChild.length()").value(2));
+        mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"interest\":\"KPOP\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
+
+        // Trẻ không thấy câu của phụ huynh; chọn giới tính KHÁC → chưa biết → chờ game chọn phụ.
+        mvc.perform(get("/api/play/personalization").header("Authorization", "Bearer " + child))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.parent").value(nullValue()));
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"gender\":\"MALE\",\"interest\":\"SPORT\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("WAITING_GAME"))
+                .andExpect(jsonPath("$.result.labels.interest").value("SPORT"))
+                .andExpect(jsonPath("$.result.labels.gender").doesNotExist())
+                .andExpect(jsonPath("$.result.askInGame[0]").value("gender"));
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"GAME\",\"answers\":{\"age\":\"8_10\"}}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"GAME\",\"answers\":{\"gender\":\"FEMALE\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.labels.gender").value("FEMALE"))
+                .andExpect(jsonPath("$.result.status").value("SKIPPED"));   // tuổi: không ai trả lời, game không hỏi tuổi
+
+        mvc.perform(get("/api/play/releases/" + v + "/chapters/CH01").header("Authorization", "Bearer " + child))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.result.variantKey").value("gender:FEMALE|interest:SPORT"))
+                .andExpect(jsonPath("$.result.scenes[0].text").value("đôi giày giảm còn 250.000đ"))
+                .andExpect(jsonPath("$.result.scenes[0].speaker").value("An (nữ)"))
+                .andExpect(jsonPath("$.result.releaseVersion").value(v));
+        // Đường công khai vẫn là bản gốc.
+        mvc.perform(get("/api/content/releases/" + v + "/chapters/CH01"))
+                .andExpect(jsonPath("$.result.scenes[0].text").value("chiếc tai nghe giảm còn 250.000đ"));
+        // Người lớn không vào cổng trẻ.
+        mvc.perform(get("/api/play/personalization").header("Authorization", "Bearer " + parent))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + parent)).andExpect(status().isOk());
+        assertThat(slotRepo.findById(UUID.fromString(slotId)).orElseThrow().getPersonalization()).isNull();
+    }
+
+    private static String personalizedChapter() {
+        return """
+                {"id":"chapter-1","title":"Ca nhan hoa","version":"1.0.0",
+                 "initialStats":{"SAVING":50,"HAPPINESS":50},
+                 "personalization":{"tokens":{"item":{"default":"chiếc tai nghe","interest:SPORT":"đôi giày"}}},
+                 "scenes":[
+                   {"id":"intro","type":"dialogue","text":"{{item}} giảm còn 250.000đ",
+                    "variants":{"gender:FEMALE":{"speaker":"An (nữ)"}},"nextSceneId":"choice-1"},
+                   {"id":"choice-1","type":"choice","options":[{"id":"a","text":"Mua {{item}}","nextSceneId":"end"},
+                                                              {"id":"b","text":"Giữ tiền","nextSceneId":"end"}]},
+                   {"id":"end","type":"ending"}
+                 ],
+                 "endingRules":{"priorityOrder":["x"],"endings":[]}}
+                """;
+    }
+
     private String releaseVersion() throws Exception {
         if (version == null) {
             version = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(

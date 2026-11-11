@@ -126,13 +126,21 @@ public class ContentServiceImpl implements ContentService {
     public JsonNode releaseChapter(String version, String code) {
         GameRelease release = releaseRepo.findByVersion(version)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
-        return chapterOf(release, code);
+        return chapterOf(release, code, java.util.Map.of(), false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JsonNode releaseChapterFor(String version, String code, java.util.Map<String, String> labels) {
+        GameRelease release = releaseRepo.findByVersion(version)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
+        return chapterOf(release, code, labels, true);
     }
 
     @Override
     @Transactional(readOnly = true)
     public JsonNode currentChapter(String code) {
-        return chapterOf(requireCurrent(), code);
+        return chapterOf(requireCurrent(), code, java.util.Map.of(), false);
     }
 
     // ------------------------------------------------------------------ ghi (Studio, theo vai — PR B 21/10)
@@ -481,7 +489,7 @@ public class ContentServiceImpl implements ContentService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chưa phát hành bản nào"));
     }
 
-    private JsonNode chapterOf(GameRelease release, String code) {
+    private JsonNode chapterOf(GameRelease release, String code, java.util.Map<String, String> labels, boolean withKey) {
         ReleaseChapter rc = releaseChapterRepo.findByRelease_IdAndChapter_Code(release.getId(), code)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND,
                         "phiên bản " + release.getVersion() + " không có chương " + code));
@@ -490,12 +498,18 @@ public class ContentServiceImpl implements ContentService {
             String raw = rc.getContent();
             // Cá nhân hoá (spec 11/11): đường công khai luôn trả BẢN GỐC (nhãn rỗng) — không bao giờ lộ "{{goal}}" cho FE. Giọng gắn lại
             // sau khi ghép vì khoá giọng tính trên chữ đã thay token. Chương không cá nhân hoá: đi đường cũ, giọng đã gắn lúc phát hành.
+            String variantKey = Personalizer.BASE_KEY;
             if (raw.contains("\"personalization\"") || raw.contains("\"variants\"")) {
-                raw = objectMapper.writeValueAsString(
-                        voiceKeys.attach(personalizer.compose(objectMapper.readTree(raw), java.util.Map.of())));
+                JsonNode src = objectMapper.readTree(raw);
+                variantKey = personalizer.variantKey(src, labels);
+                raw = objectMapper.writeValueAsString(voiceKeys.attach(personalizer.compose(src, labels)));
             }
             JsonNode node = objectMapper.readTree(raw.replace(ASSET_PLACEHOLDER, assetBase));
             ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("releaseVersion", release.getVersion());
+            if (withKey) {
+                // FE giữ tới hết chương như releaseVersion; báo cáo đợt sau dùng để hiện đúng chữ trẻ đã thấy.
+                ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("variantKey", variantKey);
+            }
             return node;
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "JSON chương hỏng trong DB: " + code);
