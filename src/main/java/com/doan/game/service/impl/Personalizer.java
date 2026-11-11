@@ -53,7 +53,7 @@ public class Personalizer {
             "expectedValue", "correctId", "answer", "eq", "in", "all", "any", "op", "var", "expression", "condition", "requires",
             "when", "field", "sumOf", "rule", "grade", "concept", "knowledgeUnits", "position", "mode", "part", "from", "key",
             "check", "options", "deltaStats", "stats", "initialStats", "lockDecisions", "deferLedger", "legacyIds", "voiceUrl",
-            "variants", "personalization");
+            "variants", "personalization", "flag");
 
     static boolean isSurface(String key) {
         return key != null && !STRUCTURAL.contains(key);
