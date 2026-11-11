@@ -83,12 +83,14 @@ public class ContentServiceImpl implements ContentService {
     private final Clock clock;
     private final String assetBase;
     private final VoiceKeys voiceKeys;
+    private final Personalizer personalizer;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                               AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
                               ObjectMapper objectMapper, ContentSchema contentSchema, Clock clock,
-                              @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys) {
+                              @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys,
+                              Personalizer personalizer) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
         this.releaseRepo = releaseRepo;
@@ -100,6 +102,7 @@ public class ContentServiceImpl implements ContentService {
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
         this.voiceKeys = voiceKeys;
+        this.personalizer = personalizer;
     }
 
     // ------------------------------------------------------------------ đọc (công khai)
@@ -371,7 +374,15 @@ public class ContentServiceImpl implements ContentService {
         }
         // Bản đưa người duyệt phải chơi được từ đầu tới Kết: lưu nháp cho soạn dở, gửi duyệt thì chặn đường đi chưa trọn.
         try {
-            contentSchema.requireCompleteFlow(objectMapper.readTree(draft.getContent()));
+            JsonNode root = objectMapper.readTree(draft.getContent());
+            contentSchema.requireCompleteFlow(root);
+            // Mọi tổ hợp nhãn phải ghép được và giữ nguyên tiền / điểm / đáp án / đường đi — bản đưa duyệt không được có biến thể hỏng.
+            List<String> personalization = personalizer.check(root);
+            if (!personalization.isEmpty()) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED, "cá nhân hoá: "
+                        + String.join("; ", personalization.subList(0, Math.min(5, personalization.size())))
+                        + (personalization.size() > 5 ? "; … còn " + (personalization.size() - 5) + " chỗ" : ""));
+            }
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: nháp không đọc được");
         }
@@ -476,7 +487,14 @@ public class ContentServiceImpl implements ContentService {
                         "phiên bản " + release.getVersion() + " không có chương " + code));
         try {
             // Thay tiền tố kho file lúc trả: JSON đóng băng giữ placeholder, đổi domain không cần phát hành lại.
-            JsonNode node = objectMapper.readTree(rc.getContent().replace(ASSET_PLACEHOLDER, assetBase));
+            String raw = rc.getContent();
+            // Cá nhân hoá (spec 11/11): đường công khai luôn trả BẢN GỐC (nhãn rỗng) — không bao giờ lộ "{{goal}}" cho FE. Giọng gắn lại
+            // sau khi ghép vì khoá giọng tính trên chữ đã thay token. Chương không cá nhân hoá: đi đường cũ, giọng đã gắn lúc phát hành.
+            if (raw.contains("\"personalization\"") || raw.contains("\"variants\"")) {
+                raw = objectMapper.writeValueAsString(
+                        voiceKeys.attach(personalizer.compose(objectMapper.readTree(raw), java.util.Map.of())));
+            }
+            JsonNode node = objectMapper.readTree(raw.replace(ASSET_PLACEHOLDER, assetBase));
             ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("releaseVersion", release.getVersion());
             return node;
         } catch (JsonProcessingException e) {
@@ -577,6 +595,8 @@ public class ContentServiceImpl implements ContentService {
     Normalized validateAndNormalize(JsonNode root) {
         // Bộ khuôn: loại cảnh, trường, link cảnh, lựa chọn + khoá, chỉ số, điều kiện, mini-game kind; đường đi chưa trọn chỉ cảnh báo.
         List<String> warnings = contentSchema.validate(root);
+        // Cá nhân hoá (spec 11/11): lưu nháp chỉ cảnh báo (đang soạn dở), gửi duyệt thì chặn — xem submitDraft.
+        personalizer.check(root).forEach(p -> warnings.add("cá nhân hoá: " + p));
         String json;
         try {
             json = objectMapper.writeValueAsString(root);

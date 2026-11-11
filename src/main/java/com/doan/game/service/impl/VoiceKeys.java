@@ -50,11 +50,13 @@ public class VoiceKeys {
 
     private final VoiceClipRepository clipRepo;
     private final ObjectMapper objectMapper;
+    private final Personalizer personalizer;
     private final JsonNode config;
 
-    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper) {
+    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper, Personalizer personalizer) {
         this.clipRepo = clipRepo;
         this.objectMapper = objectMapper;
+        this.personalizer = personalizer;
         try (InputStream in = new ClassPathResource("voice/voices.json").getInputStream()) {
             this.config = objectMapper.readTree(in);
         } catch (IOException e) {
@@ -124,7 +126,24 @@ public class VoiceKeys {
         return new Line(scene.path("id").asText(""), speaker, profile, readText, key(profile, readText));
     }
 
+    /**
+     * Mọi câu cần đọc. Chương có cá nhân hoá (spec build/spec-ca-nhan-hoa-2026-11-11.md): câu của MỌI tổ hợp nhãn sau khi ghép
+     * (token đã thay, biến thể đã áp — kể cả đổi giọng theo giới tính qua trường {@code voice}), bỏ trùng theo khoá.
+     */
     public List<Line> lines(JsonNode content) {
+        if (!personalizer.isPersonalized(content)) {
+            return linesOf(content);
+        }
+        java.util.Map<String, Line> out = new java.util.LinkedHashMap<>();
+        for (java.util.Map<String, String> labels : personalizer.combos(content)) {
+            for (Line l : linesOf(personalizer.compose(content, labels))) {
+                out.putIfAbsent(l.key(), l);
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
+    private List<Line> linesOf(JsonNode content) {
         List<Line> out = new ArrayList<>();
         for (JsonNode s : content.path("scenes")) {
             Line l = lineOf(s);

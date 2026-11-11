@@ -43,7 +43,7 @@ public class Personalizer {
 
     /** Trường "bề mặt" — biến thể được đổi. Mọi trường khác (id, nextSceneId, amount, deltaStats, grade, category…) bất biến. */
     static final Set<String> SURFACE = Set.of("text", "spokenText", "title", "label", "prompt", "description", "storyText",
-            "goalDescription", "explanation", "help", "speaker", "background", "src", "image");
+            "goalDescription", "explanation", "help", "speaker", "voice", "background", "src", "image");
     static final String BASE_KEY = "base";
     private static final Pattern TOKEN = Pattern.compile("\\{\\{([A-Za-z][A-Za-z0-9_]*)}}");
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d.,]*");
@@ -103,6 +103,11 @@ public class Personalizer {
     }
 
     // ------------------------------------------------------------------ ghép chương
+
+    /** Chương có khai báo cá nhân hoá không (không có → mọi hàm trả nguyên bản, không tốn công ghép). */
+    public boolean isPersonalized(JsonNode chapter) {
+        return chapter.has("personalization") || !dimensionsUsed(chapter).isEmpty();
+    }
 
     /** Các chiều chương này thật sự dùng (theo token + variants), sắp xếp. */
     public Set<String> dimensionsUsed(JsonNode chapter) {
@@ -399,7 +404,7 @@ public class Personalizer {
         texts(n, path, (p, s) -> {
             String last = p.replaceAll("\\[\\d+]$", "");
             last = last.substring(last.lastIndexOf('.') + 1);
-            if (SURFACE.contains(last) && !"image".equals(last) && !"src".equals(last) && !"background".equals(last)) {
+            if (SURFACE.contains(last) && !Set.of("image", "src", "background", "voice").contains(last)) {
                 f.visit(p, s);
             }
         });
