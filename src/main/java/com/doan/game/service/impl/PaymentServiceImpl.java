@@ -405,6 +405,18 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
+     * "%term%" đã escape \ , % và _ — khách gõ dấu % chỉ tìm đúng dấu %, không thành wildcard.
+     * Hạ chữ thường để khớp lower() của cột; Locale.ROOT để máy Thổ không đổi i thành ı.
+     */
+    private static String likePattern(String term) {
+        String escaped = term.trim().toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+        return "%" + escaped + "%";
+    }
+
+    /**
      * Bộ lọc admin: trạng thái, từ khoá (toàn số = orderCode, còn lại = email) và khoảng ngày theo giờ VN.
      * Dựng Specification thay vì @Query kiểu (:x is null or ...) — Postgres không suy được kiểu tham số null,
      * còn H2 vẫn xanh nên lỗi chỉ lộ trên production.
@@ -429,7 +441,7 @@ public class PaymentServiceImpl implements PaymentService {
                     }
                 } else {
                     where.add(cb.like(cb.lower(root.get("account").get("email")),
-                            "%" + term.toLowerCase(Locale.ROOT) + "%"));
+                            likePattern(term), '\\'));
                 }
             }
             if (from != null) {
@@ -612,6 +624,8 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /** Dùng chung với màn chi tiết tài khoản (AdminServiceImpl) — cùng một dạng dòng giao dịch. */
+    // ponytail: mỗi dòng đã hoàn là 1 query lấy email người hoàn (LAZY về account).
+    // Trang 20 dòng thì chấp nhận; nếu sau này join fetch refundedBy hoặc đổi sang projection.
     static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),

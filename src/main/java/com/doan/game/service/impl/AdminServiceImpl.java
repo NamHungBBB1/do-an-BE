@@ -307,9 +307,10 @@ public class AdminServiceImpl implements AdminService {
         return (root, query, cb) -> {
             List<Predicate> where = new ArrayList<>();
             if (q != null && !q.isBlank()) {
-                String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
-                where.add(cb.or(cb.like(cb.lower(root.get("email")), like),
-                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like)));
+                String like = "%" + q.trim().toLowerCase(Locale.ROOT)
+                        .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+                where.add(cb.or(cb.like(cb.lower(root.get("email")), like, '\\'),
+                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like, '\\')));
             }
             if (role != null) {
                 Subquery<UUID> sub = query.subquery(UUID.class);

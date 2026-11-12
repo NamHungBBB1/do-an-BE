@@ -316,6 +316,16 @@ class PaymentFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.totalElements").value(1))
                 .andExpect(jsonPath("$.result.items[0].orderCode").value(orderCode));
+        // "%" và "_" là ký tự thường, không phải wildcard: gõ "%" không được trả về cả bảng.
+        mvc.perform(get("/api/admin/transactions").param("q", "%").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+        mvc.perform(get("/api/admin/transactions").param("q", "_").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+        mvc.perform(get("/api/admin/accounts/list").param("q", "%").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
 
         // Khoảng ngày tính theo giờ VN: hôm nay có, ngày mai không.
         mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
