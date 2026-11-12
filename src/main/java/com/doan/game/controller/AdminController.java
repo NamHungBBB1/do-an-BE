@@ -3,6 +3,7 @@ package com.doan.game.controller;
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PageResponse;
@@ -119,6 +120,12 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(adminService.listAccounts(q, role, plan, page, size));
+    }
+
+    /** Chi tiết một tài khoản: thông tin đăng nhập, vai, lịch sử gói, 20 giao dịch mới nhất, số slot. Không có → 1003. */
+    @GetMapping("/accounts/{id}")
+    public ApiResponse<AdminAccountDetailResponse> accountDetail(@PathVariable UUID id) {
+        return ApiResponse.ok(adminService.accountDetail(id));
     }
 
     // ---- tra tài khoản (tối 15/10) ----

@@ -2,15 +2,18 @@ package com.doan.game;
 
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.Credential;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.RunState;
+import com.doan.game.enums.AuthProvider;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.entity.RoleGrantLog;
 import com.doan.game.enums.Role;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.CredentialRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.RunStateRepository;
@@ -64,6 +67,7 @@ class AdminRoleFlowTest {
     @Autowired LearnerGroupRepository groupRepo;
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired RunStateRepository runStateRepo;
+    @Autowired CredentialRepository credentialRepo;
 
     @Test
     void grantThenRevokeChangesMeAndWritesLog() throws Exception {
@@ -370,6 +374,75 @@ class AdminRoleFlowTest {
     }
 
     // ---- phụ trợ ----
+
+    @Test
+    void accountDetailShowsLoginWaysRolesSlotsAndMisses() throws Exception {
+        Account admin = account("admin");
+        Account lan = account("lan-detail");
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+        mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(lan.getId(), "GAME_EDITOR", "soan chuong")))
+                .andExpect(status().isOk());
+
+        // Hai đường vào; lần dùng gần nhất là của mật khẩu.
+        Credential google = new Credential();
+        google.setAccount(lan);
+        google.setProvider(AuthProvider.GOOGLE);
+        google.setSubject("gg-" + lan.getId());
+        google.setLastUsedAt(Instant.parse("2026-10-29T08:00:00Z"));
+        google.setCreatedAt(Instant.now());
+        credentialRepo.save(google);
+        Credential password = new Credential();
+        password.setAccount(lan);
+        password.setProvider(AuthProvider.PASSWORD);
+        password.setSubject(lan.getEmail());
+        password.setLastUsedAt(Instant.parse("2026-10-30T08:00:00Z"));
+        password.setCreatedAt(Instant.now());
+        credentialRepo.save(password);
+
+        // Slot của tài khoản này: 2 ACTIVE + 1 ARCHIVED, không lộ tên / mã của trẻ.
+        LearnerGroup g = new LearnerGroup();
+        g.setOwner(lan);
+        g.setContext(LearningContext.FAMILY);
+        g.setOpenContext(LearningContext.FAMILY);
+        g.setName("Nha detail");
+        g.setSlotLimit(4);
+        g.setOpenedAt(Instant.now());
+        g = groupRepo.save(g);
+        for (SlotStatus st : List.of(SlotStatus.ACTIVE, SlotStatus.ACTIVE, SlotStatus.ARCHIVED)) {
+            LearnerSlot s = new LearnerSlot();
+            s.setGroup(g);
+            s.setCode("D" + (System.nanoTime() % 1_000_000_000L));
+            s.setPinHash("x");
+            s.setDisplayName("Ten Cua Be " + st);
+            s.setStatus(st);
+            s.setFailedAttempts(0);
+            s.setCreatedAt(Instant.now());
+            slotRepo.save(s);
+        }
+
+        mvc.perform(get("/api/admin/accounts/" + lan.getId()).with(asAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.account.id").value(lan.getId().toString()))
+                .andExpect(jsonPath("$.result.account.email").value(lan.getEmail()))
+                .andExpect(jsonPath("$.result.account.providers.length()").value(2))
+                .andExpect(jsonPath("$.result.account.providers[0]").value("GOOGLE"))
+                .andExpect(jsonPath("$.result.account.providers[1]").value("PASSWORD"))
+                .andExpect(jsonPath("$.result.account.lastLoginAt").value("2026-10-30T08:00:00Z"))
+                .andExpect(jsonPath("$.result.roles[0]").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result.entitlements").isEmpty())
+                .andExpect(jsonPath("$.result.transactions").isEmpty())
+                .andExpect(jsonPath("$.result.slots.ACTIVE").value(2))
+                .andExpect(jsonPath("$.result.slots.ARCHIVED").value(1))
+                .andExpect(jsonPath("$.result.slots.WIPED").value(0));
+
+        mvc.perform(get("/api/admin/accounts/" + UUID.randomUUID()).with(asAdmin))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(1003));
+        mvc.perform(get("/api/admin/accounts/" + lan.getId()).with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
 
     private Account account(String prefix) {
         Account a = new Account();

@@ -387,6 +387,18 @@ class PaymentFlowTest {
         mvc.perform(get("/api/admin/accounts/list").param("q", buyer.email()).param("plan", "TEACHER").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.totalElements").value(0));
+
+        // Chi tiết tài khoản: gói còn hạn + 20 giao dịch mới nhất, đúng người mua.
+        mvc.perform(get("/api/admin/accounts/" + buyer.id()).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.account.email").value(buyer.email()))
+                .andExpect(jsonPath("$.result.entitlements[0].kind").value("PARENT"))
+                .andExpect(jsonPath("$.result.entitlements[0].active").value(true))
+                .andExpect(jsonPath("$.result.entitlements[0].source").value("PAYMENT"))
+                .andExpect(jsonPath("$.result.entitlements[0].orderCode").value(orderCode))
+                .andExpect(jsonPath("$.result.transactions[0].orderCode").value(orderCode))
+                .andExpect(jsonPath("$.result.transactions[0].status").value("PAID"))
+                .andExpect(jsonPath("$.result.slots.ACTIVE").value(0));
     }
 
     // ------------------------------------------------------------------ history

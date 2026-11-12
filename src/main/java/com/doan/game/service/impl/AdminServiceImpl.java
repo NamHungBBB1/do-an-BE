@@ -2,13 +2,16 @@ package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
 import com.doan.game.DTO.response.AdminSlotResponse;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
+import com.doan.game.DTO.response.TransactionAdminResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.Credential;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.RunState;
@@ -19,6 +22,7 @@ import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.CredentialRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
@@ -81,6 +85,7 @@ public class AdminServiceImpl implements AdminService {
     private final LearnerGroupRepository groupRepo;
     private final LearnerSlotRepository slotRepo;
     private final RunStateRepository runStateRepo;
+    private final CredentialRepository credentialRepo;
     private final EntitlementService entitlementService;
     private final Clock clock;
 
@@ -195,6 +200,52 @@ public class AdminServiceImpl implements AdminService {
                 plans.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
                 roles.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
                 a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminAccountDetailResponse accountDetail(UUID id) {
+        Account a = accountRepo.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + id));
+        // Đường vào: providers và lần đăng nhập gần nhất — đủ "lịch sử đăng nhập" mà không cần bảng mới.
+        List<Credential> credentials = credentialRepo.findByAccount_Id(id);
+        List<String> providers = credentials.stream().map(c -> c.getProvider().name())
+                .distinct().sorted().toList();
+        Instant lastLoginAt = credentials.stream().map(Credential::getLastUsedAt)
+                .filter(java.util.Objects::nonNull).max(java.util.Comparator.naturalOrder()).orElse(null);
+
+        List<String> roles = accountRoleRepo.findByAccount_IdIn(List.of(id)).stream()
+                .map(r -> r.getRole().name()).sorted().toList();
+
+        LocalDate today = LocalDate.now(clock);
+        List<AdminAccountDetailResponse.EntitlementRow> entitlements =
+                entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(id).stream()
+                        .map(e -> new AdminAccountDetailResponse.EntitlementRow(
+                                e.getKind().name(), e.getStartsOn(), e.getExpiresOn(),
+                                e.getStartsOn() != null && e.getExpiresOn() != null
+                                        && !e.getStartsOn().isAfter(today) && !e.getExpiresOn().isBefore(today),
+                                e.getSource().name(),
+                                e.getTransaction() == null ? null : e.getTransaction().getOrderCode(),
+                                e.getGrantedBy() == null ? null : e.getGrantedBy().getEmail(),
+                                e.getReason(), e.getCreatedAt()))
+                        .toList();
+
+        List<TransactionAdminResponse> transactions = transactionRepo
+                .findByAccount_IdOrderByCreatedAtDesc(id, PageRequest.of(0, 20))
+                .map(PaymentServiceImpl::toAdmin).getContent();
+
+        Map<String, Long> slots = new LinkedHashMap<>();
+        for (com.doan.game.enums.SlotStatus s : com.doan.game.enums.SlotStatus.values()) {
+            slots.put(s.name(), 0L);
+        }
+        for (LearnerSlot s : slotRepo.findAllByOwnerIds(List.of(id))) {
+            slots.merge(String.valueOf(s.getStatus()), 1L, Long::sum);
+        }
+
+        return new AdminAccountDetailResponse(new AdminAccountDetailResponse.AccountInfo(
+                a.getId(), a.getEmail(), a.getDisplayName(), a.getCreatedAt(), a.getEmailVerifiedAt(),
+                a.isMustChangePassword(), a.getLockedUntil(), providers, lastLoginAt),
+                roles, entitlements, transactions, slots);
     }
 
     @Override

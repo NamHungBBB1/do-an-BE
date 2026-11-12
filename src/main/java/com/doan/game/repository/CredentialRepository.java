@@ -11,11 +11,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface CredentialRepository extends JpaRepository<Credential, UUID> {
+
+    /** Mọi đường vào của một tài khoản (mật khẩu, Google...) — màn admin hiện "đăng nhập bằng gì". */
+    List<Credential> findByAccount_Id(UUID accountId);
 
     /** Đường vào cụ thể của một tài khoản (mật khẩu, hoặc Google sau khi gộp). */
     Optional<Credential> findByAccount_IdAndProvider(UUID accountId, AuthProvider provider);

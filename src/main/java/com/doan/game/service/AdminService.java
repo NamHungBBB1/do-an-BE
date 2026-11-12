@@ -34,6 +34,12 @@ public interface AdminService {
     PageResponse<AdminAccountResponse> listAccounts(String q, com.doan.game.enums.Role role,
                                                     com.doan.game.enums.PlanKind plan, int page, int size);
 
+    /**
+     * Chi tiết một tài khoản: thông tin đăng nhập (providers, lần dùng gần nhất), vai nội bộ,
+     * lịch sử gói kèm nguồn cấp, 20 giao dịch mới nhất và số slot theo trạng thái. Không có → 1003.
+     */
+    AdminAccountDetailResponse accountDetail(UUID id);
+
     /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100; trả kèm tổng số. */
     PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
 
