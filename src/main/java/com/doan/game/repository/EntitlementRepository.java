@@ -61,4 +61,7 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
 
     /** Gói hết hạn đúng ngày này — job nhắc gia hạn dùng. */
     List<Entitlement> findByExpiresOn(LocalDate expiresOn);
+
+    /** Gói sinh ra từ một đơn mua — hoàn tiền (việc 6) thu hồi đúng dòng này. */
+    java.util.Optional<Entitlement> findByTransaction_Id(UUID transactionId);
 }

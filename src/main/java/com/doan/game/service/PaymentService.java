@@ -44,15 +44,25 @@ public interface PaymentService {
 
     void sweepPendingTransactions();
 
-    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá và khoảng ngày, trả kèm tổng số trang. */
+    /**
+     * Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá, khoảng ngày và đã hoàn hay chưa.
+     * Trả kèm tổng số trang.
+     */
     PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
-                                                            LocalDate from, LocalDate to, int page, int size);
+                                                            LocalDate from, LocalDate to, Boolean refunded,
+                                                            int page, int size);
 
     /** Admin: chi tiết một giao dịch theo orderCode; không có → 4005. */
     TransactionDetailResponse getTransaction(long orderCode);
 
-    /** Admin: thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */
+    /** Admin: thống kê theo trạng thái và doanh thu / hoàn tiền từng ngày trong khoảng ngày (giờ Việt Nam). */
     TransactionStatsResponse stats(LocalDate from, LocalDate to);
+
+    /**
+     * Admin: ghi nhận hoàn tiền một đơn PAID chưa hoàn (hệ thống chỉ ghi nhận, tiền chuyển ngoài app).
+     * Cùng transaction thu hồi gói của đơn. Không có → 4005; không phải PAID / đã hoàn → 4008.
+     */
+    TransactionDetailResponse refund(long orderCode, com.doan.game.DTO.request.RefundRequest req, UUID actorId);
 
     /** Admin: hỏi lại PayOS cho một giao dịch (chỉ có tác dụng khi còn PENDING). */
     PaymentStatusResponse reconcile(long orderCode);

@@ -86,4 +86,18 @@ public class Transaction {
 
     @Column(name = "needs_review", nullable = false, columnDefinition = "boolean default false not null")
     private boolean needsReview;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
+    @Column(name = "refund_amount")
+    private Long refundAmount;
+
+    @Column(name = "refund_reason", length = 255)
+    private String refundReason;
+
+    /** Account. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "refunded_by_id", nullable = true)
+    private Account refundedBy;
 }

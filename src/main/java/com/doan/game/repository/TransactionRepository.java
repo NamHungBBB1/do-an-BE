@@ -56,6 +56,18 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
             + "where t.status = :status and t.paidAt >= :since")
     long sumAmountByStatusAndPaidAtAfter(@Param("status") TransactionStatus status, @Param("since") Instant since);
 
+    /** Dashboard: số đơn đã ghi nhận hoàn tiền. */
+    long countByRefundedAtIsNotNull();
+
+    /** Dashboard: tổng tiền đã hoàn. */
+    @Query("select coalesce(sum(t.refundAmount), 0) from Transaction t where t.refundedAt is not null")
+    long sumRefundedAmount();
+
+    /** Dashboard: tiền đã hoàn trong khoảng, tính theo ngày HOÀN. */
+    @Query("select coalesce(sum(t.refundAmount), 0) from Transaction t "
+            + "where t.refundedAt is not null and t.refundedAt >= :since")
+    long sumRefundedAmountSince(@Param("since") Instant since);
+
     /** Lịch sử giao dịch của chính người dùng, mới nhất trước. */
     Page<Transaction> findByAccount_IdOrderByCreatedAtDesc(UUID accountId, Pageable p);
 

@@ -316,6 +316,16 @@ class PaymentFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.totalElements").value(1))
                 .andExpect(jsonPath("$.result.items[0].orderCode").value(orderCode));
+        // "%" và "_" là ký tự thường, không phải wildcard: gõ "%" không được trả về cả bảng.
+        mvc.perform(get("/api/admin/transactions").param("q", "%").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+        mvc.perform(get("/api/admin/transactions").param("q", "_").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+        mvc.perform(get("/api/admin/accounts/list").param("q", "%").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
 
         // Khoảng ngày tính theo giờ VN: hôm nay có, ngày mai không.
         mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
@@ -399,6 +409,166 @@ class PaymentFlowTest {
                 .andExpect(jsonPath("$.result.transactions[0].orderCode").value(orderCode))
                 .andExpect(jsonPath("$.result.transactions[0].status").value("PAID"))
                 .andExpect(jsonPath("$.result.slots.ACTIVE").value(0));
+    }
+
+    // ------------------------------------------------------------------ refund (việc 6)
+    /** Hoàn đơn PAID: ghi nhận tiền, thu hồi gói, hoàn lần 2 / đơn PENDING → 409, webhook muộn không mở lại gói. */
+    @Test
+    void refundRecordsMoneyRevokesPlanAndIsSingleShot() throws Exception {
+        Buyer buyer = buyer("refund");
+        long orderCode = buy(buyer.token());
+        mvc.perform(webhook(signedWebhook(orderCode, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+        LocalDate today = LocalDate.now(ClockConfig.VN);
+        assertThat(entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id()))
+                .singleElement().satisfies(e -> assertThat(e.getExpiresOn())
+                        .isEqualTo(today.plusMonths(3).minusDays(1)));
+
+        Admin admin = adminAccount();
+        String body = "{\"reason\":\"khach doi y\"}";
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.refundAmount").value(PRICE))
+                .andExpect(jsonPath("$.result.refundReason").value("khach doi y"))
+                .andExpect(jsonPath("$.result.refundedAt").isNotEmpty())
+                .andExpect(jsonPath("$.result.refundedByEmail").value(admin.account().getEmail()));
+
+        // Gói bị thu hồi: dòng còn làm lịch sử nhưng hết hạn hôm qua (đơn bắt đầu hôm nay).
+        UUID txId = transactionRepo.findByOrderCode(orderCode).orElseThrow().getId();
+        assertThat(entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id()))
+                .singleElement().satisfies(e -> {
+                    assertThat(e.getExpiresOn()).isEqualTo(today.minusDays(1));
+                    assertThat(e.getTransaction().getId()).isEqualTo(txId);
+                });
+        mvc.perform(get("/api/admin/accounts/list").param("q", buyer.email()).param("plan", "PARENT")
+                        .with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+
+        // Hoàn lần 2 → 409; đơn PENDING → 409.
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(4008));
+        Buyer pendingBuyer = buyer("refund-pending");
+        long pending = buy(pendingBuyer.token());
+        mvc.perform(post("/api/admin/transactions/" + pending + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(4008));
+
+        // Webhook PAID đến lần nữa: đơn đã PAID nên markPaid bỏ qua, gói không được mở lại.
+        mvc.perform(webhook(signedWebhook(orderCode, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+        assertThat(entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id()))
+                .noneMatch(e -> !e.getExpiresOn().isBefore(today));
+    }
+
+    /** Số tiền hoàn và lý do được kiểm trước khi ghi: sai thì 1001 và đơn còn nguyên. */
+    @Test
+    void refundRejectsBadAmountAndMissingReason() throws Exception {
+        Buyer buyer = buyer("refund-bad");
+        long orderCode = buy(buyer.token());
+        mvc.perform(webhook(signedWebhook(orderCode, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+        Admin admin = adminAccount();
+
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":1000}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":" + (PRICE + 1) + ",\"reason\":\"qua tay\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":0,\"reason\":\"x\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(get("/api/admin/transactions/" + orderCode).with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.refundedAt").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.result.status").value("PAID"));
+
+        // Mã lạ → 4005; người thường → 403.
+        mvc.perform(post("/api/admin/transactions/1/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(4005));
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund")
+                        .header("Authorization", "Bearer " + buyer.token())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    /** Hoàn tiền vào đúng ngày hoàn: danh sách lọc được, stats và dashboard trừ doanh thu ròng. */
+    @Test
+    void refundShowsInListStatsAndDashboard() throws Exception {
+        Buyer buyer = buyer("refund-report");
+        long orderCode = buy(buyer.token());
+        mvc.perform(webhook(signedWebhook(orderCode, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+        Admin admin = adminAccount();
+        mvc.perform(post("/api/admin/transactions/" + orderCode + "/refund").with(admin.as())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":1000,\"reason\":\"hoan mot phan\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
+                        .param("refunded", "true").with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.items[0].refundAmount").value(1000))
+                .andExpect(jsonPath("$.result.items[0].refundReason").value("hoan mot phan"))
+                .andExpect(jsonPath("$.result.items[0].refundedByEmail").value(admin.account().getEmail()));
+        mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
+                        .param("refunded", "false").with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+
+        // Đơn trả 2026-10-28, hoàn hôm nay: query từ ngày trả tới hôm nay thấy cả hai khoản.
+        String from = "2026-10-28";
+        String to = LocalDate.now(ClockConfig.VN).toString();
+        String statsBody = mvc.perform(get("/api/admin/transactions/stats")
+                        .param("from", from).param("to", to).with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.refundedCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.result.refundedAmount").value(greaterThanOrEqualTo(1000)))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode stats = MAPPER.readTree(statsBody).path("result");
+        assertThat(stats.path("netAmount").asLong())
+                .isEqualTo(stats.path("paidAmount").asLong() - stats.path("refundedAmount").asLong());
+        JsonNode refundDay = null;
+        for (JsonNode d : stats.path("byDay")) {
+            if (to.equals(d.path("date").asText())) refundDay = d;
+        }
+        assertThat(refundDay).isNotNull();
+        assertThat(refundDay.path("refundedAmount").asLong()).isGreaterThanOrEqualTo(1000);
+        assertThat(refundDay.path("netAmount").asLong())
+                .isEqualTo(refundDay.path("paidAmount").asLong() - refundDay.path("refundedAmount").asLong());
+
+        String dashBody = mvc.perform(get("/api/admin/dashboard").with(admin.as()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.revenue.refundedTotal").value(greaterThanOrEqualTo(1000)))
+                .andExpect(jsonPath("$.result.transactions.refunded").value(greaterThanOrEqualTo(1)))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode revenue = MAPPER.readTree(dashBody).path("result").path("revenue");
+        assertThat(revenue.path("netTotal").asLong())
+                .isEqualTo(revenue.path("paidTotal").asLong() - revenue.path("refundedTotal").asLong());
+    }
+
+    private record Admin(Account account, RequestPostProcessor as) {
+    }
+
+    /** Admin thật (để refundedByEmail có email) + JWT SCOPE_ADMIN. */
+    private Admin adminAccount() {
+        Account a = new Account();
+        a.setEmail("refund-admin-" + System.nanoTime() + "@test.local");
+        a.setDisplayName("Admin");
+        a.setCreatedAt(Instant.now());
+        Account saved = accountRepo.save(a);
+        RequestPostProcessor as = jwt().jwt(j -> j.subject(saved.getId().toString()))
+                .authorities(new SimpleGrantedAuthority("SCOPE_ADMIN"));
+        return new Admin(saved, as);
     }
 
     // ------------------------------------------------------------------ history

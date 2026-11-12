@@ -254,6 +254,11 @@ public class AdminServiceImpl implements AdminService {
     public AdminDashboardResponse dashboard() {
         LocalDate today = LocalDate.now(clock);
         Instant since = Instant.now(clock).minus(30, java.time.temporal.ChronoUnit.DAYS);
+        long paidTotal = transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID);
+        long refundedTotal = transactionRepo.sumRefundedAmount();
+        long paidLast30 = transactionRepo.sumAmountByStatusAndPaidAtAfter(
+                com.doan.game.enums.TransactionStatus.PAID, since);
+        long refundedLast30 = transactionRepo.sumRefundedAmountSince(since);
         return new AdminDashboardResponse(
                 new AdminDashboardResponse.Accounts(accountRepo.count(),
                         entitlementRepo.countActiveAccountsByKind(PlanKind.PARENT, today),
@@ -263,14 +268,13 @@ public class AdminServiceImpl implements AdminService {
                         slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ACTIVE),
                         slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ARCHIVED),
                         slotRepo.countByStatus(com.doan.game.enums.SlotStatus.WIPED)),
-                new AdminDashboardResponse.Revenue(
-                        transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID),
-                        transactionRepo.sumAmountByStatusAndPaidAtAfter(
-                                com.doan.game.enums.TransactionStatus.PAID, since)),
+                new AdminDashboardResponse.Revenue(paidTotal, refundedTotal, paidTotal - refundedTotal,
+                        paidLast30, refundedLast30, paidLast30 - refundedLast30),
                 new AdminDashboardResponse.Transactions(
                         transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.PENDING),
                         transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.FAILED),
-                        transactionRepo.countByNeedsReviewTrue()),
+                        transactionRepo.countByNeedsReviewTrue(),
+                        transactionRepo.countByRefundedAtIsNotNull()),
                 new AdminDashboardResponse.Plans(
                         entitlementRepo.countActive(today),
                         entitlementRepo.countExpiringBetween(today, today.plusDays(7))),
@@ -303,9 +307,10 @@ public class AdminServiceImpl implements AdminService {
         return (root, query, cb) -> {
             List<Predicate> where = new ArrayList<>();
             if (q != null && !q.isBlank()) {
-                String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
-                where.add(cb.or(cb.like(cb.lower(root.get("email")), like),
-                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like)));
+                String like = "%" + q.trim().toLowerCase(Locale.ROOT)
+                        .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+                where.add(cb.or(cb.like(cb.lower(root.get("email")), like, '\\'),
+                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like, '\\')));
             }
             if (role != null) {
                 Subquery<UUID> sub = query.subquery(UUID.class);
