@@ -50,11 +50,13 @@ public class VoiceKeys {
 
     private final VoiceClipRepository clipRepo;
     private final ObjectMapper objectMapper;
+    private final Personalizer personalizer;
     private final JsonNode config;
 
-    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper) {
+    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper, Personalizer personalizer) {
         this.clipRepo = clipRepo;
         this.objectMapper = objectMapper;
+        this.personalizer = personalizer;
         try (InputStream in = new ClassPathResource("voice/voices.json").getInputStream()) {
             this.config = objectMapper.readTree(in);
         } catch (IOException e) {
@@ -124,7 +126,24 @@ public class VoiceKeys {
         return new Line(scene.path("id").asText(""), speaker, profile, readText, key(profile, readText));
     }
 
+    /**
+     * Mọi câu cần đọc. Chương có cá nhân hoá (spec build/spec-ca-nhan-hoa-2026-11-11.md): câu của MỌI tổ hợp nhãn sau khi ghép
+     * (token đã thay, biến thể đã áp — kể cả đổi giọng theo giới tính qua trường {@code voice}), bỏ trùng theo khoá.
+     */
     public List<Line> lines(JsonNode content) {
+        if (!personalizer.isPersonalized(content)) {
+            return linesOf(content);
+        }
+        java.util.Map<String, Line> out = new java.util.LinkedHashMap<>();
+        for (java.util.Map<String, String> labels : personalizer.combos(content)) {
+            for (Line l : linesOf(personalizer.compose(content, labels))) {
+                out.putIfAbsent(l.key(), l);
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
+    private List<Line> linesOf(JsonNode content) {
         List<Line> out = new ArrayList<>();
         for (JsonNode s : content.path("scenes")) {
             Line l = lineOf(s);
@@ -155,7 +174,11 @@ public class VoiceKeys {
      * không có → gỡ voiceUrl (thà im còn hơn đọc sai). Editor không tự ghi được voiceUrl. Sửa tại chỗ, trả lại chính content.
      */
     public JsonNode attach(JsonNode content) {
-        Set<String> ready = readyKeys(content);
+        return attachWith(content, readyKeys(content));
+    }
+
+    /** Như {@link #attach} nhưng theo tập khoá cho sẵn (không truy vấn DB) — dùng cho chương cá nhân hoá đã đóng băng. */
+    public JsonNode attachWith(JsonNode content, Set<String> ready) {
         for (JsonNode s : content.path("scenes")) {
             if (!(s instanceof ObjectNode o)) {
                 continue;
@@ -168,6 +191,37 @@ public class VoiceKeys {
             }
         }
         return content;
+    }
+
+    /**
+     * Đóng băng lúc phát hành. Chương cá nhân hoá (spec 11/11): câu có token chỉ có giọng SAU khi ghép, nên ghi sẵn danh sách khoá
+     * đã có tệp của MỌI tổ hợp vào {@code personalization.voiceReady}; lúc phục vụ gắn giọng từ danh sách này, không hỏi DB → bản
+     * đã phát hành không đổi theo thời gian (đường công khai cache 1 năm). Chương thường: y như {@link #attachJson}.
+     */
+    public String freezeJson(String json) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
+            if (root instanceof ObjectNode o && personalizer.isPersonalized(root)) {
+                Set<String> ready = new java.util.TreeSet<>(readyKeys(root));
+                JsonNode p = o.get("personalization");
+                ObjectNode po = p instanceof ObjectNode existing ? existing : o.putObject("personalization");
+                po.set("voiceReady", objectMapper.valueToTree(ready));
+            }
+            return objectMapper.writeValueAsString(attach(root));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON chương hỏng", e);
+        }
+    }
+
+    /** Khoá giọng đã đóng băng của chương cá nhân hoá, hoặc null nếu chương không có (bản cũ / nháp). */
+    public static Set<String> frozenReady(JsonNode chapter) {
+        JsonNode r = chapter.path("personalization").path("voiceReady");
+        if (!r.isArray()) {
+            return null;
+        }
+        Set<String> out = new java.util.HashSet<>();
+        r.forEach(k -> out.add(k.asText()));
+        return out;
     }
 
     public String attachJson(String json) {

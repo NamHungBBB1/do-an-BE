@@ -83,12 +83,14 @@ public class ContentServiceImpl implements ContentService {
     private final Clock clock;
     private final String assetBase;
     private final VoiceKeys voiceKeys;
+    private final Personalizer personalizer;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                               AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
                               ObjectMapper objectMapper, ContentSchema contentSchema, Clock clock,
-                              @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys) {
+                              @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys,
+                              Personalizer personalizer) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
         this.releaseRepo = releaseRepo;
@@ -100,6 +102,7 @@ public class ContentServiceImpl implements ContentService {
         this.clock = clock;
         this.assetBase = assetBase.replaceAll("/+$", "");
         this.voiceKeys = voiceKeys;
+        this.personalizer = personalizer;
     }
 
     // ------------------------------------------------------------------ đọc (công khai)
@@ -123,13 +126,21 @@ public class ContentServiceImpl implements ContentService {
     public JsonNode releaseChapter(String version, String code) {
         GameRelease release = releaseRepo.findByVersion(version)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
-        return chapterOf(release, code);
+        return chapterOf(release, code, java.util.Map.of(), false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JsonNode releaseChapterFor(String version, String code, java.util.Map<String, String> labels) {
+        GameRelease release = releaseRepo.findByVersion(version)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có phiên bản " + version));
+        return chapterOf(release, code, labels, true);
     }
 
     @Override
     @Transactional(readOnly = true)
     public JsonNode currentChapter(String code) {
-        return chapterOf(requireCurrent(), code);
+        return chapterOf(requireCurrent(), code, java.util.Map.of(), false);
     }
 
     // ------------------------------------------------------------------ ghi (Studio, theo vai — PR B 21/10)
@@ -219,7 +230,7 @@ public class ContentServiceImpl implements ContentService {
         Set<UUID> changed = new HashSet<>();
         for (ChapterDraft d : approved) {
             // Đóng băng kèm giọng đã sinh tới lúc phát hành (câu chưa có giọng thì không có voiceUrl — FE hiện chữ).
-            String frozenJson = voiceKeys.attachJson(d.getContent());
+            String frozenJson = voiceKeys.freezeJson(d.getContent());
             saveReleaseChapter(release, d.getChapter(), frozenJson, sha256(frozenJson));
             d.setStatus(DraftStatus.RELEASED);
             changed.add(d.getChapter().getId());
@@ -371,7 +382,15 @@ public class ContentServiceImpl implements ContentService {
         }
         // Bản đưa người duyệt phải chơi được từ đầu tới Kết: lưu nháp cho soạn dở, gửi duyệt thì chặn đường đi chưa trọn.
         try {
-            contentSchema.requireCompleteFlow(objectMapper.readTree(draft.getContent()));
+            JsonNode root = objectMapper.readTree(draft.getContent());
+            contentSchema.requireCompleteFlow(root);
+            // Mọi tổ hợp nhãn phải ghép được và giữ nguyên tiền / điểm / đáp án / đường đi — bản đưa duyệt không được có biến thể hỏng.
+            List<String> personalization = personalizer.check(root);
+            if (!personalization.isEmpty()) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED, "cá nhân hoá: "
+                        + String.join("; ", personalization.subList(0, Math.min(5, personalization.size())))
+                        + (personalization.size() > 5 ? "; … còn " + (personalization.size() - 5) + " chỗ" : ""));
+            }
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: nháp không đọc được");
         }
@@ -470,14 +489,30 @@ public class ContentServiceImpl implements ContentService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "chưa phát hành bản nào"));
     }
 
-    private JsonNode chapterOf(GameRelease release, String code) {
+    private JsonNode chapterOf(GameRelease release, String code, java.util.Map<String, String> labels, boolean withKey) {
         ReleaseChapter rc = releaseChapterRepo.findByRelease_IdAndChapter_Code(release.getId(), code)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND,
                         "phiên bản " + release.getVersion() + " không có chương " + code));
         try {
             // Thay tiền tố kho file lúc trả: JSON đóng băng giữ placeholder, đổi domain không cần phát hành lại.
-            JsonNode node = objectMapper.readTree(rc.getContent().replace(ASSET_PLACEHOLDER, assetBase));
+            String raw = rc.getContent();
+            // Cá nhân hoá (spec 11/11): đường công khai luôn trả BẢN GỐC (nhãn rỗng) — không bao giờ lộ "{{goal}}" cho FE. Giọng gắn lại
+            // sau khi ghép vì khoá giọng tính trên chữ đã thay token. Chương không cá nhân hoá: đi đường cũ, giọng đã gắn lúc phát hành.
+            String variantKey = Personalizer.BASE_KEY;
+            if (raw.contains("\"personalization\"") || raw.contains("\"variants\"")) {
+                JsonNode src = objectMapper.readTree(raw);
+                variantKey = personalizer.variantKey(src, labels);
+                java.util.Set<String> ready = VoiceKeys.frozenReady(src);   // đóng băng lúc phát hành; bản cũ không có → hỏi DB
+                JsonNode composed = personalizer.compose(src, labels);
+                raw = objectMapper.writeValueAsString(
+                        ready != null ? voiceKeys.attachWith(composed, ready) : voiceKeys.attach(composed));
+            }
+            JsonNode node = objectMapper.readTree(raw.replace(ASSET_PLACEHOLDER, assetBase));
             ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("releaseVersion", release.getVersion());
+            if (withKey) {
+                // FE giữ tới hết chương như releaseVersion; báo cáo đợt sau dùng để hiện đúng chữ trẻ đã thấy.
+                ((com.fasterxml.jackson.databind.node.ObjectNode) node).put("variantKey", variantKey);
+            }
             return node;
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "JSON chương hỏng trong DB: " + code);
@@ -577,6 +612,8 @@ public class ContentServiceImpl implements ContentService {
     Normalized validateAndNormalize(JsonNode root) {
         // Bộ khuôn: loại cảnh, trường, link cảnh, lựa chọn + khoá, chỉ số, điều kiện, mini-game kind; đường đi chưa trọn chỉ cảnh báo.
         List<String> warnings = contentSchema.validate(root);
+        // Cá nhân hoá (spec 11/11): lưu nháp chỉ cảnh báo (đang soạn dở), gửi duyệt thì chặn — xem submitDraft.
+        personalizer.check(root).forEach(p -> warnings.add("cá nhân hoá: " + p));
         String json;
         try {
             json = objectMapper.writeValueAsString(root);

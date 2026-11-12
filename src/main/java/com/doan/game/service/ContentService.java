@@ -33,6 +33,9 @@ public interface ContentService {
     /** JSON chương trong một phiên bản, {{ASSET_BASE}} đã thay bằng tiền tố kho file. 1003 nếu không có. */
     JsonNode releaseChapter(String version, String code);
 
+    /** Như {@link #releaseChapter} nhưng ghép theo nhãn cá nhân hoá của trẻ (spec 11/11), kèm {@code variantKey}. */
+    JsonNode releaseChapterFor(String version, String code, java.util.Map<String, String> labels);
+
     /** Như trên nhưng theo bản hiện tại. */
     JsonNode currentChapter(String code);
 

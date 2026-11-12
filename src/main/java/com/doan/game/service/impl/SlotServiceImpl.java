@@ -270,6 +270,7 @@ public class SlotServiceImpl implements SlotService {
         slot.setCode(null);
         slot.setPinHash(null);
         slot.setDisplayName(null);
+        slot.setPersonalization(null);   // khảo sát cá nhân hoá là dữ liệu của trẻ (spec 11/11)
         slotRepo.save(slot);
     }
 
