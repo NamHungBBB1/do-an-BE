@@ -42,6 +42,9 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);
 
+    /** Đếm slot toàn hệ thống theo trạng thái (dashboard). */
+    long countByStatus(SlotStatus status);
+
     /** Slot của một nhóm, cũ đến mới — FE danh sách theo thứ tự mở. */
     java.util.List<LearnerSlot> findByGroup_IdOrderByCreatedAtAsc(UUID groupId);
 

@@ -5,6 +5,7 @@ import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
+import com.doan.game.DTO.response.AdminDashboardResponse;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
@@ -126,6 +127,12 @@ public class AdminController {
     @GetMapping("/accounts/{id}")
     public ApiResponse<AdminAccountDetailResponse> accountDetail(@PathVariable UUID id) {
         return ApiResponse.ok(adminService.accountDetail(id));
+    }
+
+    /** Trang tổng quan: tài khoản, slot, doanh thu, giao dịch, gói và 10 thao tác vai mới nhất. */
+    @GetMapping("/dashboard")
+    public ApiResponse<AdminDashboardResponse> dashboard() {
+        return ApiResponse.ok(adminService.dashboard());
     }
 
     // ---- tra tài khoản (tối 15/10) ----

@@ -40,6 +40,9 @@ public interface AdminService {
      */
     AdminAccountDetailResponse accountDetail(UUID id);
 
+    /** Trang tổng quan: tài khoản, slot, doanh thu, giao dịch, gói và 10 thao tác vai mới nhất. */
+    AdminDashboardResponse dashboard();
+
     /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100; trả kèm tổng số. */
     PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
 

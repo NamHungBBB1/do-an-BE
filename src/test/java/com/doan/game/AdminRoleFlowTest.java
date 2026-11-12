@@ -40,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -440,6 +441,42 @@ class AdminRoleFlowTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(1003));
         mvc.perform(get("/api/admin/accounts/" + lan.getId()).with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    @Test
+    void dashboardSummarisesAccountsAndRecentRoleActions() throws Exception {
+        Account admin = account("admin");
+        Account lan = account("lan-dash");
+        RequestPostProcessor asAdmin = as(admin, "SCOPE_ADMIN");
+        mvc.perform(post("/api/admin/roles/grant").with(asAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(lan.getId(), "GAME_EDITOR", "soan dashboard")))
+                .andExpect(status().isOk());
+
+        // DB test dùng chung nên chỉ so sàn; riêng sổ vai thì dòng mới nhất chính là vừa cấp.
+        mvc.perform(get("/api/admin/dashboard").with(asAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.accounts.total").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.result.accounts.parents").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.accounts.teachers").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.accounts.internal").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.result.learners.active").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.learners.archived").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.learners.wiped").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.revenue.paidTotal").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.revenue.paidLast30Days").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.transactions.pending").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.transactions.failed").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.transactions.needsReview").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.plans.active").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.plans.expiringIn7Days").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.recentAdminActions[0].targetEmail").value(lan.getEmail()))
+                .andExpect(jsonPath("$.result.recentAdminActions[0].role").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result.recentAdminActions[0].granted").value(true))
+                .andExpect(jsonPath("$.result.recentAdminActions[0].actorEmail").value(admin.getEmail()));
+
+        mvc.perform(get("/api/admin/dashboard").with(as(lan, "SCOPE_PARENT", "TYP_ACCOUNT")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
     }

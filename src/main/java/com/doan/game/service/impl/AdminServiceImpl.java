@@ -4,6 +4,7 @@ import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
+import com.doan.game.DTO.response.AdminDashboardResponse;
 import com.doan.game.DTO.response.AdminSlotResponse;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
@@ -246,6 +247,35 @@ public class AdminServiceImpl implements AdminService {
                 a.getId(), a.getEmail(), a.getDisplayName(), a.getCreatedAt(), a.getEmailVerifiedAt(),
                 a.isMustChangePassword(), a.getLockedUntil(), providers, lastLoginAt),
                 roles, entitlements, transactions, slots);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminDashboardResponse dashboard() {
+        LocalDate today = LocalDate.now(clock);
+        Instant since = Instant.now(clock).minus(30, java.time.temporal.ChronoUnit.DAYS);
+        return new AdminDashboardResponse(
+                new AdminDashboardResponse.Accounts(accountRepo.count(),
+                        entitlementRepo.countActiveAccountsByKind(PlanKind.PARENT, today),
+                        entitlementRepo.countActiveAccountsByKind(PlanKind.TEACHER, today),
+                        accountRoleRepo.countDistinctAccountsByRoleIn(AccountRoleRepository.INTERNAL_ROLES)),
+                new AdminDashboardResponse.Learners(
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ACTIVE),
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ARCHIVED),
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.WIPED)),
+                new AdminDashboardResponse.Revenue(
+                        transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID),
+                        transactionRepo.sumAmountByStatusAndPaidAtAfter(
+                                com.doan.game.enums.TransactionStatus.PAID, since)),
+                new AdminDashboardResponse.Transactions(
+                        transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.PENDING),
+                        transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.FAILED),
+                        transactionRepo.countByNeedsReviewTrue()),
+                new AdminDashboardResponse.Plans(
+                        entitlementRepo.countActive(today),
+                        entitlementRepo.countExpiringBetween(today, today.plusDays(7))),
+                // Đợt 1 chưa có bảng nhật ký thao tác admin chung — dùng sổ cấp / thu vai.
+                listRoleLog(null, 0, 10).items());
     }
 
     @Override

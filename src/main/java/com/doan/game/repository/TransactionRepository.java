@@ -42,6 +42,20 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
 
     Page<Transaction> findByStatusOrderByCreatedAtDesc(TransactionStatus status, Pageable p);
 
+    /** Dashboard: số đơn theo trạng thái và số đơn đang chờ người soát. */
+    long countByStatus(TransactionStatus status);
+
+    long countByNeedsReviewTrue();
+
+    /** Dashboard: tổng tiền đã thu (chưa trừ hoàn — việc 6 sẽ thêm refunded). */
+    @Query("select coalesce(sum(t.amount), 0) from Transaction t where t.status = :status")
+    long sumAmountByStatus(@Param("status") TransactionStatus status);
+
+    /** Dashboard: tiền đã thu trong khoảng, tính theo ngày TRẢ. */
+    @Query("select coalesce(sum(t.amount), 0) from Transaction t "
+            + "where t.status = :status and t.paidAt >= :since")
+    long sumAmountByStatusAndPaidAtAfter(@Param("status") TransactionStatus status, @Param("since") Instant since);
+
     /** Lịch sử giao dịch của chính người dùng, mới nhất trước. */
     Page<Transaction> findByAccount_IdOrderByCreatedAtDesc(UUID accountId, Pageable p);
 
