@@ -2,20 +2,28 @@ package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
+import com.doan.game.DTO.response.AdminDashboardResponse;
 import com.doan.game.DTO.response.AdminSlotResponse;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
+import com.doan.game.DTO.response.TransactionAdminResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.Credential;
+import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.RunState;
 import com.doan.game.entity.RoleGrantLog;
+import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.CredentialRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
@@ -27,8 +35,14 @@ import com.doan.game.service.AdminService;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,6 +86,7 @@ public class AdminServiceImpl implements AdminService {
     private final LearnerGroupRepository groupRepo;
     private final LearnerSlotRepository slotRepo;
     private final RunStateRepository runStateRepo;
+    private final CredentialRepository credentialRepo;
     private final EntitlementService entitlementService;
     private final Clock clock;
 
@@ -150,12 +165,12 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminAccountResponse> listAccounts(String q, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        List<Account> accounts = q == null || q.isBlank()
-                ? accountRepo.findAllByOrderByEmailAsc(pageable)
-                : accountRepo.search("%" + q.trim().toLowerCase(Locale.ROOT) + "%", pageable);
-        if (accounts.isEmpty()) return List.of();
+    public PageResponse<AdminAccountResponse> listAccounts(String q, Role role, PlanKind plan, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Direction.ASC, "email"));
+        Page<Account> pageResult = accountRepo.findAll(accountFilter(q, role, plan), pageable);
+        List<Account> accounts = pageResult.getContent();
+        if (accounts.isEmpty()) return PageResponse.of(pageResult, List.of());
         // Vai, gói, slot, tiến độ của cả trang: 4 truy vấn gom theo id, không tra từng người.
         List<UUID> ids = accounts.stream().map(Account::getId).toList();
         Map<UUID, List<String>> roles = new HashMap<>();
@@ -182,26 +197,134 @@ public class AdminServiceImpl implements AdminService {
                     run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone()),
                     run == null ? null : run.getAttemptIndex(), run == null ? null : run.getUpdatedAt()));
         }
-        return accounts.stream().map(a -> new AdminAccountResponse(a.getId(), a.getEmail(), a.getDisplayName(),
+        return PageResponse.of(pageResult, accounts.stream().map(a -> new AdminAccountResponse(a.getId(), a.getEmail(), a.getDisplayName(),
                 plans.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
                 roles.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
-                a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList();
+                a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size) {
-        // Cùng cách kẹp trang với giao dịch: page < 0 → 0, size 1..100; không trả tổng, FE lật tới khi rỗng.
+    public AdminAccountDetailResponse accountDetail(UUID id) {
+        Account a = accountRepo.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + id));
+        // Đường vào: providers và lần đăng nhập gần nhất — đủ "lịch sử đăng nhập" mà không cần bảng mới.
+        List<Credential> credentials = credentialRepo.findByAccount_Id(id);
+        List<String> providers = credentials.stream().map(c -> c.getProvider().name())
+                .distinct().sorted().toList();
+        Instant lastLoginAt = credentials.stream().map(Credential::getLastUsedAt)
+                .filter(java.util.Objects::nonNull).max(java.util.Comparator.naturalOrder()).orElse(null);
+
+        List<String> roles = accountRoleRepo.findByAccount_IdIn(List.of(id)).stream()
+                .map(r -> r.getRole().name()).sorted().toList();
+
+        LocalDate today = LocalDate.now(clock);
+        List<AdminAccountDetailResponse.EntitlementRow> entitlements =
+                entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(id).stream()
+                        .map(e -> new AdminAccountDetailResponse.EntitlementRow(
+                                e.getKind().name(), e.getStartsOn(), e.getExpiresOn(),
+                                e.getStartsOn() != null && e.getExpiresOn() != null
+                                        && !e.getStartsOn().isAfter(today) && !e.getExpiresOn().isBefore(today),
+                                e.getSource().name(),
+                                e.getTransaction() == null ? null : e.getTransaction().getOrderCode(),
+                                e.getGrantedBy() == null ? null : e.getGrantedBy().getEmail(),
+                                e.getReason(), e.getCreatedAt()))
+                        .toList();
+
+        List<TransactionAdminResponse> transactions = transactionRepo
+                .findByAccount_IdOrderByCreatedAtDesc(id, PageRequest.of(0, 20))
+                .map(PaymentServiceImpl::toAdmin).getContent();
+
+        Map<String, Long> slots = new LinkedHashMap<>();
+        for (com.doan.game.enums.SlotStatus s : com.doan.game.enums.SlotStatus.values()) {
+            slots.put(s.name(), 0L);
+        }
+        for (LearnerSlot s : slotRepo.findAllByOwnerIds(List.of(id))) {
+            slots.merge(String.valueOf(s.getStatus()), 1L, Long::sum);
+        }
+
+        return new AdminAccountDetailResponse(new AdminAccountDetailResponse.AccountInfo(
+                a.getId(), a.getEmail(), a.getDisplayName(), a.getCreatedAt(), a.getEmailVerifiedAt(),
+                a.isMustChangePassword(), a.getLockedUntil(), providers, lastLoginAt),
+                roles, entitlements, transactions, slots);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminDashboardResponse dashboard() {
+        LocalDate today = LocalDate.now(clock);
+        Instant since = Instant.now(clock).minus(30, java.time.temporal.ChronoUnit.DAYS);
+        return new AdminDashboardResponse(
+                new AdminDashboardResponse.Accounts(accountRepo.count(),
+                        entitlementRepo.countActiveAccountsByKind(PlanKind.PARENT, today),
+                        entitlementRepo.countActiveAccountsByKind(PlanKind.TEACHER, today),
+                        accountRoleRepo.countDistinctAccountsByRoleIn(AccountRoleRepository.INTERNAL_ROLES)),
+                new AdminDashboardResponse.Learners(
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ACTIVE),
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ARCHIVED),
+                        slotRepo.countByStatus(com.doan.game.enums.SlotStatus.WIPED)),
+                new AdminDashboardResponse.Revenue(
+                        transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID),
+                        transactionRepo.sumAmountByStatusAndPaidAtAfter(
+                                com.doan.game.enums.TransactionStatus.PAID, since)),
+                new AdminDashboardResponse.Transactions(
+                        transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.PENDING),
+                        transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.FAILED),
+                        transactionRepo.countByNeedsReviewTrue()),
+                new AdminDashboardResponse.Plans(
+                        entitlementRepo.countActive(today),
+                        entitlementRepo.countExpiringBetween(today, today.plusDays(7))),
+                // Đợt 1 chưa có bảng nhật ký thao tác admin chung — dùng sổ cấp / thu vai.
+                listRoleLog(null, 0, 10).items());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size) {
+        // Cùng cách kẹp trang với giao dịch: page < 0 → 0, size 1..100; trả kèm tổng số dòng.
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        List<RoleGrantLog> rows = subjectId == null
+        Page<RoleGrantLog> pageResult = subjectId == null
                 ? roleGrantLogRepo.findAllByOrderByCreatedAtDesc(pageable)
                 : roleGrantLogRepo.findByTarget_IdOrderByCreatedAtDesc(subjectId, pageable);
-        return rows.stream().map(l -> new RoleGrantLogResponse(l.getId(), l.getActor().getId(), l.getActor().getEmail(),
+        return PageResponse.of(pageResult, pageResult.getContent().stream().map(l -> new RoleGrantLogResponse(
+                l.getId(), l.getActor().getId(), l.getActor().getEmail(),
                 l.getTarget().getId(), l.getTarget().getEmail(), l.getRole(), l.isGranted(), l.getReason(),
-                l.getCreatedAt())).toList();
+                l.getCreatedAt())).toList());
     }
 
     // ---- phụ trợ ----
+
+    /**
+     * Lọc danh sách tài khoản: q (email / tên hiển thị), vai nội bộ và gói còn hạn.
+     * Hai điều kiện sau dựng bằng subquery exists để không nhân dòng khi một người có nhiều vai / nhiều gói.
+     * "Còn hạn" tính theo ngày VN, cùng mốc với EntitlementService: startsOn ≤ hôm nay ≤ expiresOn.
+     */
+    private Specification<Account> accountFilter(String q, Role role, PlanKind plan) {
+        return (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
+                where.add(cb.or(cb.like(cb.lower(root.get("email")), like),
+                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like)));
+            }
+            if (role != null) {
+                Subquery<UUID> sub = query.subquery(UUID.class);
+                Root<AccountRole> ar = sub.from(AccountRole.class);
+                sub.select(ar.get("id")).where(cb.equal(ar.get("account"), root), cb.equal(ar.get("role"), role));
+                where.add(cb.exists(sub));
+            }
+            if (plan != null) {
+                LocalDate today = LocalDate.now(clock);
+                Subquery<UUID> sub = query.subquery(UUID.class);
+                Root<Entitlement> e = sub.from(Entitlement.class);
+                sub.select(e.get("id")).where(cb.equal(e.get("account"), root), cb.equal(e.get("kind"), plan),
+                        cb.lessThanOrEqualTo(e.get("startsOn"), today),
+                        cb.greaterThanOrEqualTo(e.get("expiresOn"), today));
+                where.add(cb.exists(sub));
+            }
+            return cb.and(where.toArray(new Predicate[0]));
+        };
+    }
 
     /** Kiểm dữ liệu vào một chỗ: thiếu trường, vai lạ, vai suy ra → 1001 kèm lý do. Chữ thường vẫn nhận. */
     private static Role internalRole(GrantRoleRequest req) {
