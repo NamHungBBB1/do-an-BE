@@ -1,6 +1,7 @@
 package com.doan.game.controller;
 
 import com.doan.game.DTO.request.GrantRoleRequest;
+import com.doan.game.DTO.request.RefundRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.AdminAccountDetailResponse;
@@ -50,16 +51,17 @@ public class AdminController {
     }
 
     // ---- giao dịch ----
-    /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email) và khoảng ngày. Trả kèm tổng số trang. */
+    /** Mới nhất trước; lọc theo trạng thái, từ khoá, khoảng ngày và đã hoàn hay chưa. Trả kèm tổng số trang. */
     @GetMapping("/transactions")
     public ApiResponse<PageResponse<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Boolean refunded,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, page, size));
+        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, refunded, page, size));
     }
 
     /** Thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */
@@ -80,6 +82,17 @@ public class AdminController {
     @PostMapping("/transactions/{orderCode}/reconcile")
     public ApiResponse<PaymentStatusResponse> reconcile(@PathVariable long orderCode) {
         return ApiResponse.ok(paymentService.reconcile(orderCode));
+    }
+
+    /**
+     * Ghi nhận hoàn tiền một đơn PAID chưa hoàn; cùng transaction thu hồi gói của đơn.
+     * Không có → 4005; không phải PAID / đã hoàn → 4008; amount sai → 1001.
+     */
+    @PostMapping("/transactions/{orderCode:\\d+}/refund")
+    public ApiResponse<TransactionDetailResponse> refund(@AuthenticationPrincipal Jwt jwt,
+                                                         @PathVariable long orderCode,
+                                                         @RequestBody RefundRequest req) {
+        return ApiResponse.ok(paymentService.refund(orderCode, req, UUID.fromString(jwt.getSubject())));
     }
 
     // ---- vai nội bộ (PR A, 15/10) ----

@@ -17,11 +17,12 @@ public record AdminDashboardResponse(Accounts accounts, Learners learners, Reven
     public record Learners(long active, long archived, long wiped) {
     }
 
-    /** paidTotal = mọi đơn PAID; paidLast30Days = đơn PAID có paidAt trong 30 ngày gần nhất. */
-    public record Revenue(long paidTotal, long paidLast30Days) {
+    /** paidTotal / refundedTotal / netTotal = mọi đơn; *Last30Days = phát sinh trong 30 ngày gần nhất. */
+    public record Revenue(long paidTotal, long refundedTotal, long netTotal,
+                          long paidLast30Days, long refundedLast30Days, long netLast30Days) {
     }
 
-    public record Transactions(long pending, long failed, long needsReview) {
+    public record Transactions(long pending, long failed, long needsReview, long refunded) {
     }
 
     /** active = dòng gói đang chạy; expiringIn7Days = hết hạn trong 7 ngày tới. */

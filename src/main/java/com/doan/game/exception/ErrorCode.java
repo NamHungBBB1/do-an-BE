@@ -85,6 +85,7 @@ public enum ErrorCode {
     TRANSACTION_NOT_FOUND(4005, "Không tìm thấy giao dịch", HttpStatus.NOT_FOUND),
     TRANSACTION_NOT_PENDING(4006, "Giao dịch không còn ở trạng thái chờ", HttpStatus.CONFLICT),
     PLAN_PRICE_INVALID(4007, "Giá gói phải là số dương (VND)", HttpStatus.BAD_REQUEST),
+    TRANSACTION_NOT_REFUNDABLE(4008, "Chỉ hoàn được đơn đã trả và chưa hoàn", HttpStatus.CONFLICT),
     // 5xxx  nhóm học
     GROUP_ALREADY_OPEN(5001, "Đã có nhóm đang mở cho loại này — đóng nhóm cũ trước khi mở nhóm mới",
             HttpStatus.CONFLICT),

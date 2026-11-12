@@ -1,6 +1,7 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.BuyPlanRequest;
+import com.doan.game.DTO.request.RefundRequest;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
@@ -296,10 +297,11 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
-                                                                   LocalDate from, LocalDate to, int page, int size) {
+                                                                   LocalDate from, LocalDate to, Boolean refunded,
+                                                                   int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "orderCode")));
-        return PageResponse.of(transactionRepo.findAll(filter(status, q, from, to), pageable),
+        return PageResponse.of(transactionRepo.findAll(filter(status, q, from, to, refunded), pageable),
                 PaymentServiceImpl::toAdmin);
     }
 
@@ -320,28 +322,86 @@ public class PaymentServiceImpl implements PaymentService {
         }
         // Chốt với bot 12/11: đơn chưa trả tính theo ngày TẠO, đơn đã trả tính theo ngày TRẢ.
         // Đơn tạo tháng trước mà trả tháng này thì thuộc tháng này — đúng kỳ doanh thu.
-        for (Transaction tx : transactionRepo.findAll(filter(null, null, from, to),
+        for (Transaction tx : transactionRepo.findAll(filter(null, null, from, to, null),
                 Sort.by(Sort.Direction.DESC, "createdAt"))) {
             if (tx.getStatus() != TransactionStatus.PAID) {
                 count.merge(tx.getStatus().name(), 1L, Long::sum);
             }
         }
         long paidAmount = 0;
+        long refundedAmount = 0;
+        long refundedCount = 0;
+        // byDay: [paidCount, paidAmount, refundedCount, refundedAmount]
         Map<LocalDate, long[]> byDay = new TreeMap<>();
         for (Transaction tx : transactionRepo.findAll(paidBetween(from, to),
                 Sort.by(Sort.Direction.ASC, "paidAt"))) {
             count.merge(TransactionStatus.PAID.name(), 1L, Long::sum);
             paidAmount += tx.getAmount();
             long[] day = byDay.computeIfAbsent(tx.getPaidAt().atZone(ClockConfig.VN).toLocalDate(),
-                    k -> new long[2]);
+                    k -> new long[4]);
             day[0]++;
             day[1] += tx.getAmount();
         }
+        // Tiền hoàn tính theo ngày HOÀN, không theo ngày trả — mỗi khoản nằm đúng ngày phát sinh.
+        for (Transaction tx : transactionRepo.findAll(refundedBetween(from, to),
+                Sort.by(Sort.Direction.ASC, "refundedAt"))) {
+            long refund = tx.getRefundAmount() == null ? 0 : tx.getRefundAmount();
+            refundedAmount += refund;
+            refundedCount++;
+            long[] day = byDay.computeIfAbsent(tx.getRefundedAt().atZone(ClockConfig.VN).toLocalDate(),
+                    k -> new long[4]);
+            day[2]++;
+            day[3] += refund;
+        }
         List<TransactionStatsResponse.DayRow> days = byDay.entrySet().stream()
-                .map(e -> new TransactionStatsResponse.DayRow(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .map(e -> new TransactionStatsResponse.DayRow(e.getKey(), e.getValue()[0], e.getValue()[1],
+                        e.getValue()[2], e.getValue()[3], e.getValue()[1] - e.getValue()[3]))
                 .toList();
         // ponytail: gom trong bộ nhớ, chuyển sang group by SQL khi > vài chục nghìn dòng
-        return new TransactionStatsResponse(count, paidAmount, days);
+        return new TransactionStatsResponse(count, paidAmount, refundedAmount, paidAmount - refundedAmount,
+                refundedCount, days);
+    }
+
+    @Override
+    @Transactional
+    public TransactionDetailResponse refund(long orderCode, RefundRequest req, UUID actorId) {
+        if (req == null || req.reason() == null || req.reason().isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "cần lý do hoàn tiền");
+        }
+        if (req.reason().trim().length() > 255) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "lý do hoàn tối đa 255 ký tự");
+        }
+        // Khoá dòng như mọi đường ghi tiền: hai admin bấm hoàn cùng lúc thì người sau thấy đã hoàn.
+        Transaction tx = transactionRepo.lockByOrderCode(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
+        if (tx.getStatus() != TransactionStatus.PAID || tx.getRefundedAt() != null) {
+            throw new AppException(ErrorCode.TRANSACTION_NOT_REFUNDABLE, String.valueOf(orderCode));
+        }
+        long amount = req.amount() == null ? tx.getAmount() : req.amount();
+        if (amount <= 0 || amount > tx.getAmount()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "số tiền hoàn phải trong khoảng 1.." + tx.getAmount());
+        }
+        Account actor = accountRepo.findById(actorId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + actorId));
+
+        tx.setRefundedAt(Instant.now(clock));
+        tx.setRefundAmount(amount);
+        tx.setRefundReason(req.reason().trim());
+        tx.setRefundedBy(actor);
+
+        // Thu hồi gói của đơn: expiresOn = min(expiresOn, max(startsOn, today) − 1), giữ dòng làm lịch sử.
+        LocalDate today = LocalDate.now(clock);
+        entitlementRepo.findByTransaction_Id(tx.getId()).ifPresent(e -> {
+            LocalDate from = e.getStartsOn().isAfter(today) ? e.getStartsOn() : today;
+            LocalDate revokedOn = from.minusDays(1);
+            if (e.getExpiresOn().isAfter(revokedOn)) {
+                e.setExpiresOn(revokedOn);
+            }
+        });
+        log.info("Hoàn {}đ cho giao dịch {} bởi {} — thu hồi gói của đơn",
+                amount, orderCode, actor.getEmail());
+        return toDetail(tx);
     }
 
     /**
@@ -349,11 +409,15 @@ public class PaymentServiceImpl implements PaymentService {
      * Dựng Specification thay vì @Query kiểu (:x is null or ...) — Postgres không suy được kiểu tham số null,
      * còn H2 vẫn xanh nên lỗi chỉ lộ trên production.
      */
-    private static Specification<Transaction> filter(TransactionStatus status, String q, LocalDate from, LocalDate to) {
+    private static Specification<Transaction> filter(TransactionStatus status, String q, LocalDate from, LocalDate to,
+                                                     Boolean refunded) {
         return (root, query, cb) -> {
             List<Predicate> where = new ArrayList<>();
             if (status != null) {
                 where.add(cb.equal(root.get("status"), status));
+            }
+            if (refunded != null) {
+                where.add(refunded ? cb.isNotNull(root.get("refundedAt")) : cb.isNull(root.get("refundedAt")));
             }
             if (q != null && !q.isBlank()) {
                 String term = q.trim();
@@ -388,6 +452,23 @@ public class PaymentServiceImpl implements PaymentService {
             }
             if (to != null) {
                 where.add(cb.lessThan(root.get("paidAt"), to.plusDays(1).atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            return cb.and(where.toArray(new Predicate[0]));
+        };
+    }
+
+    /** Tiền hoàn tính theo ngày HOÀN (refundedAt, giờ VN) — mỗi khoản nằm đúng ngày phát sinh. */
+    private static Specification<Transaction> refundedBetween(LocalDate from, LocalDate to) {
+        return (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            where.add(cb.isNotNull(root.get("refundedAt")));
+            if (from != null) {
+                where.add(cb.greaterThanOrEqualTo(root.get("refundedAt"),
+                        from.atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            if (to != null) {
+                where.add(cb.lessThan(root.get("refundedAt"),
+                        to.plusDays(1).atStartOfDay(ClockConfig.VN).toInstant()));
             }
             return cb.and(where.toArray(new Predicate[0]));
         };
@@ -534,13 +615,17 @@ public class PaymentServiceImpl implements PaymentService {
     static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
-                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote());
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(),
+                tx.getRefundedAt(), tx.getRefundAmount(), tx.getRefundReason(),
+                tx.getRefundedBy() == null ? null : tx.getRefundedBy().getEmail());
     }
 
     private static TransactionDetailResponse toDetail(Transaction tx) {
         return new TransactionDetailResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
                 tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(),
-                tx.getGatewayRef(), tx.getTransferNote(), tx.getExpiresAt());
+                tx.getGatewayRef(), tx.getTransferNote(), tx.getExpiresAt(),
+                tx.getRefundedAt(), tx.getRefundAmount(), tx.getRefundReason(),
+                tx.getRefundedBy() == null ? null : tx.getRefundedBy().getEmail());
     }
 }
