@@ -9,9 +9,11 @@ import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
+import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.RunState;
 import com.doan.game.entity.RoleGrantLog;
+import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -28,9 +30,14 @@ import com.doan.game.service.AdminService;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -152,11 +159,10 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminAccountResponse> listAccounts(String q, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        Page<Account> pageResult = q == null || q.isBlank()
-                ? accountRepo.findAllByOrderByEmailAsc(pageable)
-                : accountRepo.search("%" + q.trim().toLowerCase(Locale.ROOT) + "%", pageable);
+    public PageResponse<AdminAccountResponse> listAccounts(String q, Role role, PlanKind plan, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Direction.ASC, "email"));
+        Page<Account> pageResult = accountRepo.findAll(accountFilter(q, role, plan), pageable);
         List<Account> accounts = pageResult.getContent();
         if (accounts.isEmpty()) return PageResponse.of(pageResult, List.of());
         // Vai, gói, slot, tiến độ của cả trang: 4 truy vấn gom theo id, không tra từng người.
@@ -206,6 +212,38 @@ public class AdminServiceImpl implements AdminService {
     }
 
     // ---- phụ trợ ----
+
+    /**
+     * Lọc danh sách tài khoản: q (email / tên hiển thị), vai nội bộ và gói còn hạn.
+     * Hai điều kiện sau dựng bằng subquery exists để không nhân dòng khi một người có nhiều vai / nhiều gói.
+     * "Còn hạn" tính theo ngày VN, cùng mốc với EntitlementService: startsOn ≤ hôm nay ≤ expiresOn.
+     */
+    private Specification<Account> accountFilter(String q, Role role, PlanKind plan) {
+        return (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
+                where.add(cb.or(cb.like(cb.lower(root.get("email")), like),
+                        cb.like(cb.lower(cb.coalesce(root.<String>get("displayName"), "")), like)));
+            }
+            if (role != null) {
+                Subquery<UUID> sub = query.subquery(UUID.class);
+                Root<AccountRole> ar = sub.from(AccountRole.class);
+                sub.select(ar.get("id")).where(cb.equal(ar.get("account"), root), cb.equal(ar.get("role"), role));
+                where.add(cb.exists(sub));
+            }
+            if (plan != null) {
+                LocalDate today = LocalDate.now(clock);
+                Subquery<UUID> sub = query.subquery(UUID.class);
+                Root<Entitlement> e = sub.from(Entitlement.class);
+                sub.select(e.get("id")).where(cb.equal(e.get("account"), root), cb.equal(e.get("kind"), plan),
+                        cb.lessThanOrEqualTo(e.get("startsOn"), today),
+                        cb.greaterThanOrEqualTo(e.get("expiresOn"), today));
+                where.add(cb.exists(sub));
+            }
+            return cb.and(where.toArray(new Predicate[0]));
+        };
+    }
 
     /** Kiểm dữ liệu vào một chỗ: thiếu trường, vai lạ, vai suy ra → 1001 kèm lý do. Chữ thường vẫn nhận. */
     private static Role internalRole(GrantRoleRequest req) {

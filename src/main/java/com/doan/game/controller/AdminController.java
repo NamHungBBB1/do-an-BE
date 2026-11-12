@@ -110,12 +110,15 @@ public class AdminController {
     }
 
     // ---- danh sách mọi tài khoản (Hưng 25/10, trang phân quyền) ----
-    /** Xếp theo email, q lọc email / tên; mỗi dòng kèm vai, gói, slot (không thông tin cá nhân của trẻ). Trả kèm tổng số. */
+    /** Xếp theo email; q lọc email / tên, role lọc vai nội bộ, plan lọc gói còn hạn. Trả kèm tổng số. */
     @GetMapping("/accounts/list")
-    public ApiResponse<PageResponse<AdminAccountResponse>> listAccounts(@RequestParam(required = false) String q,
-                                                               @RequestParam(defaultValue = "0") int page,
-                                                               @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(adminService.listAccounts(q, page, size));
+    public ApiResponse<PageResponse<AdminAccountResponse>> listAccounts(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) com.doan.game.enums.Role role,
+            @RequestParam(required = false) com.doan.game.enums.PlanKind plan,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(adminService.listAccounts(q, role, plan, page, size));
     }
 
     // ---- tra tài khoản (tối 15/10) ----

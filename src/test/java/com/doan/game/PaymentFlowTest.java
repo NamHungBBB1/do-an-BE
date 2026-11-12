@@ -377,6 +377,16 @@ class PaymentFlowTest {
                         .value(org.hamcrest.Matchers.hasItem(greaterThanOrEqualTo(1))))
                 .andExpect(jsonPath("$.result.byDay[?(@.date == '" + paidDate + "')].paidAmount")
                         .value(org.hamcrest.Matchers.hasItem(greaterThanOrEqualTo((int) PRICE))));
+
+        // plan lọc người đang có gói còn hạn: người vừa mua PARENT có mặt, TEACHER thì không.
+        mvc.perform(get("/api/admin/accounts/list").param("q", buyer.email()).param("plan", "PARENT").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.items[0].email").value(buyer.email()))
+                .andExpect(jsonPath("$.result.items[0].plans[0]").value("PARENT"));
+        mvc.perform(get("/api/admin/accounts/list").param("q", buyer.email()).param("plan", "TEACHER").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
     }
 
     // ------------------------------------------------------------------ history

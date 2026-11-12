@@ -311,6 +311,18 @@ class AdminRoleFlowTest {
         mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("page", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.items").isEmpty());
+        // role lọc đúng người giữ vai đó; người không giữ thì không lọt vào.
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("role", "GAME_EDITOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.items[0].id").value(editor.getId().toString()));
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("role", "GAME_MANAGER"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+        // plan: chưa ai trong nhóm này có gói còn hạn.
+        mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("plan", "PARENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
         // Không q: danh sách chung vẫn chạy (DB test dùng chung nên không đếm tổng).
         mvc.perform(get("/api/admin/accounts/list").with(asAdmin))
                 .andExpect(status().isOk())

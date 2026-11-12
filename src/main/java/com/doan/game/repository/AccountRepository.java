@@ -2,9 +2,8 @@ package com.doan.game.repository;
 
 import com.doan.game.entity.Account;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,7 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface AccountRepository extends JpaRepository<Account, UUID> {
+public interface AccountRepository extends JpaRepository<Account, UUID>, JpaSpecificationExecutor<Account> {
 
     /** Email không phân biệt hoa thường: "A@b.vn" và "a@b.vn" là một tài khoản. */
     Optional<Account> findByEmailIgnoreCase(String email);
@@ -33,19 +32,6 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     Optional<Account> lockById(@Param("id") UUID id);
 
     boolean existsByEmailIgnoreCase(String email);
-
-    /** Danh sách mọi tài khoản cho trang phân quyền (25/10): xếp theo email, phân trang kèm tổng số. */
-    Page<Account> findAllByOrderByEmailAsc(Pageable p);
-
-    /**
-     * Như trên nhưng lọc: email hoặc tên hiển thị chứa q (q đã viết thường, đã bọc %).
-     * countQuery viết tường minh: câu chính có order by, để Spring tự suy dễ ra câu đếm sai.
-     */
-    @Query(value = "select a from Account a where lower(a.email) like :q "
-            + "or lower(coalesce(a.displayName, '')) like :q order by a.email",
-            countQuery = "select count(a) from Account a where lower(a.email) like :q "
-                    + "or lower(coalesce(a.displayName, '')) like :q")
-    Page<Account> search(@Param("q") String q, Pageable p);
 
     /**
      * Sai mật khẩu: tăng bộ đếm bằng MỘT câu UPDATE trong DB — N request song song không thể cùng đọc 0

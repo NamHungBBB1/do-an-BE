@@ -27,10 +27,12 @@ public interface AdminService {
 
     /**
      * Mọi tài khoản (trang phân quyền, Hưng 25/10), xếp theo email; q lọc email / tên hiển thị, không phân biệt hoa thường.
+     * role lọc người giữ vai nội bộ đó; plan lọc người đang có gói đó còn hạn (tính theo ngày VN).
      * Mỗi dòng kèm vai, gói còn hạn và slot — slot KHÔNG có tên, mã đăng nhập, huy hiệu của trẻ.
      * page < 0 → 0, size kẹp 1..100; trả kèm tổng số dòng / số trang.
      */
-    PageResponse<AdminAccountResponse> listAccounts(String q, int page, int size);
+    PageResponse<AdminAccountResponse> listAccounts(String q, com.doan.game.enums.Role role,
+                                                    com.doan.game.enums.PlanKind plan, int page, int size);
 
     /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100; trả kèm tổng số. */
     PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
