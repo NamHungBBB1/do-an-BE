@@ -4,6 +4,7 @@ import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
 import com.doan.game.DTO.response.AdminSlotResponse;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.entity.Account;
@@ -27,6 +28,7 @@ import com.doan.game.service.AdminService;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -150,12 +152,13 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminAccountResponse> listAccounts(String q, int page, int size) {
+    public PageResponse<AdminAccountResponse> listAccounts(String q, int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        List<Account> accounts = q == null || q.isBlank()
+        Page<Account> pageResult = q == null || q.isBlank()
                 ? accountRepo.findAllByOrderByEmailAsc(pageable)
                 : accountRepo.search("%" + q.trim().toLowerCase(Locale.ROOT) + "%", pageable);
-        if (accounts.isEmpty()) return List.of();
+        List<Account> accounts = pageResult.getContent();
+        if (accounts.isEmpty()) return PageResponse.of(pageResult, List.of());
         // Vai, gói, slot, tiến độ của cả trang: 4 truy vấn gom theo id, không tra từng người.
         List<UUID> ids = accounts.stream().map(Account::getId).toList();
         Map<UUID, List<String>> roles = new HashMap<>();
@@ -182,23 +185,24 @@ public class AdminServiceImpl implements AdminService {
                     run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone()),
                     run == null ? null : run.getAttemptIndex(), run == null ? null : run.getUpdatedAt()));
         }
-        return accounts.stream().map(a -> new AdminAccountResponse(a.getId(), a.getEmail(), a.getDisplayName(),
+        return PageResponse.of(pageResult, accounts.stream().map(a -> new AdminAccountResponse(a.getId(), a.getEmail(), a.getDisplayName(),
                 plans.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
                 roles.getOrDefault(a.getId(), List.of()).stream().sorted().toList(),
-                a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList();
+                a.getCreatedAt(), slots.getOrDefault(a.getId(), List.of()))).toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size) {
-        // Cùng cách kẹp trang với giao dịch: page < 0 → 0, size 1..100; không trả tổng, FE lật tới khi rỗng.
+    public PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size) {
+        // Cùng cách kẹp trang với giao dịch: page < 0 → 0, size 1..100; trả kèm tổng số dòng.
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        List<RoleGrantLog> rows = subjectId == null
+        Page<RoleGrantLog> pageResult = subjectId == null
                 ? roleGrantLogRepo.findAllByOrderByCreatedAtDesc(pageable)
                 : roleGrantLogRepo.findByTarget_IdOrderByCreatedAtDesc(subjectId, pageable);
-        return rows.stream().map(l -> new RoleGrantLogResponse(l.getId(), l.getActor().getId(), l.getActor().getEmail(),
+        return PageResponse.of(pageResult, pageResult.getContent().stream().map(l -> new RoleGrantLogResponse(
+                l.getId(), l.getActor().getId(), l.getActor().getEmail(),
                 l.getTarget().getId(), l.getTarget().getEmail(), l.getRole(), l.isGranted(), l.getReason(),
-                l.getCreatedAt())).toList();
+                l.getCreatedAt())).toList());
     }
 
     // ---- phụ trợ ----

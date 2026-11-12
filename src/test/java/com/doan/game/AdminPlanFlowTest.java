@@ -101,6 +101,7 @@ class AdminPlanFlowTest {
         mvc.perform(get("/api/admin/transactions")
                         .with(jwt().authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result").isArray());
+                .andExpect(jsonPath("$.result.items").isArray())
+                .andExpect(jsonPath("$.result.totalElements").isNumber());
     }
 }

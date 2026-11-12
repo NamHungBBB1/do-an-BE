@@ -1,6 +1,7 @@
 package com.doan.game.service;
 
 import com.doan.game.DTO.request.BuyPlanRequest;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
@@ -40,8 +41,8 @@ public interface PaymentService {
 
     void sweepPendingTransactions();
 
-    /** Admin: bảng giao dịch, mới nhất trước; status null = tất cả. */
-    List<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size);
+    /** Admin: bảng giao dịch, mới nhất trước; status null = tất cả; trả kèm tổng số dòng / số trang. */
+    PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size);
 
     /** Admin: hỏi lại PayOS cho một giao dịch (chỉ có tác dụng khi còn PENDING). */
     PaymentStatusResponse reconcile(long orderCode);

@@ -278,20 +278,21 @@ class AdminRoleFlowTest {
         // q lọc theo email, không phân biệt hoa thường; xếp theo email.
         String json = mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag.toUpperCase(Locale.ROOT)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.length()").value(2))
-                .andExpect(jsonPath("$.result[0].id").value(parent.getId().toString()))
-                .andExpect(jsonPath("$.result[0].slots[0].id").value(s.getId().toString()))
-                .andExpect(jsonPath("$.result[0].slots[0].groupId").value(g.getId().toString()))
-                .andExpect(jsonPath("$.result[0].slots[0].context").value("FAMILY"))
-                .andExpect(jsonPath("$.result[0].slots[0].status").value("ACTIVE"))
-                .andExpect(jsonPath("$.result[0].slots[0].locked").value(false))
-                .andExpect(jsonPath("$.result[0].slots[0].chaptersDone[1]").value(2))   // trẻ chơi tới đâu
-                .andExpect(jsonPath("$.result[0].slots[0].attemptIndex").value(1))
-                .andExpect(jsonPath("$.result[0].slots[0].lastPlayedAt").value("2026-10-25T10:00:00Z"))
-                .andExpect(jsonPath("$.result[0].roles").isEmpty())
-                .andExpect(jsonPath("$.result[1].id").value(editor.getId().toString()))
-                .andExpect(jsonPath("$.result[1].roles[0]").value("GAME_EDITOR"))
-                .andExpect(jsonPath("$.result[1].slots").isEmpty())
+                .andExpect(jsonPath("$.result.totalElements").value(2))
+                .andExpect(jsonPath("$.result.items.length()").value(2))
+                .andExpect(jsonPath("$.result.items[0].id").value(parent.getId().toString()))
+                .andExpect(jsonPath("$.result.items[0].slots[0].id").value(s.getId().toString()))
+                .andExpect(jsonPath("$.result.items[0].slots[0].groupId").value(g.getId().toString()))
+                .andExpect(jsonPath("$.result.items[0].slots[0].context").value("FAMILY"))
+                .andExpect(jsonPath("$.result.items[0].slots[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.result.items[0].slots[0].locked").value(false))
+                .andExpect(jsonPath("$.result.items[0].slots[0].chaptersDone[1]").value(2))   // trẻ chơi tới đâu
+                .andExpect(jsonPath("$.result.items[0].slots[0].attemptIndex").value(1))
+                .andExpect(jsonPath("$.result.items[0].slots[0].lastPlayedAt").value("2026-10-25T10:00:00Z"))
+                .andExpect(jsonPath("$.result.items[0].roles").isEmpty())
+                .andExpect(jsonPath("$.result.items[1].id").value(editor.getId().toString()))
+                .andExpect(jsonPath("$.result.items[1].roles[0]").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result.items[1].slots").isEmpty())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         // Thông tin cá nhân của trẻ không bao giờ ra khỏi API này.
         assertFalse(json.contains("Ten Cua Be"));
@@ -301,15 +302,19 @@ class AdminRoleFlowTest {
         // Phân trang: size 1, trang 2 = người thứ hai; trang quá cuối = rỗng.
         mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("page", "1").param("size", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.length()").value(1))
-                .andExpect(jsonPath("$.result[0].id").value(editor.getId().toString()));
+                .andExpect(jsonPath("$.result.totalElements").value(2))
+                .andExpect(jsonPath("$.result.totalPages").value(2))
+                .andExpect(jsonPath("$.result.page").value(1))
+                .andExpect(jsonPath("$.result.size").value(1))
+                .andExpect(jsonPath("$.result.items.length()").value(1))
+                .andExpect(jsonPath("$.result.items[0].id").value(editor.getId().toString()));
         mvc.perform(get("/api/admin/accounts/list").with(asAdmin).param("q", tag).param("page", "5"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result").isEmpty());
+                .andExpect(jsonPath("$.result.items").isEmpty());
         // Không q: danh sách chung vẫn chạy (DB test dùng chung nên không đếm tổng).
         mvc.perform(get("/api/admin/accounts/list").with(asAdmin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result").isNotEmpty());
+                .andExpect(jsonPath("$.result.items").isNotEmpty());
         mvc.perform(get("/api/admin/accounts/list").with(as(parent, "SCOPE_PARENT", "TYP_ACCOUNT")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
@@ -330,18 +335,19 @@ class AdminRoleFlowTest {
         // Lọc theo người: đúng 2 dòng, mới nhất trước, đủ ai làm / với ai / vai / cấp hay thu / lý do.
         mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("subjectId", lan.getId().toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.length()").value(2))
-                .andExpect(jsonPath("$.result[0].granted").value(false))
-                .andExpect(jsonPath("$.result[0].reason").value("xong viec"))
-                .andExpect(jsonPath("$.result[0].role").value("GAME_EDITOR"))
-                .andExpect(jsonPath("$.result[0].actorEmail").value(admin.getEmail()))
-                .andExpect(jsonPath("$.result[0].targetEmail").value(lan.getEmail()))
-                .andExpect(jsonPath("$.result[1].granted").value(true))
-                .andExpect(jsonPath("$.result[1].reason").value("soan chuong 5"));
+                .andExpect(jsonPath("$.result.totalElements").value(2))
+                .andExpect(jsonPath("$.result.items.length()").value(2))
+                .andExpect(jsonPath("$.result.items[0].granted").value(false))
+                .andExpect(jsonPath("$.result.items[0].reason").value("xong viec"))
+                .andExpect(jsonPath("$.result.items[0].role").value("GAME_EDITOR"))
+                .andExpect(jsonPath("$.result.items[0].actorEmail").value(admin.getEmail()))
+                .andExpect(jsonPath("$.result.items[0].targetEmail").value(lan.getEmail()))
+                .andExpect(jsonPath("$.result.items[1].granted").value(true))
+                .andExpect(jsonPath("$.result.items[1].reason").value("soan chuong 5"));
         // Không lọc: DB test dùng chung nên không đếm tổng; chỉ kiểm size=0 bị kẹp về 1.
         mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("size", "0"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.length()").value(1));
+                .andExpect(jsonPath("$.result.items.length()").value(1));
         // subjectId không phải UUID → 1001; người thường → 403.
         mvc.perform(get("/api/admin/roles/log").with(asAdmin).param("subjectId", "abc"))
                 .andExpect(status().isBadRequest())

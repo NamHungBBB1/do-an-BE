@@ -5,6 +5,7 @@ import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
@@ -43,9 +44,9 @@ public class AdminController {
     }
 
     // ---- giao dịch ----
-    /** Mới nhất trước. Không trả tổng số dòng: FE lật trang tới khi nhận danh sách rỗng. */
+    /** Mới nhất trước. Trả kèm tổng số dòng / số trang để FE biết còn bao nhiêu trang. */
     @GetMapping("/transactions")
-    public ApiResponse<List<TransactionAdminResponse>> listTransactions(
+    public ApiResponse<PageResponse<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -79,18 +80,18 @@ public class AdminController {
         return ApiResponse.ok(adminService.listInternalAccounts());
     }
 
-    /** Sổ cấp / thu vai: mới nhất trước, lọc theo subjectId nếu có; không trả tổng, FE lật trang tới khi rỗng. */
+    /** Sổ cấp / thu vai: mới nhất trước, lọc theo subjectId nếu có; trả kèm tổng số dòng / số trang. */
     @GetMapping("/roles/log")
-    public ApiResponse<List<RoleGrantLogResponse>> listRoleLog(@RequestParam(required = false) UUID subjectId,
+    public ApiResponse<PageResponse<RoleGrantLogResponse>> listRoleLog(@RequestParam(required = false) UUID subjectId,
                                                               @RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "50") int size) {
         return ApiResponse.ok(adminService.listRoleLog(subjectId, page, size));
     }
 
     // ---- danh sách mọi tài khoản (Hưng 25/10, trang phân quyền) ----
-    /** Xếp theo email, q lọc email / tên; mỗi dòng kèm vai, gói, slot (không thông tin cá nhân của trẻ). Không trả tổng. */
+    /** Xếp theo email, q lọc email / tên; mỗi dòng kèm vai, gói, slot (không thông tin cá nhân của trẻ). Trả kèm tổng số. */
     @GetMapping("/accounts/list")
-    public ApiResponse<List<AdminAccountResponse>> listAccounts(@RequestParam(required = false) String q,
+    public ApiResponse<PageResponse<AdminAccountResponse>> listAccounts(@RequestParam(required = false) String q,
                                                                @RequestParam(defaultValue = "0") int page,
                                                                @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(adminService.listAccounts(q, page, size));

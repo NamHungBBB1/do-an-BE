@@ -279,7 +279,7 @@ class PaymentFlowTest {
         mvc.perform(webhook(signedWebhook(orderCode, PRICE - 1000, "00", CHECKSUM_KEY))).andExpect(status().isOk());
 
         assertThat(entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id())).isEmpty();
-        String row = "$.result[?(@.orderCode == " + orderCode + ")]";
+        String row = "$.result.items[?(@.orderCode == " + orderCode + ")]";
         mvc.perform(get("/api/admin/transactions").param("status", "PENDING").param("size", "100").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(row + ".status").value("PENDING"))

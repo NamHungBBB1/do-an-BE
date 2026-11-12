@@ -28,11 +28,11 @@ public interface AdminService {
     /**
      * Mọi tài khoản (trang phân quyền, Hưng 25/10), xếp theo email; q lọc email / tên hiển thị, không phân biệt hoa thường.
      * Mỗi dòng kèm vai, gói còn hạn và slot — slot KHÔNG có tên, mã đăng nhập, huy hiệu của trẻ.
-     * page < 0 → 0, size kẹp 1..100, không trả tổng (FE lật tới khi rỗng).
+     * page < 0 → 0, size kẹp 1..100; trả kèm tổng số dòng / số trang.
      */
-    List<AdminAccountResponse> listAccounts(String q, int page, int size);
+    PageResponse<AdminAccountResponse> listAccounts(String q, int page, int size);
 
-    /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100, không trả tổng. */
-    List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
+    /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100; trả kèm tổng số. */
+    PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
 
 }

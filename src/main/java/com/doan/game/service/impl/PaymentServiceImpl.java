@@ -1,6 +1,7 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.BuyPlanRequest;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
@@ -284,12 +285,12 @@ public class PaymentServiceImpl implements PaymentService {
     // ------------------------------------------------------------------ admin
     @Override
     @Transactional(readOnly = true)
-    public List<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size) {
+    public PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         var result = status == null
                 ? transactionRepo.findAllByOrderByCreatedAtDesc(pageable)
                 : transactionRepo.findByStatusOrderByCreatedAtDesc(status, pageable);
-        return result.map(PaymentServiceImpl::toAdmin).getContent();
+        return PageResponse.of(result, PaymentServiceImpl::toAdmin);
     }
 
     @Override
