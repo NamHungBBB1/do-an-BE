@@ -11,15 +11,19 @@ import com.doan.game.DTO.response.PlanResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
+import com.doan.game.DTO.response.TransactionDetailResponse;
+import com.doan.game.DTO.response.TransactionStatsResponse;
 import com.doan.game.enums.TransactionStatus;
 import com.doan.game.service.AdminService;
 import com.doan.game.service.PaymentService;
 import com.doan.game.service.PlanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,13 +48,30 @@ public class AdminController {
     }
 
     // ---- giao dịch ----
-    /** Mới nhất trước. Trả kèm tổng số dòng / số trang để FE biết còn bao nhiêu trang. */
+    /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email) và khoảng ngày. Trả kèm tổng số trang. */
     @GetMapping("/transactions")
     public ApiResponse<PageResponse<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(paymentService.listTransactions(status, page, size));
+        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, page, size));
+    }
+
+    /** Thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */
+    @GetMapping("/transactions/stats")
+    public ApiResponse<TransactionStatsResponse> transactionStats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiResponse.ok(paymentService.stats(from, to));
+    }
+
+    /** Chi tiết một giao dịch theo orderCode; không có → 4005. */
+    @GetMapping("/transactions/{orderCode:\\d+}")
+    public ApiResponse<TransactionDetailResponse> getTransaction(@PathVariable long orderCode) {
+        return ApiResponse.ok(paymentService.getTransaction(orderCode));
     }
 
     /** Hỏi lại PayOS ngay cho một giao dịch còn PENDING (khi nghi webhook không tới). */

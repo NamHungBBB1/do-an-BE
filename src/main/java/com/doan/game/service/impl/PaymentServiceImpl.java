@@ -5,6 +5,9 @@ import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
+import com.doan.game.DTO.response.TransactionDetailResponse;
+import com.doan.game.DTO.response.TransactionStatsResponse;
+import com.doan.game.configuration.ClockConfig;
 import com.doan.game.configuration.PayOsProperties;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
@@ -24,6 +27,7 @@ import com.doan.game.service.EntitlementFactory;
 import com.doan.game.service.OutgoingMail;
 import com.doan.game.service.PaymentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +35,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +53,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.time.Duration;
 import com.doan.game.enums.Role;
 import com.doan.game.repository.AccountRoleRepository;
@@ -285,12 +295,102 @@ public class PaymentServiceImpl implements PaymentService {
     // ------------------------------------------------------------------ admin
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        var result = status == null
-                ? transactionRepo.findAllByOrderByCreatedAtDesc(pageable)
-                : transactionRepo.findByStatusOrderByCreatedAtDesc(status, pageable);
-        return PageResponse.of(result, PaymentServiceImpl::toAdmin);
+    public PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
+                                                                   LocalDate from, LocalDate to, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "orderCode")));
+        return PageResponse.of(transactionRepo.findAll(filter(status, q, from, to), pageable),
+                PaymentServiceImpl::toAdmin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TransactionDetailResponse getTransaction(long orderCode) {
+        Transaction tx = transactionRepo.findByOrderCode(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
+        return toDetail(tx);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TransactionStatsResponse stats(LocalDate from, LocalDate to) {
+        Map<String, Long> count = new LinkedHashMap<>();
+        for (TransactionStatus s : TransactionStatus.values()) {
+            count.put(s.name(), 0L);
+        }
+        // Chốt với bot 12/11: đơn chưa trả tính theo ngày TẠO, đơn đã trả tính theo ngày TRẢ.
+        // Đơn tạo tháng trước mà trả tháng này thì thuộc tháng này — đúng kỳ doanh thu.
+        for (Transaction tx : transactionRepo.findAll(filter(null, null, from, to),
+                Sort.by(Sort.Direction.DESC, "createdAt"))) {
+            if (tx.getStatus() != TransactionStatus.PAID) {
+                count.merge(tx.getStatus().name(), 1L, Long::sum);
+            }
+        }
+        long paidAmount = 0;
+        Map<LocalDate, long[]> byDay = new TreeMap<>();
+        for (Transaction tx : transactionRepo.findAll(paidBetween(from, to),
+                Sort.by(Sort.Direction.ASC, "paidAt"))) {
+            count.merge(TransactionStatus.PAID.name(), 1L, Long::sum);
+            paidAmount += tx.getAmount();
+            long[] day = byDay.computeIfAbsent(tx.getPaidAt().atZone(ClockConfig.VN).toLocalDate(),
+                    k -> new long[2]);
+            day[0]++;
+            day[1] += tx.getAmount();
+        }
+        List<TransactionStatsResponse.DayRow> days = byDay.entrySet().stream()
+                .map(e -> new TransactionStatsResponse.DayRow(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+        // ponytail: gom trong bộ nhớ, chuyển sang group by SQL khi > vài chục nghìn dòng
+        return new TransactionStatsResponse(count, paidAmount, days);
+    }
+
+    /**
+     * Bộ lọc admin: trạng thái, từ khoá (toàn số = orderCode, còn lại = email) và khoảng ngày theo giờ VN.
+     * Dựng Specification thay vì @Query kiểu (:x is null or ...) — Postgres không suy được kiểu tham số null,
+     * còn H2 vẫn xanh nên lỗi chỉ lộ trên production.
+     */
+    private static Specification<Transaction> filter(TransactionStatus status, String q, LocalDate from, LocalDate to) {
+        return (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            if (status != null) {
+                where.add(cb.equal(root.get("status"), status));
+            }
+            if (q != null && !q.isBlank()) {
+                String term = q.trim();
+                if (term.chars().allMatch(Character::isDigit)) {
+                    try {
+                        where.add(cb.equal(root.get("orderCode"), Long.valueOf(term)));
+                    } catch (NumberFormatException tooLong) {
+                        where.add(cb.disjunction());
+                    }
+                } else {
+                    where.add(cb.like(cb.lower(root.get("account").get("email")),
+                            "%" + term.toLowerCase(Locale.ROOT) + "%"));
+                }
+            }
+            if (from != null) {
+                where.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from.atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            if (to != null) {
+                where.add(cb.lessThan(root.get("createdAt"), to.plusDays(1).atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            return cb.and(where.toArray(new Predicate[0]));
+        };
+    }
+
+    /** Doanh thu tính theo ngày TRẢ (paidAt, giờ VN), không theo ngày tạo — chốt với bot 12/11. */
+    private static Specification<Transaction> paidBetween(LocalDate from, LocalDate to) {
+        return (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            where.add(cb.equal(root.get("status"), TransactionStatus.PAID));
+            if (from != null) {
+                where.add(cb.greaterThanOrEqualTo(root.get("paidAt"), from.atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            if (to != null) {
+                where.add(cb.lessThan(root.get("paidAt"), to.plusDays(1).atStartOfDay(ClockConfig.VN).toInstant()));
+            }
+            return cb.and(where.toArray(new Predicate[0]));
+        };
     }
 
     @Override
@@ -434,5 +534,12 @@ public class PaymentServiceImpl implements PaymentService {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
                 tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote());
+    }
+
+    private static TransactionDetailResponse toDetail(Transaction tx) {
+        return new TransactionDetailResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
+                tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(),
+                tx.getGatewayRef(), tx.getTransferNote(), tx.getExpiresAt());
     }
 }

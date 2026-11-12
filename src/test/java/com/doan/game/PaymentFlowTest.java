@@ -38,11 +38,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -294,6 +296,87 @@ class PaymentFlowTest {
         mvc.perform(get("/api/admin/transactions").header("Authorization", "Bearer " + buyer.token()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    /** ADM-2: lọc theo orderCode / email / khoảng ngày, xem chi tiết một đơn, mã lạ → 4005, người thường → 403. */
+    @Test
+    void adminFiltersTransactionsReadsDetailAndServesStats() throws Exception {
+        Buyer buyer = buyer("filter");
+        long orderCode = buy(buyer.token());
+        String today = LocalDate.now(ClockConfig.VN).toString();
+        String tomorrow = LocalDate.now(ClockConfig.VN).plusDays(1).toString();
+
+        // q toàn số = orderCode; q còn lại = email, không phân biệt hoa thường.
+        mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode)).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.items[0].orderCode").value(orderCode))
+                .andExpect(jsonPath("$.result.items[0].status").value("PENDING"));
+        mvc.perform(get("/api/admin/transactions").param("q", buyer.email().toUpperCase(Locale.ROOT)).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.items[0].orderCode").value(orderCode));
+
+        // Khoảng ngày tính theo giờ VN: hôm nay có, ngày mai không.
+        mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
+                        .param("from", today).param("to", today).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(1));
+        mvc.perform(get("/api/admin/transactions").param("q", String.valueOf(orderCode))
+                        .param("from", tomorrow).param("to", tomorrow).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalElements").value(0));
+
+        // Chi tiết: thêm gatewayRef / transferNote / expiresAt so với dòng trong bảng.
+        mvc.perform(get("/api/admin/transactions/" + orderCode).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.orderCode").value(orderCode))
+                .andExpect(jsonPath("$.result.email").value(buyer.email()))
+                .andExpect(jsonPath("$.result.status").value("PENDING"))
+                .andExpect(jsonPath("$.result.gatewayRef").value("link-" + orderCode))
+                .andExpect(jsonPath("$.result.transferNote").isNotEmpty())
+                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+        mvc.perform(get("/api/admin/transactions/1").with(admin()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(4005));
+
+        // Thống kê: đếm theo trạng thái, byDay là mảng (dữ liệu H2 dùng chung nên chỉ so sàn).
+        mvc.perform(get("/api/admin/transactions/stats").param("from", today).param("to", today).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.count.PENDING").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.result.count.PAID").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.byDay").isArray());
+
+        // Hai đường mới cũng khoá SCOPE_ADMIN.
+        mvc.perform(get("/api/admin/transactions/" + orderCode)
+                        .header("Authorization", "Bearer " + buyer.token()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(get("/api/admin/transactions/stats")
+                        .header("Authorization", "Bearer " + buyer.token()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+    }
+
+    /** ADM-3: doanh thu trong stats cộng đơn PAID và gom đúng ngày Việt Nam. */
+    @Test
+    void adminStatsAddsPaidRevenueAndGroupsByDay() throws Exception {
+        Buyer buyer = buyer("stats");
+        long orderCode = buy(buyer.token());
+        mvc.perform(webhook(signedWebhook(orderCode, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+
+        // Webhook test ký với transactionDateTime cố định "2026-10-28 10:00:00" → paidAt = 2026-10-28.
+        // Doanh thu tính theo ngày TRẢ, nên lọc đúng ngày đó chứ không phải hôm nay.
+        String paidDate = "2026-10-28";
+        mvc.perform(get("/api/admin/transactions/stats").param("from", paidDate).param("to", paidDate).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.count.PAID").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.result.paidAmount").value(greaterThanOrEqualTo((int) PRICE)))
+                .andExpect(jsonPath("$.result.byDay[?(@.date == '" + paidDate + "')]").isNotEmpty())
+                .andExpect(jsonPath("$.result.byDay[?(@.date == '" + paidDate + "')].paidCount")
+                        .value(org.hamcrest.Matchers.hasItem(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$.result.byDay[?(@.date == '" + paidDate + "')].paidAmount")
+                        .value(org.hamcrest.Matchers.hasItem(greaterThanOrEqualTo((int) PRICE))));
     }
 
     // ------------------------------------------------------------------ history

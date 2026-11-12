@@ -5,8 +5,11 @@ import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
+import com.doan.game.DTO.response.TransactionDetailResponse;
+import com.doan.game.DTO.response.TransactionStatsResponse;
 import com.doan.game.enums.TransactionStatus;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,8 +44,15 @@ public interface PaymentService {
 
     void sweepPendingTransactions();
 
-    /** Admin: bảng giao dịch, mới nhất trước; status null = tất cả; trả kèm tổng số dòng / số trang. */
-    PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, int page, int size);
+    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá và khoảng ngày, trả kèm tổng số trang. */
+    PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
+                                                            LocalDate from, LocalDate to, int page, int size);
+
+    /** Admin: chi tiết một giao dịch theo orderCode; không có → 4005. */
+    TransactionDetailResponse getTransaction(long orderCode);
+
+    /** Admin: thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */
+    TransactionStatsResponse stats(LocalDate from, LocalDate to);
 
     /** Admin: hỏi lại PayOS cho một giao dịch (chỉ có tác dụng khi còn PENDING). */
     PaymentStatusResponse reconcile(long orderCode);
