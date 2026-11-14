@@ -3,22 +3,29 @@ package com.doan.game.controller;
 import com.doan.game.DTO.request.GrantRoleRequest;
 import com.doan.game.DTO.request.SetPlanPriceRequest;
 import com.doan.game.DTO.response.AccountResponse;
+import com.doan.game.DTO.response.AdminAccountDetailResponse;
 import com.doan.game.DTO.response.AdminAccountResponse;
+import com.doan.game.DTO.response.AdminDashboardResponse;
 import com.doan.game.DTO.response.ApiResponse;
+import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentStatusResponse;
 import com.doan.game.DTO.response.PlanResponse;
 import com.doan.game.DTO.response.RoleGrantLogResponse;
 import com.doan.game.DTO.response.RoleListResponse;
 import com.doan.game.DTO.response.TransactionAdminResponse;
+import com.doan.game.DTO.response.TransactionDetailResponse;
+import com.doan.game.DTO.response.TransactionStatsResponse;
 import com.doan.game.enums.TransactionStatus;
 import com.doan.game.service.AdminService;
 import com.doan.game.service.PaymentService;
 import com.doan.game.service.PlanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,13 +50,30 @@ public class AdminController {
     }
 
     // ---- giao dịch ----
-    /** Mới nhất trước. Không trả tổng số dòng: FE lật trang tới khi nhận danh sách rỗng. */
+    /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email) và khoảng ngày. Trả kèm tổng số trang. */
     @GetMapping("/transactions")
-    public ApiResponse<List<TransactionAdminResponse>> listTransactions(
+    public ApiResponse<PageResponse<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(paymentService.listTransactions(status, page, size));
+        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, page, size));
+    }
+
+    /** Thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */
+    @GetMapping("/transactions/stats")
+    public ApiResponse<TransactionStatsResponse> transactionStats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiResponse.ok(paymentService.stats(from, to));
+    }
+
+    /** Chi tiết một giao dịch theo orderCode; không có → 4005. */
+    @GetMapping("/transactions/{orderCode:\\d+}")
+    public ApiResponse<TransactionDetailResponse> getTransaction(@PathVariable long orderCode) {
+        return ApiResponse.ok(paymentService.getTransaction(orderCode));
     }
 
     /** Hỏi lại PayOS ngay cho một giao dịch còn PENDING (khi nghi webhook không tới). */
@@ -79,21 +103,36 @@ public class AdminController {
         return ApiResponse.ok(adminService.listInternalAccounts());
     }
 
-    /** Sổ cấp / thu vai: mới nhất trước, lọc theo subjectId nếu có; không trả tổng, FE lật trang tới khi rỗng. */
+    /** Sổ cấp / thu vai: mới nhất trước, lọc theo subjectId nếu có; trả kèm tổng số dòng / số trang. */
     @GetMapping("/roles/log")
-    public ApiResponse<List<RoleGrantLogResponse>> listRoleLog(@RequestParam(required = false) UUID subjectId,
+    public ApiResponse<PageResponse<RoleGrantLogResponse>> listRoleLog(@RequestParam(required = false) UUID subjectId,
                                                               @RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "50") int size) {
         return ApiResponse.ok(adminService.listRoleLog(subjectId, page, size));
     }
 
     // ---- danh sách mọi tài khoản (Hưng 25/10, trang phân quyền) ----
-    /** Xếp theo email, q lọc email / tên; mỗi dòng kèm vai, gói, slot (không thông tin cá nhân của trẻ). Không trả tổng. */
+    /** Xếp theo email; q lọc email / tên, role lọc vai nội bộ, plan lọc gói còn hạn. Trả kèm tổng số. */
     @GetMapping("/accounts/list")
-    public ApiResponse<List<AdminAccountResponse>> listAccounts(@RequestParam(required = false) String q,
-                                                               @RequestParam(defaultValue = "0") int page,
-                                                               @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(adminService.listAccounts(q, page, size));
+    public ApiResponse<PageResponse<AdminAccountResponse>> listAccounts(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) com.doan.game.enums.Role role,
+            @RequestParam(required = false) com.doan.game.enums.PlanKind plan,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(adminService.listAccounts(q, role, plan, page, size));
+    }
+
+    /** Chi tiết một tài khoản: thông tin đăng nhập, vai, lịch sử gói, 20 giao dịch mới nhất, số slot. Không có → 1003. */
+    @GetMapping("/accounts/{id}")
+    public ApiResponse<AdminAccountDetailResponse> accountDetail(@PathVariable UUID id) {
+        return ApiResponse.ok(adminService.accountDetail(id));
+    }
+
+    /** Trang tổng quan: tài khoản, slot, doanh thu, giao dịch, gói và 10 thao tác vai mới nhất. */
+    @GetMapping("/dashboard")
+    public ApiResponse<AdminDashboardResponse> dashboard() {
+        return ApiResponse.ok(adminService.dashboard());
     }
 
     // ---- tra tài khoản (tối 15/10) ----

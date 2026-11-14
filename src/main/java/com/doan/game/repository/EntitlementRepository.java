@@ -20,6 +20,19 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     /** Đã từng có gói (kể cả hết hạn) — tài khoản khách hàng, không cấp vai nội bộ (23/10). */
     boolean existsByAccount_Id(UUID accountId);
 
+    /** Số tài khoản đang có gói loại này chạy (dashboard): đếm distinct để gia hạn nhiều lần không nhân đôi. */
+    @Query("select count(distinct e.account.id) from Entitlement e "
+            + "where e.kind = :kind and e.startsOn <= :today and e.expiresOn >= :today")
+    long countActiveAccountsByKind(@Param("kind") PlanKind kind, @Param("today") LocalDate today);
+
+    /** Số dòng gói đang chạy, mọi loại (dashboard). */
+    @Query("select count(e) from Entitlement e where e.startsOn <= :today and e.expiresOn >= :today")
+    long countActive(@Param("today") LocalDate today);
+
+    /** Số gói hết hạn trong khoảng [today, until] — dashboard nhắc gia hạn 7 ngày. */
+    @Query("select count(e) from Entitlement e where e.expiresOn between :today and :until")
+    long countExpiringBetween(@Param("today") LocalDate today, @Param("until") LocalDate until);
+
     /** Gói mới nhất của một loại: gia hạn nối tiếp từ expiresOn của nó. */
     Optional<Entitlement> findTopByAccount_IdAndKindOrderByExpiresOnDesc(UUID accountId, PlanKind kind);
 

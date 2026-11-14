@@ -4,6 +4,7 @@ import com.doan.game.entity.AccountRole;
 import com.doan.game.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -27,6 +28,10 @@ public interface AccountRoleRepository extends JpaRepository<AccountRole, UUID> 
     Set<Role> INTERNAL_ROLES = Set.of(Role.ADMIN, Role.GAME_EDITOR, Role.GAME_REVIEWER, Role.GAME_MANAGER);
 
     boolean existsByAccount_IdAndRoleIn(UUID accountId, Collection<Role> roles);
+
+    /** Số tài khoản nội bộ (dashboard): distinct để một người giữ nhiều vai không bị đếm nhiều lần. */
+    @Query("select count(distinct r.account.id) from AccountRole r where r.role in :roles")
+    long countDistinctAccountsByRoleIn(@Param("roles") Collection<Role> roles);
 
     /** Tài khoản nội bộ: không mua gói, không nhận gói, không mở nhóm (3025). */
     default boolean isInternal(UUID accountId) {

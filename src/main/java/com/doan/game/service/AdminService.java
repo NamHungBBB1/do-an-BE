@@ -27,12 +27,23 @@ public interface AdminService {
 
     /**
      * Mọi tài khoản (trang phân quyền, Hưng 25/10), xếp theo email; q lọc email / tên hiển thị, không phân biệt hoa thường.
+     * role lọc người giữ vai nội bộ đó; plan lọc người đang có gói đó còn hạn (tính theo ngày VN).
      * Mỗi dòng kèm vai, gói còn hạn và slot — slot KHÔNG có tên, mã đăng nhập, huy hiệu của trẻ.
-     * page < 0 → 0, size kẹp 1..100, không trả tổng (FE lật tới khi rỗng).
+     * page < 0 → 0, size kẹp 1..100; trả kèm tổng số dòng / số trang.
      */
-    List<AdminAccountResponse> listAccounts(String q, int page, int size);
+    PageResponse<AdminAccountResponse> listAccounts(String q, com.doan.game.enums.Role role,
+                                                    com.doan.game.enums.PlanKind plan, int page, int size);
 
-    /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100, không trả tổng. */
-    List<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
+    /**
+     * Chi tiết một tài khoản: thông tin đăng nhập (providers, lần dùng gần nhất), vai nội bộ,
+     * lịch sử gói kèm nguồn cấp, 20 giao dịch mới nhất và số slot theo trạng thái. Không có → 1003.
+     */
+    AdminAccountDetailResponse accountDetail(UUID id);
+
+    /** Trang tổng quan: tài khoản, slot, doanh thu, giao dịch, gói và 10 thao tác vai mới nhất. */
+    AdminDashboardResponse dashboard();
+
+    /** Sổ cấp / thu vai, mới nhất trước; subjectId null = toàn hệ thống. page < 0 → 0, size kẹp 1..100; trả kèm tổng số. */
+    PageResponse<RoleGrantLogResponse> listRoleLog(UUID subjectId, int page, int size);
 
 }
