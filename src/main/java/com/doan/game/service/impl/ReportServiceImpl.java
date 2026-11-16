@@ -26,9 +26,9 @@ import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
+import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.ReportService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -78,6 +78,8 @@ public class ReportServiceImpl implements ReportService {
     private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
     private final ObjectMapper objectMapper;
+    private final QuizSupport support;
+    private final QuizAttemptService quizAttemptService;
     private final Clock clock;
 
     /**
@@ -104,6 +106,8 @@ public class ReportServiceImpl implements ReportService {
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
         LearnerGroup group = slot.getGroup();
         requireOwner(callerId, group);
+        // Quiz v3: chốt lượt quá giờ của nhóm trước khi đọc (giao dịch riêng — hàm này readOnly).
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
         Integer totalChapters = currentTotalChapters();
         if (totalChapters == null) {
             throw new AppException(ErrorCode.NOT_FOUND, "chưa phát hành bản nội dung nào");
@@ -137,7 +141,7 @@ public class ReportServiceImpl implements ReportService {
         List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
         for (QuizResult r : myResults) {
             resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
-                    r.getQuiz().getTitle(), r.getScore(), questionCount(r.getQuiz()),
+                    r.getQuiz().getTitle(), r.getScore(), support.questionsPerLearner(r.getQuiz()),
                     r.getSubmittedAt()));
         }
         SlotReportResponse.Quizzes quizzes = new SlotReportResponse.Quizzes(
@@ -160,6 +164,8 @@ public class ReportServiceImpl implements ReportService {
         LearnerGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
         requireOwner(callerId, group);
+        // Quiz v3: chốt lượt quá giờ của nhóm trước khi đọc (giao dịch riêng — hàm này readOnly).
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
         GroupReportResponse.GroupInfo info = new GroupReportResponse.GroupInfo(
                 group.getId(), group.getName(),
                 group.getContext() == null ? null : group.getContext().name(),
@@ -359,21 +365,6 @@ public class ReportServiceImpl implements ReportService {
     /** avg() ra Double / BigDecimal tùy H2 hay Postgres — Number là chung được cho cả hai. */
     private static Double avgOf(Object value) {
         return value == null ? null : ((Number) value).doubleValue();
-    }
-
-    /** Số câu mỗi em làm = độ dài questionIds (JSON text); đề Kiểm tra rút drawCount câu (v3). */
-    private Integer questionCount(Quiz quiz) {
-        if (quiz.getQuestionIds() == null || quiz.getQuestionIds().isBlank()) {
-            return 0;
-        }
-        try {
-            int total = objectMapper.readValue(quiz.getQuestionIds(),
-                    new TypeReference<List<UUID>>() { }).size();
-            return quiz.getMode() == com.doan.game.enums.Mode.TEST && quiz.getDrawCount() != null
-                    ? Math.min(quiz.getDrawCount(), total) : total;
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "questionIds hong trong quiz");
-        }
     }
 
     // ------------------------------------------------------------------ truy vấn gộp

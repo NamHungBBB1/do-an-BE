@@ -230,7 +230,7 @@ class QuizFlowTest {
         mvc.perform(post("/api/quizzes").header("Authorization", "Bearer " + room.teacher())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"groupId\":\"" + room.groupId() + "\",\"title\":\"De het han\","
-                                + "\"questionIds\":[\"" + ids.get(0) + "\"],\"mode\":\"PRACTICE\","
+                                + "\"questionIds\":[\"" + ids.get(0) + "\"],"
                                 + "\"dueAt\":\"2026-10-01T03:00:00Z\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
@@ -523,7 +523,7 @@ class QuizFlowTest {
     }
 
     // ------------------------------------------------------------------ 7. quyền bật / tắt cờ
-    /** FAMILY (v3) bật được bằng gói PARENT; không phải chủ → 3004; bật khi hết gói TEACHER → 3005; tắt khi hết gói → vẫn 200. */
+    /** FAMILY (quiz v3, 16/11) bật được bằng gói PARENT; không phải chủ → 3004; bật khi hết gói TEACHER → 3005; tắt khi hết gói → vẫn 200. */
     @Test
     void postTestFlagPermissions() throws Exception {
         // 16/11 (quiz v3): phụ huynh bật trên nhóm FAMILY bằng gói PARENT → 200 (v2 trả 8008).
@@ -915,7 +915,7 @@ class QuizFlowTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"groupId\":\"" + groupId + "\",\"title\":\"" + title + "\","
                         + "\"questionIds\":[" + questionIds.stream().map(id -> "\"" + id + "\"")
-                        .collect(Collectors.joining(",")) + "],\"mode\":\"PRACTICE\",\"dueAt\":\"" + DUE_FUTURE + "\"}");
+                        .collect(Collectors.joining(",")) + "],\"dueAt\":\"" + DUE_FUTURE + "\"}");
     }
 
     private String createQuiz(String teacher, String groupId, List<String> ids, String title)
@@ -928,18 +928,11 @@ class QuizFlowTest {
         return extractId(body);
     }
 
-    /**
-     * Phát đề rồi đưa về "đề cũ" (mode NULL, như 5 đề production trước v3): các ca ở đây kiểm luồng v2 — nộp một lần
-     * qua đường cũ. Từ v3 đề mới bắt buộc có chế độ và làm qua lượt làm (QuizV3FlowTest).
-     */
     private void publishQuiz(String teacher, String quizId) throws Exception {
         mvc.perform(post("/api/quizzes/" + quizId + "/publish")
                         .header("Authorization", "Bearer " + teacher))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.publishedAt").value(notNullValue()));
-        Quiz quiz = quizRepo.findById(UUID.fromString(quizId)).orElseThrow();
-        quiz.setMode(null);
-        quizRepo.save(quiz);
     }
 
     private static MockHttpServletRequestBuilder submit(String child, String quizId, String answers) {

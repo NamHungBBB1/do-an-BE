@@ -27,4 +27,10 @@ public interface QuizAttemptService {
 
     /** Giáo viên đọc kết quả: chốt mọi lượt quá giờ của đề (một truy vấn lọc, khoá slot liên quan). */
     void finalizeExpired(UUID quizId);
+
+    /**
+     * Chốt mọi lượt quá giờ trong các đề của một nhóm, giao dịch RIÊNG (REQUIRES_NEW) — gọi ở đầu báo cáo slot / nhóm, danh
+     * sách đề giáo viên, chi tiết đề, danh sách của em (đường đọc readOnly không ghi được).
+     */
+    void finalizeExpiredInGroup(UUID groupId);
 }

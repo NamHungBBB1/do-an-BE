@@ -60,7 +60,7 @@ public class Quiz {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "mode")
-    private Mode mode;
+    private QuizMode mode;
 
     @Column(name = "draw_count")
     private Integer drawCount;

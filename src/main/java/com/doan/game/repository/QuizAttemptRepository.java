@@ -29,4 +29,17 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, UUID> 
 
     /** Lượt quá hạn chưa chốt của một đề (gọi sau khi đã khoá slot). */
     List<QuizAttempt> findByQuiz_IdAndSubmittedAtIsNullAndDeadlineAtBefore(UUID quizId, Instant cutoff);
+
+    /** Như trên nhưng cho mọi đề của một nhóm — báo cáo, danh sách đề, danh sách của em chốt lười trước khi đọc. */
+    @Query("select distinct a.slot.id from QuizAttempt a where a.quiz.group.id = :groupId "
+            + "and a.submittedAt is null and a.deadlineAt < :cutoff")
+    List<UUID> findSlotIdsWithExpiredOpenInGroup(@Param("groupId") UUID groupId, @Param("cutoff") Instant cutoff);
+
+    List<QuizAttempt> findByQuiz_Group_IdAndSubmittedAtIsNullAndDeadlineAtBefore(UUID groupId, Instant cutoff);
+
+    /** Mọi lượt của một em (một câu) — danh sách của em lấy lượt mới nhất từng đề (attemptId). */
+    List<QuizAttempt> findBySlot_IdOrderByAttemptNoAsc(UUID slotId);
+
+    /** Đường nộp cũ: hậu trắc em đã mở lượt làm thì không nộp đường cũ nữa (8010). */
+    boolean existsByQuiz_IdAndSlot_Id(UUID quizId, UUID slotId);
 }

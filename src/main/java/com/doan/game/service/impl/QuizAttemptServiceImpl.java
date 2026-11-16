@@ -10,13 +10,12 @@ import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Question;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizAttempt;
-import com.doan.game.enums.Mode;
+import com.doan.game.enums.QuizMode;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.QuizMapper;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.QuizAttemptRepository;
-import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.impl.QuizSupport.GradedAnswer;
@@ -24,6 +23,7 @@ import com.doan.game.service.impl.QuizSupport.PaperEntry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -58,7 +59,6 @@ import java.util.stream.IntStream;
 public class QuizAttemptServiceImpl implements QuizAttemptService {
 
     private final QuizAttemptRepository attemptRepo;
-    private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
     private final LearnerSlotRepository slotRepo;
     private final QuizSupport support;
@@ -89,7 +89,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
                 }
             }
         }
-        if (quiz.getMode() == Mode.TEST && !mine.isEmpty()) {
+        if (quiz.getMode() == QuizMode.TEST && !mine.isEmpty()) {
             throw new AppException(ErrorCode.TEST_SINGLE_ATTEMPT);
         }
         if (QuizSupport.isPostTest(quiz)
@@ -101,7 +101,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         }
         List<Question> ordered = support.parseIds(quiz.getQuestionIds()).stream()
                 .map(questions::get).filter(java.util.Objects::nonNull).toList();
-        Integer draw = quiz.getMode() == Mode.TEST ? quiz.getDrawCount() : null;
+        Integer draw = quiz.getMode() == QuizMode.TEST ? quiz.getDrawCount() : null;
         List<PaperEntry> paper = buildPaper(ordered, draw, quizRandom,
                 q -> support.parseOptions(q.getOptions()).size());
 
@@ -181,21 +181,50 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     @Override
     @Transactional
     public void finalizeExpired(UUID quizId) {
-        Instant now = Instant.now(clock);
-        Instant cutoff = now.minusSeconds(graceSeconds);
-        List<UUID> slotIds = attemptRepo.findSlotIdsWithExpiredOpen(quizId, cutoff);
+        Instant cutoff = Instant.now(clock).minusSeconds(graceSeconds);
+        finalizeLocked(attemptRepo.findSlotIdsWithExpiredOpen(quizId, cutoff),
+                () -> attemptRepo.findByQuiz_IdAndSubmittedAtIsNullAndDeadlineAtBefore(quizId, cutoff),
+                () -> quizResultRepo.findByQuiz_Id(quizId).stream()
+                        .map(r -> resultKey(quizId, r.getSlot().getId())).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Như finalizeExpired nhưng cho mọi đề của một nhóm. REQUIRES_NEW: người gọi (báo cáo, danh sách đề) chạy giao dịch
+     * readOnly — FlushMode MANUAL của nó sẽ bỏ mất phần ghi nếu chạy chung.
+     */
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void finalizeExpiredInGroup(UUID groupId) {
+        Instant cutoff = Instant.now(clock).minusSeconds(graceSeconds);
+        finalizeLocked(attemptRepo.findSlotIdsWithExpiredOpenInGroup(groupId, cutoff),
+                () -> attemptRepo.findByQuiz_Group_IdAndSubmittedAtIsNullAndDeadlineAtBefore(groupId, cutoff),
+                () -> quizResultRepo.findQuizSlotPairsInGroup(groupId).stream()
+                        .map(r -> resultKey((UUID) r[0], (UUID) r[1])).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Khoá các slot có lượt quá giờ (một câu, thứ tự id cố định) rồi MỚI nạp lượt + kết quả chính thức — nạp trước khi khoá là
+     * đọc bản cũ trong lúc em đang bấm nộp. Câu hỏi nạp một lần cho mọi lượt.
+     */
+    private void finalizeLocked(List<UUID> slotIds, Supplier<List<QuizAttempt>> expired,
+                                Supplier<Set<String>> resultKeys) {
         if (slotIds.isEmpty()) {
             return;
         }
         slotRepo.lockAllById(slotIds);
-        Quiz quiz = quizRepo.findById(quizId).orElseThrow(() -> new AppException(ErrorCode.QUIZ_NOT_FOUND));
-        Map<UUID, Question> questions = support.loadQuestions(support.parseIds(quiz.getQuestionIds()));
-        Set<UUID> withResult = new HashSet<>();
-        quizResultRepo.findByQuiz_Id(quizId).forEach(r -> withResult.add(r.getSlot().getId()));
-        for (QuizAttempt attempt : attemptRepo.findByQuiz_IdAndSubmittedAtIsNullAndDeadlineAtBefore(quizId, cutoff)) {
-            boolean first = withResult.add(attempt.getSlot().getId());
+        List<QuizAttempt> attempts = expired.get();
+        Set<String> withResult = new HashSet<>(resultKeys.get());
+        Set<UUID> questionIds = new HashSet<>();
+        attempts.forEach(a -> support.parsePaper(a.getPaper()).forEach(e -> questionIds.add(e.q())));
+        Map<UUID, Question> questions = support.loadQuestions(questionIds);
+        for (QuizAttempt attempt : attempts) {
+            boolean first = withResult.add(resultKey(attempt.getQuiz().getId(), attempt.getSlot().getId()));
             grade(attempt, questions, attempt.getDeadlineAt(), true, first);
         }
+    }
+
+    private static String resultKey(UUID quizId, UUID slotId) {
+        return quizId + "/" + slotId;
     }
 
     // ------------------------------------------------------------------ xáo đề
@@ -278,7 +307,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     }
 
     private static Instant deadline(Quiz quiz, Instant now, int questionCount) {
-        if (quiz.getMode() != Mode.TEST) {
+        if (quiz.getMode() != QuizMode.TEST) {
             return quiz.getDueAt();   // PRACTICE: hạn nộp; hậu trắc: null
         }
         int seconds = quiz.getDurationSeconds() != null ? quiz.getDurationSeconds()
@@ -317,7 +346,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         List<PaperEntry> paper = support.parsePaper(attempt.getPaper());
         Map<Integer, Integer> answers = support.parseAnswers(attempt.getAnswers());
         boolean reveal = attempt.getSubmittedAt() != null
-                && (quiz.getMode() != Mode.TEST || quiz.getDueAt() == null || !now.isBefore(quiz.getDueAt()));
+                && (quiz.getMode() != QuizMode.TEST || quiz.getDueAt() == null || !now.isBefore(quiz.getDueAt()));
         List<AttemptAnswerReviewResponse> rows = null;
         if (reveal) {
             rows = new ArrayList<>(paper.size());

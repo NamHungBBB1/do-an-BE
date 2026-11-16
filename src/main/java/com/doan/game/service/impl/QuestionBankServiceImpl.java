@@ -102,8 +102,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         question.setExternalId(externalId);
         question.setCreatedAt(now);
         if (req.replacesId() != null) {
-            Question old = questionRepo.findById(req.replacesId())
-                    .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có câu " + req.replacesId()));
+            Question old = require(req.replacesId());
             if (old.getRetiredAt() == null) {
                 old.setRetiredAt(now);   // câu cũ rút ngay: đề mới không chụp nó nữa, đề cũ vẫn giữ
                 questionRepo.save(old);
@@ -177,7 +176,9 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         if (questionId == null) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu id câu");
         }
+        // Câu của giáo viên (quiz v3) không thuộc kho Studio: coi như không có (1003), Studio không sửa / rút được.
         return questionRepo.findById(questionId)
+                .filter(question -> question.getOwner() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có câu " + questionId));
     }
 

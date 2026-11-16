@@ -9,6 +9,7 @@ import com.doan.game.entity.QuizAnswer;
 import com.doan.game.entity.QuizResult;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.QuizKind;
+import com.doan.game.enums.QuizMode;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -115,6 +116,13 @@ class QuizSupport {
         return runStateRepo.findBySlot_Id(slotId)
                 .map(run -> ChaptersDone.parse(run.getChaptersDone()))
                 .orElseGet(List::of);
+    }
+
+    /** Số câu mỗi em làm: đề Kiểm tra rút drawCount câu, còn lại làm hết — một luật cho kết quả, danh sách, báo cáo. */
+    int questionsPerLearner(Quiz quiz) {
+        int total = parseIds(quiz.getQuestionIds()).size();
+        return quiz.getMode() == QuizMode.TEST && quiz.getDrawCount() != null
+                ? Math.min(quiz.getDrawCount(), total) : total;
     }
 
     static boolean isPostTest(Quiz quiz) {

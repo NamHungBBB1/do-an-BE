@@ -80,6 +80,8 @@ public class TeacherQuestionServiceImpl implements TeacherQuestionService {
         if (!errors.isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, errors.size() + " câu không hợp lệ", errors);
         }
+        // ponytail: hai lô CÙNG LÚC của cùng một giáo viên có thể tạo câu trùng (mỗi lô chỉ thấy câu đã commit). Trần chấp
+        // nhận được — trùng chỉ thừa một dòng trong "Câu của tôi". Muốn chặn hẳn: khoá dòng Account của người gọi đầu hàm.
         Map<String, UUID> byKey = new HashMap<>();
         for (Question existing : questionRepo.findByOwner_IdAndRetiredAtIsNullOrderByCreatedAtDesc(callerId)) {
             byKey.putIfAbsent(dedupKey(existing.getStem(), support.parseOptions(existing.getOptions()),

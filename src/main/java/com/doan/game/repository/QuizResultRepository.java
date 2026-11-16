@@ -18,6 +18,10 @@ public interface QuizResultRepository extends JpaRepository<QuizResult, UUID> {
 
     List<QuizResult> findByQuiz_Id(UUID quizId);
 
+    /** (quizId, slotId) đã có kết quả chính thức trong một nhóm — chốt lười cả nhóm biết lượt nào là lần nộp đầu. */
+    @Query("select r.quiz.id, r.slot.id from QuizResult r where r.quiz.group.id = :groupId")
+    List<Object[]> findQuizSlotPairsInGroup(@Param("groupId") UUID groupId);
+
     /** Bài của một em mọi đề — completed mới nhất trước. */
     List<QuizResult> findBySlot_IdOrderBySubmittedAtDesc(UUID slotId);
 

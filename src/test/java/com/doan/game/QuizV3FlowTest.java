@@ -155,6 +155,16 @@ class QuizV3FlowTest {
                         .content(newQ("Sua trom", 0, "A", "B")))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
 
+        // Studio coi câu của giáo viên như không có (1003) ở mọi đường theo id.
+        RequestPostProcessor studioAdmin = admin();
+        mvc.perform(post("/api/studio/questions/" + q2 + "/retire").with(studioAdmin))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value(1003));
+        mvc.perform(post("/api/studio/questions").with(studioAdmin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"stem\":\"Thay cau GV\",\"options\":[\"A\",\"B\"],\"correctIndex\":0,"
+                                + "\"replacesId\":\"" + q2 + "\"}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value(1003));
+        assertThat(questionRepo.findById(UUID.fromString(q2)).orElseThrow().getRetiredAt()).isNull();
+
         // q1 vào đề đã phát → sửa 8009, xoá chỉ ẩn; q2 chưa vào đề nào → sửa được, xoá mất hẳn.
         LearnerGroup room = classGroup(teacher);
         String quizId = createQuiz(teacher, room, List.of(q1), "PRACTICE", null, null);
@@ -225,6 +235,16 @@ class QuizV3FlowTest {
         assertThat(row.path("reference").path("page").asText()).isEqualTo("p.5");
         assertThat(row.path("reference").path("optionsOriginal").get(2).asText()).isEqualTo("Both");
         assertThat(row.path("correctIndex").asInt()).isEqualTo(2);
+
+        // Nhập lại bằng lô cũ (không có keepOptionOrder / reference) → giữ giá trị đang có.
+        mvc.perform(post("/api/admin/questions/import").with(admin()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"externalId\":\"" + ext + "\",\"pool\":\"FDIC\",\"stem\":\"Cau nhap sua\","
+                                + "\"options\":[\"A\",\"B\",\"Ca hai\"],\"correctIndex\":2}]"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.updated").value(1));
+        Question kept = questionRepo.findByExternalId(ext).orElseThrow();
+        assertThat(kept.getStem()).isEqualTo("Cau nhap sua");
+        assertThat(kept.isKeepOptionOrder()).isTrue();
+        assertThat(kept.getReference()).contains("Money Smart");
     }
 
     // ------------------------------------------------------------------ 2. tạo đề có newQuestions
@@ -251,7 +271,7 @@ class QuizV3FlowTest {
 
         mvc.perform(post("/api/quizzes").with(as(teacher)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"De loi\",\"mode\":\"PRACTICE\","
-                                + "\"questionIds\":[],\"newQuestions\":[" + newQ("Cau moi 3", 0, "A", "B") + ","
+                                + "\"dueAt\":\"" + DUE_FUTURE + "\",\"questionIds\":[],\"newQuestions\":[" + newQ("Cau moi 3", 0, "A", "B") + ","
                                 + newQ("Cau hong", 9, "A", "B") + "]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001))
@@ -259,21 +279,30 @@ class QuizV3FlowTest {
         assertThat(questionRepo.findByOwner_IdAndRetiredAtIsNullOrderByCreatedAtDesc(teacher.getId())).hasSize(2);
         assertThat(quizRepo.findByGroup_Id(room.getId())).hasSize(quizzesBefore);
 
-        // Chế độ bắt buộc; drawCount quá số câu → 1001.
+        // Không gửi mode = đề kiểu v2 (FE đang chạy không gãy), không cần dueAt; có mode thì dueAt bắt buộc.
+        JsonNode legacy = result(mvc.perform(post("/api/quizzes").with(as(teacher)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"Khong che do\","
+                                + "\"questionIds\":[\"" + pool.getId() + "\"]}"))
+                .andExpect(status().isOk()));
+        assertThat(legacy.path("mode").isNull()).isTrue();
+        mvc.perform(post("/api/quizzes/" + legacy.path("id").asText() + "/publish").with(as(teacher)))
+                .andExpect(status().isOk());
         mvc.perform(post("/api/quizzes").with(as(teacher)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"Thieu che do\","
+                        .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"Thieu han\",\"mode\":\"PRACTICE\","
                                 + "\"questionIds\":[\"" + pool.getId() + "\"]}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
         mvc.perform(post("/api/quizzes").with(as(teacher)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"Rut qua\",\"mode\":\"TEST\","
-                                + "\"drawCount\":2,\"questionIds\":[\"" + pool.getId() + "\"]}"))
+                                + "\"dueAt\":\"" + DUE_FUTURE + "\",\"drawCount\":2,"
+                                + "\"questionIds\":[\"" + pool.getId() + "\"]}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
         // Câu của giáo viên khác không vào đề được (8007).
         Account other = adult("v3import2", PlanKind.TEACHER);
         UUID foreign = questionRepo.findByOwner_IdAndRetiredAtIsNullOrderByCreatedAtDesc(teacher.getId()).get(0).getId();
         mvc.perform(post("/api/quizzes").with(as(other)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"groupId\":\"" + classGroup(other).getId() + "\",\"title\":\"Cau nguoi khac\","
-                                + "\"mode\":\"PRACTICE\",\"questionIds\":[\"" + foreign + "\"]}"))
+                                + "\"mode\":\"PRACTICE\",\"dueAt\":\"" + DUE_FUTURE + "\","
+                                + "\"questionIds\":[\"" + foreign + "\"]}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(8007));
     }
 
@@ -326,6 +355,12 @@ class QuizV3FlowTest {
                 assertThat(shown.get(i).asText()).isEqualTo(original.get(paper.get(0).path("o").get(i).asInt()));
             }
         }
+
+        // GET đường cũ không lộ bộ câu của đề có mode (câu chỉ xuống qua lượt làm).
+        mvc.perform(get("/api/learner/quizzes/" + quizId).with(as(a)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.id").value(quizId))
+                .andExpect(jsonPath("$.result.questions").isEmpty());
 
         // A: vị trí 0 đúng, vị trí 1 sai, vị trí 2 bỏ trống → 1 điểm; rời trang 2 lần.
         QuizAttempt attemptA = onlyAttempt(quizId, a);
@@ -433,6 +468,59 @@ class QuizV3FlowTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(8012));
     }
 
+    /** Lượt quá giờ được chốt ở báo cáo slot / nhóm và danh sách đề của giáo viên — không cần ai mở /results. */
+    @Test
+    void expiredAttemptFinalisedOnReportAndListPaths() throws Exception {
+        ensureRelease();
+        Account teacher = adult("v3baocao", PlanKind.TEACHER);
+        LearnerGroup room = classGroup(teacher);
+        Question q = poolQuestion(2, 0, true);
+        String quizId = createQuiz(teacher, room, List.of(q.getId().toString()), "TEST", null, 1);
+        publish(teacher, quizId);
+        LearnerSlot a = slot(room, "HS A");
+        LearnerSlot b = slot(room, "HS B");
+        UUID attemptA = UUID.fromString(result(mvc.perform(post("/api/learner/quizzes/" + quizId + "/attempts")
+                .with(as(a)))).path("attemptId").asText());
+        UUID attemptB = UUID.fromString(result(mvc.perform(post("/api/learner/quizzes/" + quizId + "/attempts")
+                .with(as(b)))).path("attemptId").asText());
+        saveAnswer(a, attemptA, 0, 0, null).andExpect(status().isOk());
+
+        CLOCK.set(START.plusSeconds(91));   // quá deadline (60 giây) + 30 giây
+        mvc.perform(get("/api/slots/" + a.getId() + "/report").with(as(teacher)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.quizzes.submitted").value(1))
+                .andExpect(jsonPath("$.result.quizzes.results[0].score").value(1));
+        QuizAttempt closedA = attemptRepo.findById(attemptA).orElseThrow();
+        assertThat(closedA.isAutoSubmitted()).isTrue();
+        assertThat(closedA.getSubmittedAt()).isEqualTo(START.plusSeconds(60));
+        // Báo cáo slot chốt cả nhóm → B cũng đã chốt; danh sách đề thấy 2 bài.
+        assertThat(attemptRepo.findById(attemptB).orElseThrow().isAutoSubmitted()).isTrue();
+        JsonNode quizzes = result(mvc.perform(get("/api/quizzes?groupId=" + room.getId()).with(as(teacher))));
+        assertThat(quizzes.get(0).path("submittedCount").asInt()).isEqualTo(2);
+        mvc.perform(get("/api/groups/" + room.getId() + "/report").with(as(teacher)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.summary.quizSubmitted").value(2));
+    }
+
+    /** Danh sách đề của giáo viên tự chốt lượt quá giờ khi chưa có đường nào khác chạm tới. */
+    @Test
+    void expiredAttemptFinalisedByQuizList() throws Exception {
+        Account teacher = adult("v3dsde", PlanKind.TEACHER);
+        LearnerGroup room = classGroup(teacher);
+        Question q = poolQuestion(2, 0, true);
+        String quizId = createQuiz(teacher, room, List.of(q.getId().toString()), "TEST", null, 1);
+        publish(teacher, quizId);
+        LearnerSlot a = slot(room, "HS A");
+        UUID attemptA = UUID.fromString(result(mvc.perform(post("/api/learner/quizzes/" + quizId + "/attempts")
+                .with(as(a)))).path("attemptId").asText());
+        CLOCK.set(START.plusSeconds(91));
+        JsonNode quizzes = result(mvc.perform(get("/api/quizzes?groupId=" + room.getId()).with(as(teacher))));
+        assertThat(quizzes.get(0).path("submittedCount").asInt()).isEqualTo(1);
+        QuizAttempt closed = attemptRepo.findById(attemptA).orElseThrow();
+        assertThat(closed.isAutoSubmitted()).isTrue();
+        assertThat(closed.getScore()).isZero();
+    }
+
     // ------------------------------------------------------------------ 6 + 7. một lần / làm lại / giấu tới hạn
     /** TEST lần hai → 8012; nộp hai lần → cùng kết quả; trước dueAt không có điểm / đúng sai, sau dueAt có; PRACTICE làm lại tạo lượt 2, QuizResult vẫn là lần đầu. */
     @Test
@@ -468,6 +556,7 @@ class QuizV3FlowTest {
         JsonNode completed = list.path("completed").get(0);
         assertThat(completed.path("id").asText()).isEqualTo(testId);
         assertThat(completed.path("score").isNull()).isTrue();
+        assertThat(completed.path("attemptId").asText()).isEqualTo(attempt.toString());   // FE mở lại sau hạn nộp
 
         // Sau hạn nộp: có điểm và đúng / sai từng vị trí (vẫn không có đáp án đúng).
         CLOCK.set(Instant.parse(DUE_FUTURE).plusSeconds(1));
@@ -484,6 +573,9 @@ class QuizV3FlowTest {
         // Luyện tập: lần 1 được 0, lần 2 đúng hết — kết quả chính thức vẫn là lần đầu.
         String practiceId = createQuiz(teacher, room, ids, "PRACTICE", null, null);
         publish(teacher, practiceId);
+        JsonNode pendingPractice = result(mvc.perform(get("/api/learner/quizzes").with(as(a)))).path("pending").get(0);
+        assertThat(pendingPractice.path("id").asText()).isEqualTo(practiceId);
+        assertThat(pendingPractice.path("attemptId").isNull()).isTrue();   // chưa mở
         JsonNode p1 = result(mvc.perform(post("/api/learner/quizzes/" + practiceId + "/attempts").with(as(a))));
         assertThat(p1.path("deadlineAt").asText()).isEqualTo(DUE_FUTURE);
         UUID p1Id = UUID.fromString(p1.path("attemptId").asText());
@@ -502,6 +594,13 @@ class QuizV3FlowTest {
                 .path("score").asInt()).isEqualTo(2);
         assertThat(quizResultRepo.findByQuiz_IdAndSlot_Id(UUID.fromString(practiceId), a.getId()).orElseThrow()
                 .getScore()).isEqualTo(0);
+        JsonNode practiceDone = null;
+        for (JsonNode n : result(mvc.perform(get("/api/learner/quizzes").with(as(a)))).path("completed")) {
+            if (practiceId.equals(n.path("id").asText())) {
+                practiceDone = n;
+            }
+        }
+        assertThat(practiceDone.path("attemptId").asText()).isEqualTo(p2Id.toString());   // lượt mới nhất
         mvc.perform(get("/api/quizzes/" + practiceId + "/results").with(as(teacher)))
                 .andExpect(jsonPath("$.result.rows[0].score").value(0))
                 .andExpect(jsonPath("$.result.rows[0].attemptCode").value(p1Id.toString().substring(0, 6)));
@@ -529,11 +628,14 @@ class QuizV3FlowTest {
         mvc.perform(get("/api/learner/quizzes").with(as(a)))
                 .andExpect(jsonPath("$.result.pending[0].mode").value("PRACTICE"));
 
-        String legacy = createQuiz(teacher, room, List.of(q.getId().toString()), "PRACTICE", null, null);
+        // Đề không gửi mode (như FE v2 đang chạy) → chạy y v2.
+        String legacy = result(mvc.perform(post("/api/quizzes").with(as(teacher)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"groupId\":\"" + room.getId() + "\",\"title\":\"De cu\",\"questionIds\":[\""
+                        + q.getId() + "\"],\"dueAt\":\"" + DUE_FUTURE + "\"}"))
+                .andExpect(status().isOk())).path("id").asText();
         publish(teacher, legacy);
-        Quiz old = quizRepo.findById(UUID.fromString(legacy)).orElseThrow();
-        old.setMode(null);   // như 5 đề production trước v3
-        quizRepo.save(old);
+        mvc.perform(get("/api/learner/quizzes/" + legacy).with(as(a)))
+                .andExpect(jsonPath("$.result.questions.length()").value(1));
         mvc.perform(post("/api/learner/quizzes/" + legacy + "/submit").with(as(a))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.result.score").value(1));
@@ -573,6 +675,9 @@ class QuizV3FlowTest {
         assertThat(opened.path("deadlineAt").isNull()).isTrue();
         assertThat(opened.path("questions")).hasSize(chapterEight);
         UUID attemptId = UUID.fromString(opened.path("attemptId").asText());
+        mvc.perform(post("/api/learner/quizzes/" + postTestId + "/submit").with(as(kid))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"answers\":[]}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(8010));
         JsonNode submitted = result(mvc.perform(post("/api/learner/attempts/" + attemptId + "/submit").with(as(kid))));
         assertThat(submitted.path("review")).hasSize(chapterEight);   // hậu trắc: đúng / sai ngay khi nộp
         mvc.perform(post("/api/learner/quizzes/" + postTestId + "/attempts").with(as(kid)))
