@@ -11,7 +11,9 @@ import lombok.Setter;
  * Kho câu hỏi dùng chung (nhập từ pool công khai, upsert theo externalId, giáo viên chỉ chọn) cộng
  * bộ hậu trắc cố định của từng chương (chapter = N; NULL = kho chung). Câu rút khỏi kho chỉ đặt
  * retiredAt, không xoá, để đề cũ còn nguyên. Đáp án không bao giờ xuống trẻ. 17/10: câu đã nằm
- * trong đề đã phát thì khoá nội dung; sửa = tạo câu mới có replacesId, câu cũ tự rút.
+ * trong đề đã phát thì khoá nội dung; sửa = tạo câu mới có replacesId, câu cũ tự rút. 16/11 (v3):
+ * ownerId = câu của giáo viên (chỉ người đó thấy); keepOptionOrder = không xáo đáp án; reference =
+ * nguồn kiểm chứng (JSON, chỉ hiển thị).
  */
 @Entity
 @Table(name = "question")
@@ -61,4 +63,20 @@ public class Question {
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "replaces_id", nullable = true)
     private Question replaces;
+
+    /** Account. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "owner_id", nullable = true)
+    private Account owner;
+
+    /** Question. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "copied_from_id", nullable = true)
+    private Question copiedFrom;
+
+    @Column(name = "keep_option_order", nullable = false, columnDefinition = "boolean default false not null")
+    private boolean keepOptionOrder;
+
+    @Column(name = "reference", columnDefinition = "text")
+    private String reference;
 }

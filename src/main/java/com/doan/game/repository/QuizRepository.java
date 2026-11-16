@@ -22,4 +22,10 @@ public interface QuizRepository extends JpaRepository<Quiz, UUID> {
 
     /** 17/10 (Studio kho câu hỏi): câu đã nằm trong đề đã phát thì khoá nội dung (8009). questionIds là JSON text, tìm chuỗi id. */
     boolean existsByPublishedAtIsNotNullAndQuestionIdsContaining(String questionId);
+
+    /** 16/11 quiz v3: câu của giáo viên đã từng vào đề nào (kể cả nháp) thì xoá chỉ là ẩn (retiredAt), không xoá cứng. */
+    boolean existsByQuestionIdsContaining(String questionId);
+
+    /** 16/11 quiz v3: đề đã phát của một giáo viên — đếm usedInPublished cho "Câu của tôi" một lần, không N+1. */
+    List<Quiz> findByOwner_IdAndPublishedAtIsNotNull(UUID ownerId);
 }

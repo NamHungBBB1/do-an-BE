@@ -17,6 +17,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     /** Bộ hậu trắc của chương N, chưa rút, xếp theo externalId — chụp nguyên bộ vào đề lúc tạo. */
     List<Question> findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(Integer chapter);
 
-    /** Kho chung giáo viên chọn: chưa rút và không phải câu hậu trắc. */
-    List<Question> findByRetiredAtIsNullAndChapterIsNull();
+    /** Kho chung giáo viên chọn: chưa rút, không phải câu hậu trắc, không phải câu của giáo viên nào (16/11 v3). */
+    List<Question> findByRetiredAtIsNullAndChapterIsNullAndOwnerIsNull();
+
+    /** "Câu của tôi" (quiz v3): câu chưa rút của một giáo viên, mới nhất trước — cũng là tập so trùng khi lưu lô. */
+    List<Question> findByOwner_IdAndRetiredAtIsNullOrderByCreatedAtDesc(UUID ownerId);
 }

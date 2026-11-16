@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,6 +39,11 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from LearnerSlot s where s.id = :id")
     Optional<LearnerSlot> lockById(@Param("id") UUID id);
+
+    /** Khoá nhiều slot một câu (quiz v3: giáo viên xem kết quả thì chốt mọi lượt quá giờ của đề). Thứ tự id cố định. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from LearnerSlot s where s.id in :ids order by s.id")
+    List<LearnerSlot> lockAllById(@Param("ids") java.util.Collection<UUID> ids);
 
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);

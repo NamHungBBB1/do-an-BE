@@ -11,7 +11,6 @@ import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizResult;
 import com.doan.game.entity.RunState;
-import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -131,22 +130,19 @@ public class ReportServiceImpl implements ReportService {
                         group.getClosedAt()),
                 slot.getCreatedAt(), slot.getArchivedAt(), slot.getWipedAt(), lastActiveAt);
 
-        // Quiz chỉ cho lớp; FAMILY nhận null — FE ẩn hẳn khối quiz (Hưng chốt, cùng dashboard).
-        // Đợt 3 (quiz.md v2): assigned = số đề đã publish của lớp; results = bài của em, mới nhất
-        // trước (chưa nộp thì không có dòng, FE hiện "chưa nộp").
-        SlotReportResponse.Quizzes quizzes = null;
-        if (group.getContext() == LearningContext.CLASS) {
-            List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
-            List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
-            for (QuizResult r : myResults) {
-                resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
-                        r.getQuiz().getTitle(), r.getScore(), questionCount(r.getQuiz()),
-                        r.getSubmittedAt()));
-            }
-            quizzes = new SlotReportResponse.Quizzes(
-                    (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
-                    myResults.size(), resultRows);
+        // Đợt 3 (quiz.md v2): assigned = số đề đã publish của nhóm; results = bài của em, mới nhất
+        // trước (chưa nộp thì không có dòng, FE hiện "chưa nộp"). 16/11 (v3, Hưng chốt): gia đình cũng
+        // có khối này — chỉ chứa hậu trắc (gia đình không có đề giáo viên), không còn null.
+        List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
+        List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
+        for (QuizResult r : myResults) {
+            resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
+                    r.getQuiz().getTitle(), r.getScore(), questionCount(r.getQuiz()),
+                    r.getSubmittedAt()));
         }
+        SlotReportResponse.Quizzes quizzes = new SlotReportResponse.Quizzes(
+                (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
+                myResults.size(), resultRows);
 
         return new SlotReportResponse(learner, progress, indicatorsOf(run),
                 List.copyOf(achievements), List.of(), List.of(), quizzes, null);
@@ -365,14 +361,16 @@ public class ReportServiceImpl implements ReportService {
         return value == null ? null : ((Number) value).doubleValue();
     }
 
-    /** Số câu của đề = độ dài questionIds (JSON text) — cùng nội dung với quiz.questionCount. */
+    /** Số câu mỗi em làm = độ dài questionIds (JSON text); đề Kiểm tra rút drawCount câu (v3). */
     private Integer questionCount(Quiz quiz) {
         if (quiz.getQuestionIds() == null || quiz.getQuestionIds().isBlank()) {
             return 0;
         }
         try {
-            return objectMapper.readValue(quiz.getQuestionIds(),
+            int total = objectMapper.readValue(quiz.getQuestionIds(),
                     new TypeReference<List<UUID>>() { }).size();
+            return quiz.getMode() == com.doan.game.enums.Mode.TEST && quiz.getDrawCount() != null
+                    ? Math.min(quiz.getDrawCount(), total) : total;
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "questionIds hong trong quiz");
         }

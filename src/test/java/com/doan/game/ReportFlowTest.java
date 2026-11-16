@@ -143,7 +143,9 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.achievements").isEmpty())
                 .andExpect(jsonPath("$.result.concepts").isEmpty())
                 .andExpect(jsonPath("$.result.chapters").isEmpty())
-                .andExpect(jsonPath("$.result.quizzes").value(nullValue()))
+                // Quiz v3 (16/11): gia đình có khối quizzes (chỉ hậu trắc), không còn null.
+                .andExpect(jsonPath("$.result.quizzes.assigned").value(0))
+                .andExpect(jsonPath("$.result.quizzes.results").isEmpty())
                 .andExpect(jsonPath("$.result.dailySummary").value(nullValue()))
                 .andReturn().getResponse();
         String body = res.getContentAsString(StandardCharsets.UTF_8);

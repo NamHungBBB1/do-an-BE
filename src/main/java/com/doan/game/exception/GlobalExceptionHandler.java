@@ -25,11 +25,12 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse<Void>> handleApp(AppException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleApp(AppException ex) {
         ErrorCode ec = ex.getErrorCode();
         log.warn("AppException {} — {}", ec.getCode(), ex.getMessage());
+        // details (nếu có) vào result: cùng một hình ApiResponse, FE đọc lỗi theo vị trí mà không học hình mới.
         return ResponseEntity.status(ec.getStatus())
-                .body(ApiResponse.error(ec.getCode(), ex.getMessage()));
+                .body(new ApiResponse<>(ec.getCode(), ex.getMessage(), ex.getDetails()));
     }
 
     /** Lỗi @Valid: gom hết tên trường + lý do, đừng chỉ trả về trường đầu tiên. */
