@@ -163,13 +163,14 @@ trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — r
 ## Chưa vào khung, cố ý
 
 - **Quiz v3 (16/11, nhánh `feat/quiz-v3`, thiết kế `build/thiet-ke-be-quiz-v3-2026-11-16.md`)**: `Question` thêm `ownerId`,
-  `copiedFromId`, `keepOptionOrder`, `reference` (JSON); `Quiz` thêm `mode` (enum `Mode` PRACTICE / TEST — enum mới trên cột
+  `copiedFromId`, `keepOptionOrder`, `reference` (JSON); `Quiz` thêm `mode` (enum `QuizMode` PRACTICE / TEST — enum mới trên cột
   mới, Hibernate tạo CHECK đủ giá trị), `drawCount`, `durationSeconds`; bảng mới `QuizAttempt` UNIQUE(quiz, slot, attemptNo).
   Mọi cột mới cho phép NULL (BOOL theo khuôn bộ sinh: `default false not null`), không SQL tay. Hằng số nghiệp vụ một chỗ:
   `service/impl/QuizRules`; trễ cho mạng là cấu hình `app.quiz.grace-seconds` (mặc định 30). Phần dùng chung của các service
-  quiz (JSON text, kiểm slot / đề của trẻ, ghi kết quả chính thức) ở lớp gói riêng `service/impl/QuizSupport`. Tên enum là
-  `Mode` vì bộ sinh đặt tên theo tập giá trị và chưa có ánh xạ {PRACTICE, TEST} — muốn `QuizMode` thì thêm một dòng vào
-  `ten_enum` của `ops/sinh-khung-be.py` rồi sinh lại. Đề cũ `mode` NULL và hậu trắc vẫn nộp đường cũ; đề có `mode` → 8010.
+  quiz (JSON text, kiểm slot / đề của trẻ, ghi kết quả chính thức) ở lớp gói riêng `service/impl/QuizSupport`. Tên enum `QuizMode` nhờ ánh xạ {PRACTICE, TEST} trong `ten_enum` của `ops/sinh-khung-be.py`.
+  `mode` tuỳ chọn: không gửi = đề kiểu v2 (FE đang chạy không gãy); có `mode` thì bắt buộc `dueAt`. Đường đọc readOnly (báo cáo, danh sách đề,
+  chi tiết đề, danh sách của em) chốt lượt quá giờ bằng `QuizAttemptService.finalizeExpiredInGroup` chạy REQUIRES_NEW.
+  Đề cũ `mode` NULL và hậu trắc vẫn nộp đường cũ; đề có `mode` → 8010.
 
 - **Question** đã sửa 16/10 (nhánh `feat/quiz`): `externalId` UNIQUE, `concept`, `retiredAt`, `chapter` (câu hậu trắc
   của chương N, NULL = kho chung); `Quiz` thêm `kind` (enum `QuizKind`) + `chapter` + UNIQUE(group_id, kind, chapter);
