@@ -217,19 +217,20 @@ public class GroupServiceImpl implements GroupService {
     }
 
     /**
-     * 16/10 (quiz.md v2): bật / tắt hậu trắc cho lớp, idempotent. Chỉ chủ nhóm CLASS đang mở
-     * (FAMILY hoặc đã đóng → 8008, không phải chủ → 3004); BẬT thêm cần gói TEACHER còn hạn (3005),
-     * TẮT chỉ cần chủ nhóm — gói hết hạn vẫn tắt được. Giữ mốc bật lần đầu như confirmConsent.
+     * 16/10 (quiz.md v2): bật / tắt hậu trắc, idempotent. Chỉ chủ nhóm đang mở (đã đóng → 8008, không phải chủ →
+     * 3004). 16/11 (v3): gia đình cũng bật được — BẬT cần gói đúng loại nhóm còn hạn (CLASS → TEACHER, FAMILY → PARENT,
+     * thiếu → 3005), TẮT chỉ cần chủ nhóm — gói hết hạn vẫn tắt được. Giữ mốc bật lần đầu như confirmConsent.
      */
     @Override
     @Transactional
     public void setPostTest(UUID callerId, UUID groupId, boolean enabled) {
         LearnerGroup group = requireOwnedGroup(callerId, groupId);
-        if (group.getContext() != LearningContext.CLASS || group.getClosedAt() != null) {
-            throw new AppException(ErrorCode.GROUP_NOT_CLASS_OR_CLOSED);
+        if (group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_NOT_CLASS_OR_CLOSED, "Nhóm đã đóng");
         }
         if (enabled) {
-            if (!entitlementService.activePlans(callerId).contains(PlanKind.TEACHER)) {
+            PlanKind needed = group.getContext() == LearningContext.FAMILY ? PlanKind.PARENT : PlanKind.TEACHER;
+            if (!entitlementService.activePlans(callerId).contains(needed)) {
                 throw new AppException(ErrorCode.PLAN_REQUIRED);
             }
             if (group.getPostTestEnabledAt() == null) {

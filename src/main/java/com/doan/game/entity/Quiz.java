@@ -12,8 +12,9 @@ import lombok.Setter;
  * Đề giáo viên tự chọn câu từ kho chung, phát cho một nhóm CLASS, có hạn nộp. Child không bao giờ
  * có quiz. 16/10: kind = CLASS_TEST (giáo viên ra đề) hoặc POST_TEST (hậu trắc, BE tự tạo cho lớp
  * bật cờ khi em xong chương, không hạn nộp); chapter = chương của đề hậu trắc. NULL = đề giáo viên
- * (dòng cũ). Ràng buộc: UNIQUE(groupId, kind, chapter): mỗi lớp mỗi chương đúng một đề hậu trắc
- * (đề giáo viên có chapter NULL nên không vướng)
+ * (dòng cũ). 16/11 (v3): mode = PRACTICE (luyện tập, làm lại được) hoặc TEST (kiểm tra, một lần,
+ * có giờ, rút drawCount câu); NULL = đề cũ / hậu trắc. Ràng buộc: UNIQUE(groupId, kind, chapter):
+ * mỗi lớp mỗi chương đúng một đề hậu trắc (đề giáo viên có chapter NULL nên không vướng)
  */
 @Entity
 @Table(name = "quiz", uniqueConstraints = {
@@ -56,4 +57,14 @@ public class Quiz {
 
     @Column(name = "chapter")
     private Integer chapter;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mode")
+    private QuizMode mode;
+
+    @Column(name = "draw_count")
+    private Integer drawCount;
+
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
 }

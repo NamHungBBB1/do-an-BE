@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Ruột GET /api/learner/dashboard đi qua HTTP thật (MockMvc + H2), token SLOT THẬT theo khuôn
  * AuthFlowTest: đăng ký chủ nhóm → OTP → mở nhóm → mở slot → POST /api/slots/login.
  *
- * Kiểm contract Hưng duyệt 08/10 (đợt 1): FAMILY trả quizzes = null, CLASS trả object rỗng,
+ * Kiểm contract Hưng duyệt 08/10 (đợt 1; FAMILY đổi 16/11 quiz v3: object rỗng như CLASS thay vì null),
  * token người lớn bị 403/3004, thiếu token 401/3003, slot đã trả → 3009, slot đã xoá → 3007;
  * khối progress / achievements / recentActivities đúng mặc định đợt 1.
  * Đồng hồ đóng băng 10:00 02/10/2026 giờ VN — gói cấp trong test luôn còn hạn.
@@ -77,7 +77,7 @@ class LearnerDashboardFlowTest {
     }
 
     // ------------------------------------------------------------------ FAMILY
-    /** Đợt 1: learner đầy đủ, mọi khối còn lại mặc định; FAMILY không có quiz (quizzes = null). */
+    /** Đợt 1: learner đầy đủ, mọi khối còn lại mặc định; FAMILY (từ quiz v3, 16/11) có khối quiz rỗng — chỉ hậu trắc. */
     @Test
     void familyDashboardShowsLearnerAndEmptyBlocks() throws Exception {
         String parent = parentToken("dashfam");
@@ -101,8 +101,9 @@ class LearnerDashboardFlowTest {
                 .andExpect(jsonPath("$.result.progress.chaptersDone").isEmpty())
                 .andExpect(jsonPath("$.result.progress.continueChapter").value(1))
                 .andExpect(jsonPath("$.result.progress.lastPlayedAt").value(nullValue()))
-                // Quiz chỉ cho CLASS: FAMILY nhận null để FE ẩn hẳn khối quiz.
-                .andExpect(jsonPath("$.result.quizzes").value(nullValue()))
+                // Quiz v3: gia đình cũng có khối quiz (chỉ hậu trắc) — chưa bật / chưa xong chương thì hai mảng rỗng.
+                .andExpect(jsonPath("$.result.quizzes.pending").isEmpty())
+                .andExpect(jsonPath("$.result.quizzes.completed").isEmpty())
                 .andExpect(jsonPath("$.result.achievements").isEmpty())
                 .andExpect(jsonPath("$.result.recentActivities").isEmpty());
     }

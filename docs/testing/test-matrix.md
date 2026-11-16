@@ -132,6 +132,14 @@ bulk open succeeds in a CLASS group.
 | R | `QuizFlowTest#validationAndErrorCodes` (8007, past `dueAt` 1001, 8002); `#importQuestionsUpsertsAndHidesChapterSet`; `StudioQuestionFlowTest#questionInPublishedQuizKeepsContentButLabelsChange` |
 | E | `QuizFlowTest#permissionGates` (8008, 3004, 3005); `#postTestFlagPermissions` |
 
+### TCH-2b — Quiz v3 (16/11/2026): teacher's own questions, PRACTICE / TEST modes, per-learner shuffled attempts, family post-test — **covered**
+Design: `build/thiet-ke-be-quiz-v3-2026-11-16.md` §6 (ten groups). All in `QuizV3FlowTest` unless noted.
+| Kind | Tests |
+|---|---|
+| M | `#myQuestionsBatchEditDeleteCopy` (batch of 3 with one duplicate → 2 new + 1 reused; copy from the pool keeps `copiedFromId`); `#createQuizWithNewQuestionsIsAllOrNothing`; `#testModeShufflesDrawsAndGradesByOriginalIndex` (TEST draws 3 of 4, grades through the shuffled positions, `QuizAnswer.chosenIndex` is the original index, teacher sees attempt columns and the learner's paper); `#familyPostTest` (parent enables, child finishes the chapter, takes the post-test through an attempt, slot report has the quiz block); `#importCarriesReferenceAndKeepOptionOrder`; `QuizPaperTest` (unit: valid permutation, exactly N drawn, keep-order question unshuffled, seed 42 deterministic) |
+| R | `#expiredAttemptIsAutoSubmitted` (deadline + 30 s → save 8011, auto-submitted at the deadline; the teacher's results finalise other expired attempts); `#singleTestAttemptHiddenUntilDueAndPracticeRepeats` (8012, idempotent submit, TEST score / review hidden until `dueAt`, PRACTICE attempt 2 does not change `QuizResult`, 8013); `#oldSubmitPathBlockedForModeQuizzes` (8010; legacy `mode` NULL quiz still submits the old way); `#concurrentOpenCreatesOneAttempt` (slot row lock) |
+| E | `#myQuestionsBatchEditDeleteCopy` (errors by index 1001, other teacher 3004, edit a question in a published quiz 8009, copy a post-test / foreign question 8007, no TEACHER plan 3005); `#familyPostTest` (stranger 3004, no PARENT plan 3005, closed group 8008) |
+
 ### ADM-1 — Set plan prices and durations; grant a plan or internal role with a recorded reason; inspect and reconcile payment transactions, including those held for review — **partial**
 | Kind | Tests |
 |---|---|
@@ -230,6 +238,15 @@ transitions be included, so they are listed in 4.7 and should be counted in the 
 | Q7 | HIDDEN → OPEN | postTestOn | — | missing |
 | Q8 | OPEN → OPEN | submit [once per child] | `QuizFlowTest#teacherPublishesAndLearnersSubmit`; `#validationAndErrorCodes` | covered |
 | Q9 | PUBLISHED → CLOSED | when(due date passed) | `QuizFlowTest#validationAndErrorCodes` (quiz seeded overdue, submit 8004) | covered |
+
+### 4.4b Quiz attempt (v3, 16/11/2026)
+| # | From → To | Trigger | Tests | Status |
+|---|---|---|---|---|
+| A1 | ● → OPEN | open [no open attempt; TEST never attempted; before `dueAt`] | `QuizV3FlowTest#testModeShufflesDrawsAndGradesByOriginalIndex` | covered |
+| A2 | OPEN → OPEN | open again / save answer | `QuizV3FlowTest#singleTestAttemptHiddenUntilDueAndPracticeRepeats`; `#concurrentOpenCreatesOneAttempt` | covered |
+| A3 | OPEN → SUBMITTED | submit | `QuizV3FlowTest#testModeShufflesDrawsAndGradesByOriginalIndex` | covered |
+| A4 | OPEN → SUBMITTED (auto) | when(now > deadline + grace) on any read / write or the teacher's results | `QuizV3FlowTest#expiredAttemptIsAutoSubmitted` | covered |
+| A5 | SUBMITTED → SUBMITTED | submit again (same result) | `QuizV3FlowTest#singleTestAttemptHiddenUntilDueAndPracticeRepeats` | covered |
 
 ### 4.5 ContentChange
 | # | From → To | Trigger | Tests | Status |

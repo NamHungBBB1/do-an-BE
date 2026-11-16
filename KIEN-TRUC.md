@@ -64,10 +64,12 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 |---|---|---|
 | `AuthService` | Account, Credential, VerificationToken | Đăng ký, xác minh email, đăng nhập, gộp cách đăng nhập, quên / đặt lại mật khẩu |
 | `EntitlementService` | Entitlement | Gói đang giữ (`activePlans`), admin cấp gói, nhắc sắp hết hạn |
-| `GroupService` | LearnerGroup | Mở nhóm gia đình / lớp, xác nhận đồng ý phụ huynh, kết thúc nhóm, đếm chỗ trống; bật / tắt hậu trắc cho lớp (`setPostTest`, PR #32) |
+| `GroupService` | LearnerGroup | Mở nhóm gia đình / lớp, xác nhận đồng ý phụ huynh, kết thúc nhóm, đếm chỗ trống; bật / tắt hậu trắc (`setPostTest`, PR #32; từ quiz v3 16/11 cả gia đình: bật cần gói đúng loại nhóm CLASS→TEACHER, FAMILY→PARENT, tắt chỉ cần chủ nhóm, nhóm đã đóng → 8008) |
 | `SlotService` | LearnerSlot | Mở slot (một hoặc nhiều), trả, xoá sạch, đổi PIN, trẻ đăng nhập |
 | `PlayService` | ChoiceEvent, MiniGameResult, RunState | Nhận lô một chương, chống ghi trùng |
-| `QuizService` **(có ruột)** | Question, Quiz, QuizResult, QuizAnswer | Quiz hai kiểu (quiz.md v2, 16/10): nhập kho, giáo viên soạn đề CLASS_TEST từ kho chung; hậu trắc POST_TEST BE tự tạo theo chương cho lớp bật cờ (tạo lúc em đọc danh sách, khoá dòng lớp); chấm, kết quả từng em. PR #32 (Thanh), production 17/10 |
+| `QuizService` **(có ruột)** | Question, Quiz, QuizResult, QuizAnswer | Quiz hai kiểu (quiz.md v2, 16/10): nhập kho, giáo viên soạn đề CLASS_TEST từ kho chung; hậu trắc POST_TEST BE tự tạo theo chương cho lớp bật cờ (tạo lúc em đọc danh sách, khoá dòng lớp); chấm, kết quả từng em. PR #32 (Thanh), production 17/10. Quiz v3 (16/11): đề có `mode` PRACTICE / TEST (bắt buộc khi tạo, nháp cũ phải chọn trước khi phát), `newQuestions` lưu cùng giao dịch, câu của chính giáo viên được vào đề, gia đình có hậu trắc, kết quả giáo viên có cột lượt làm + `paper` |
+| `TeacherQuestionService` **(có ruột, quiz v3 16/11)** | Question (`ownerId` khác null) | "Câu của tôi": lưu lô 1–100 câu (trùng nội dung chuẩn hoá với câu chưa rút của chính người đó → dùng lại id; lỗi trả theo vị trí trong `result`), sửa (câu nằm trong đề đã phát → 8009), xoá (đã vào đề → chỉ ẩn `retiredAt`), sao câu kho chung (`copiedFromId`; câu hậu trắc / của người khác → 8007). Cần gói TEACHER. `QuizServiceImpl.createQuiz` gọi `saveMine` trong cùng giao dịch cho `newQuestions` |
+| `QuizAttemptService` **(có ruột, quiz v3 16/11)** | QuizAttempt | Lượt làm: mở đề tạo đề riêng đã xáo (`paper`, bean `Random quizRandom` = SecureRandom trong `QuizConfig`, test thay `Random(42)`), tự lưu câu, nộp (idempotent), xem lại; đồng hồ BE tính, chốt lười lượt quá `deadline + app.quiz.grace-seconds`; lần nộp đầu của (đề, em) ghi `QuizResult` + `QuizAnswer` (chỉ số gốc). Mọi đường khoá dòng slot trước. Giáo viên xem kết quả → `finalizeExpired` khoá các slot liên quan rồi chốt |
 | `QuestionBankService` **(có ruột)** | Question | Kho câu hỏi trong Studio cho ba vai nội bộ (17/10, cách 1): xem toàn kho, thêm (externalId tự sinh, `replacesId` thay câu cũ), sửa, rút / đưa lại; câu đã nằm trong đề đã phát thì khoá chữ / lựa chọn / đáp án (8009), chỉ sửa nhãn; không xoá cứng. Reviewer chỉ đọc |
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
@@ -159,6 +161,16 @@ EntitlementRepository, PlanRepository): script
 trước khi chạy lại script. Entity/enum vẫn sinh lại hoàn toàn — ruột chỉ nên nằm ở service/controller/repository.
 
 ## Chưa vào khung, cố ý
+
+- **Quiz v3 (16/11, nhánh `feat/quiz-v3`, thiết kế `build/thiet-ke-be-quiz-v3-2026-11-16.md`)**: `Question` thêm `ownerId`,
+  `copiedFromId`, `keepOptionOrder`, `reference` (JSON); `Quiz` thêm `mode` (enum `QuizMode` PRACTICE / TEST — enum mới trên cột
+  mới, Hibernate tạo CHECK đủ giá trị), `drawCount`, `durationSeconds`; bảng mới `QuizAttempt` UNIQUE(quiz, slot, attemptNo).
+  Mọi cột mới cho phép NULL (BOOL theo khuôn bộ sinh: `default false not null`), không SQL tay. Hằng số nghiệp vụ một chỗ:
+  `service/impl/QuizRules`; trễ cho mạng là cấu hình `app.quiz.grace-seconds` (mặc định 30). Phần dùng chung của các service
+  quiz (JSON text, kiểm slot / đề của trẻ, ghi kết quả chính thức) ở lớp gói riêng `service/impl/QuizSupport`. Tên enum `QuizMode` nhờ ánh xạ {PRACTICE, TEST} trong `ten_enum` của `ops/sinh-khung-be.py`.
+  `mode` tuỳ chọn: không gửi = đề kiểu v2 (FE đang chạy không gãy); có `mode` thì bắt buộc `dueAt`. Đường đọc readOnly (báo cáo, danh sách đề,
+  chi tiết đề, danh sách của em) chốt lượt quá giờ bằng `QuizAttemptService.finalizeExpiredInGroup` chạy REQUIRES_NEW.
+  Đề cũ `mode` NULL và hậu trắc vẫn nộp đường cũ; đề có `mode` → 8010.
 
 - **Question** đã sửa 16/10 (nhánh `feat/quiz`): `externalId` UNIQUE, `concept`, `retiredAt`, `chapter` (câu hậu trắc
   của chương N, NULL = kho chung); `Quiz` thêm `kind` (enum `QuizKind`) + `chapter` + UNIQUE(group_id, kind, chapter);

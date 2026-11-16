@@ -11,7 +11,6 @@ import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizResult;
 import com.doan.game.entity.RunState;
-import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -27,9 +26,9 @@ import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
+import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.ReportService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -79,6 +78,8 @@ public class ReportServiceImpl implements ReportService {
     private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
     private final ObjectMapper objectMapper;
+    private final QuizSupport support;
+    private final QuizAttemptService quizAttemptService;
     private final Clock clock;
 
     /**
@@ -105,6 +106,8 @@ public class ReportServiceImpl implements ReportService {
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
         LearnerGroup group = slot.getGroup();
         requireOwner(callerId, group);
+        // Quiz v3: chốt lượt quá giờ của nhóm trước khi đọc (giao dịch riêng — hàm này readOnly).
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
         Integer totalChapters = currentTotalChapters();
         if (totalChapters == null) {
             throw new AppException(ErrorCode.NOT_FOUND, "chưa phát hành bản nội dung nào");
@@ -131,22 +134,19 @@ public class ReportServiceImpl implements ReportService {
                         group.getClosedAt()),
                 slot.getCreatedAt(), slot.getArchivedAt(), slot.getWipedAt(), lastActiveAt);
 
-        // Quiz chỉ cho lớp; FAMILY nhận null — FE ẩn hẳn khối quiz (Hưng chốt, cùng dashboard).
-        // Đợt 3 (quiz.md v2): assigned = số đề đã publish của lớp; results = bài của em, mới nhất
-        // trước (chưa nộp thì không có dòng, FE hiện "chưa nộp").
-        SlotReportResponse.Quizzes quizzes = null;
-        if (group.getContext() == LearningContext.CLASS) {
-            List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
-            List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
-            for (QuizResult r : myResults) {
-                resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
-                        r.getQuiz().getTitle(), r.getScore(), questionCount(r.getQuiz()),
-                        r.getSubmittedAt()));
-            }
-            quizzes = new SlotReportResponse.Quizzes(
-                    (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
-                    myResults.size(), resultRows);
+        // Đợt 3 (quiz.md v2): assigned = số đề đã publish của nhóm; results = bài của em, mới nhất
+        // trước (chưa nộp thì không có dòng, FE hiện "chưa nộp"). 16/11 (v3, Hưng chốt): gia đình cũng
+        // có khối này — chỉ chứa hậu trắc (gia đình không có đề giáo viên), không còn null.
+        List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
+        List<SlotReportResponse.QuizResultRow> resultRows = new ArrayList<>();
+        for (QuizResult r : myResults) {
+            resultRows.add(new SlotReportResponse.QuizResultRow(r.getQuiz().getId(),
+                    r.getQuiz().getTitle(), r.getScore(), support.questionsPerLearner(r.getQuiz()),
+                    r.getSubmittedAt()));
         }
+        SlotReportResponse.Quizzes quizzes = new SlotReportResponse.Quizzes(
+                (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
+                myResults.size(), resultRows);
 
         return new SlotReportResponse(learner, progress, indicatorsOf(run),
                 List.copyOf(achievements), List.of(), List.of(), quizzes, null);
@@ -164,6 +164,8 @@ public class ReportServiceImpl implements ReportService {
         LearnerGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
         requireOwner(callerId, group);
+        // Quiz v3: chốt lượt quá giờ của nhóm trước khi đọc (giao dịch riêng — hàm này readOnly).
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
         GroupReportResponse.GroupInfo info = new GroupReportResponse.GroupInfo(
                 group.getId(), group.getName(),
                 group.getContext() == null ? null : group.getContext().name(),
@@ -363,19 +365,6 @@ public class ReportServiceImpl implements ReportService {
     /** avg() ra Double / BigDecimal tùy H2 hay Postgres — Number là chung được cho cả hai. */
     private static Double avgOf(Object value) {
         return value == null ? null : ((Number) value).doubleValue();
-    }
-
-    /** Số câu của đề = độ dài questionIds (JSON text) — cùng nội dung với quiz.questionCount. */
-    private Integer questionCount(Quiz quiz) {
-        if (quiz.getQuestionIds() == null || quiz.getQuestionIds().isBlank()) {
-            return 0;
-        }
-        try {
-            return objectMapper.readValue(quiz.getQuestionIds(),
-                    new TypeReference<List<UUID>>() { }).size();
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "questionIds hong trong quiz");
-        }
     }
 
     // ------------------------------------------------------------------ truy vấn gộp

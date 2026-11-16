@@ -7,7 +7,6 @@ import com.doan.game.DTO.response.LearnerQuizPendingResponse;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.RunState;
-import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -96,10 +95,10 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
         List<LearnerDashboardResponse.RecentActivity> activities =
                 new ArrayList<>(run == null ? List.of() : chapterActivities(run, done));
 
-        // Đợt 3: quiz chỉ cho CLASS; FAMILY nhận null (Hưng chốt 08/10) — FE ẩn hẳn khối quiz.
-        // CLASS: đúng dữ liệu của GET /api/learner/quizzes, hai mảng hình cũ giữ nguyên.
+        // Đợt 3: đúng dữ liệu của GET /api/learner/quizzes, hai mảng hình cũ giữ nguyên. 16/11 (v3): gia đình
+        // cũng có khối này (chỉ hậu trắc) — trước đó FAMILY nhận null (Hưng chốt 08/10, nay đổi).
         LearnerDashboardResponse.Quizzes quizzes = null;
-        if (group != null && group.getContext() == LearningContext.CLASS) {
+        if (group != null) {
             LearnerQuizListResponse quizList = quizService.listForLearner(slotId);
             List<LearnerDashboardResponse.PendingQuiz> pending = new ArrayList<>();
             for (LearnerQuizPendingResponse p : quizList.pending()) {

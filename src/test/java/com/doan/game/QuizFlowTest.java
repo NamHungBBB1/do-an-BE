@@ -523,17 +523,17 @@ class QuizFlowTest {
     }
 
     // ------------------------------------------------------------------ 7. quyền bật / tắt cờ
-    /** FAMILY → 8008; không phải chủ → 3004; bật khi hết gói TEACHER → 3005; tắt khi hết gói → vẫn 200. */
+    /** FAMILY (quiz v3, 16/11) bật được bằng gói PARENT; không phải chủ → 3004; bật khi hết gói TEACHER → 3005; tắt khi hết gói → vẫn 200. */
     @Test
     void postTestFlagPermissions() throws Exception {
-        // Phụ huynh bật trên nhóm FAMILY → 8008.
+        // 16/11 (quiz v3): phụ huynh bật trên nhóm FAMILY bằng gói PARENT → 200 (v2 trả 8008).
         String parent = adult("qzcod", PlanKind.PARENT);
         String familyId = openGroup(parent, "Nha qzcod", "FAMILY");
         mvc.perform(post("/api/groups/" + familyId + "/post-test")
                         .header("Authorization", "Bearer " + parent)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(8008));
+                .andExpect(status().isOk());
+        assertThat(postTestEnabled(parent, familyId)).isTrue();
 
         // Người không phải chủ → 3004 (trước cả kiểm gói).
         Room room = newRoom("qztong");

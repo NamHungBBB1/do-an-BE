@@ -3,6 +3,7 @@ package com.doan.game.service.impl;
 import com.doan.game.DTO.request.AnswerDto;
 import com.doan.game.DTO.request.CreateQuizRequest;
 import com.doan.game.DTO.request.ImportQuestionDto;
+import com.doan.game.DTO.request.NewQuestionDto;
 import com.doan.game.DTO.request.SubmitQuizRequest;
 import com.doan.game.DTO.request.UpdateQuizRequest;
 import com.doan.game.DTO.response.AnswerReviewResponse;
@@ -12,6 +13,7 @@ import com.doan.game.DTO.response.LearnerQuizCompletedResponse;
 import com.doan.game.DTO.response.LearnerQuizListResponse;
 import com.doan.game.DTO.response.LearnerQuizPendingResponse;
 import com.doan.game.DTO.response.LearnerQuizResponse;
+import com.doan.game.DTO.response.PaperItemResponse;
 import com.doan.game.DTO.response.QuestionResponse;
 import com.doan.game.DTO.response.QuizAnswerResponse;
 import com.doan.game.DTO.response.QuizDetailResponse;
@@ -20,15 +22,17 @@ import com.doan.game.DTO.response.QuizResultResponse;
 import com.doan.game.DTO.response.QuizResultsResponse;
 import com.doan.game.DTO.response.QuizResultsSummaryResponse;
 import com.doan.game.DTO.response.QuizSlotResultResponse;
+import com.doan.game.DTO.response.SavedQuestionResponse;
 import com.doan.game.DTO.response.SubmitQuizResponse;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Question;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizAnswer;
+import com.doan.game.entity.QuizAttempt;
 import com.doan.game.entity.QuizResult;
-import com.doan.game.entity.RunState;
 import com.doan.game.enums.LearningContext;
+import com.doan.game.enums.QuizMode;
 import com.doan.game.enums.PlanKind;
 import com.doan.game.enums.QuizKind;
 import com.doan.game.enums.Role;
@@ -41,44 +45,49 @@ import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.QuestionRepository;
 import com.doan.game.repository.QuizAnswerRepository;
+import com.doan.game.repository.QuizAttemptRepository;
 import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
-import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.EntitlementService;
+import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.QuizService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.doan.game.service.TeacherQuestionService;
+import com.doan.game.service.impl.QuizSupport.GradedAnswer;
+import com.doan.game.service.impl.QuizSupport.PaperEntry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Ruột quiz hai kiểu (quiz.md v2, Hưng chốt 16/10).
+ * Ruột quiz hai kiểu (quiz.md v2, Hưng chốt 16/10; v3 16/11).
  *
- * Đề giáo viên (CLASS_TEST): chọn câu kho chung (chapter NULL), publish rồi bất biến.
- * Hậu trắc (POST_TEST): lớp bật cờ postTestEnabledAt thì MỖI lần đọc danh sách của em, nếu em đã
- * xong chương N mà lớp chưa có đề hậu trắc chương N và chương đó có câu → BE tự tạo (chụp
+ * Đề giáo viên (CLASS_TEST): chọn câu kho chung (chapter null) hoặc câu của chính mình (v3), publish rồi bất biến.
+ * Hậu trắc (POST_TEST): nhóm bật cờ postTestEnabledAt thì MỖI lần đọc danh sách của em, nếu em đã
+ * xong chương N mà nhóm chưa có đề hậu trắc chương N và chương đó có câu → BE tự tạo (chụp
  * questionIds lúc tạo, published ngay, không hạn). Một điểm tạo duy nhất, không chạm PlayService;
- * bật cờ muộn hay thêm chương sau đều tự đúng ở lần gọi kế tiếp.
+ * bật cờ muộn hay thêm chương sau đều tự đúng ở lần gọi kế tiếp. Từ v3 gia đình cũng có hậu trắc.
  *
  * Máy chủ chấm, mỗi em nộp một lần (UNIQUE quiz + slot, khoá dòng slot bằng lockById như Play),
  * đáp án KHÔNG BAO GIỜ xuống trẻ: DTO học sinh không có correctIndex, sau khi nộp chỉ trả đúng /
  * sai từng câu. Câu không nộp = bỏ trống = sai (OECD/INFE, khung chấm 3.2).
+ *
+ * v3: đề có mode (PRACTICE / TEST) làm qua lượt làm (QuizAttemptService) — đường nộp cũ trả 8010; đề cũ mode NULL
+ * và hậu trắc vẫn nộp đường cũ. Kết quả giáo viên chốt lượt quá giờ trước khi đọc.
  */
 @Service
 @RequiredArgsConstructor
@@ -88,12 +97,14 @@ public class QuizServiceImpl implements QuizService {
     private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
     private final QuizAnswerRepository quizAnswerRepo;
+    private final QuizAttemptRepository attemptRepo;
     private final LearnerGroupRepository groupRepo;
     private final LearnerSlotRepository slotRepo;
-    private final RunStateRepository runStateRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
-    private final ObjectMapper objectMapper;
+    private final TeacherQuestionService teacherQuestionService;
+    private final QuizAttemptService quizAttemptService;
+    private final QuizSupport support;
     private final Clock clock;
 
     // ------------------------------------------------------------------ kho câu hỏi
@@ -124,13 +135,21 @@ public class QuizServiceImpl implements QuizService {
             q.setExternalId(dto.externalId());
             q.setPool(dto.pool());
             q.setStem(dto.stem());
-            q.setOptions(toJson(dto.options()));
+            q.setOptions(support.toJson(dto.options()));
             q.setCorrectIndex(dto.correctIndex());
             q.setStandard(dto.standard());
             q.setConcept(dto.concept());
             // license nhập vào source khi source trống — không thêm cột (quiz.md).
             q.setSource(dto.source() != null && !dto.source().isBlank() ? dto.source() : dto.license());
             q.setChapter(dto.chapter());
+            // v3: nhóm đặt cờ không xáo đáp án và nguồn kiểm chứng qua nhập kho (giáo viên không đặt được).
+            // Không gửi (null) = giữ giá trị đang có: lô cũ không có hai trường này không được xoá chúng.
+            if (dto.keepOptionOrder() != null) {
+                q.setKeepOptionOrder(dto.keepOptionOrder());
+            }
+            if (dto.reference() != null) {
+                q.setReference(support.toJson(dto.reference()));
+            }
             if (isNew) {
                 q.setCreatedAt(now);
                 questionRepo.save(q);
@@ -163,8 +182,8 @@ public class QuizServiceImpl implements QuizService {
     }
 
     /**
-     * Giáo viên chọn câu: kho chung (chapter null) chưa rút, có correctIndex (người lớn cần thấy
-     * đáp án để chọn). Gói TEACHER còn hạn hoặc ADMIN — thiếu thì 3005.
+     * Giáo viên chọn câu: kho chung (chapter null, không của giáo viên nào) chưa rút, có correctIndex (người lớn cần
+     * thấy đáp án để chọn). Gói TEACHER còn hạn hoặc ADMIN — thiếu thì 3005.
      */
     @Override
     @Transactional(readOnly = true)
@@ -175,8 +194,7 @@ public class QuizServiceImpl implements QuizService {
             throw new AppException(ErrorCode.PLAN_REQUIRED);
         }
         List<QuestionResponse> out = new ArrayList<>();
-        for (Question question : questionRepo.findByRetiredAtIsNullAndChapterIsNull()) {
-            List<String> options = parseOptions(question.getOptions());
+        for (Question question : questionRepo.findByRetiredAtIsNullAndChapterIsNullAndOwnerIsNull()) {
             if (standard != null && !standard.isBlank()
                     && !standard.equals(question.getStandard())) {
                 continue;
@@ -190,34 +208,36 @@ public class QuizServiceImpl implements QuizService {
             }
             if (q != null && !q.isBlank()
                     && (question.getStem() == null
-                    || !question.getStem().toLowerCase(java.util.Locale.ROOT)
-                    .contains(q.toLowerCase(java.util.Locale.ROOT)))) {
+                    || !question.getStem().toLowerCase(Locale.ROOT)
+                    .contains(q.toLowerCase(Locale.ROOT)))) {
                 continue;
             }
-            out.add(QuizMapper.toResponse(question, options));
+            out.add(support.questionResponse(question, null));
         }
         return out;
     }
 
     // ------------------------------------------------------------------ giáo viên: đề CLASS_TEST
 
-    /** Tạo nháp: lớp CLASS đang mở của người gọi + gói TEACHER; câu phải có trong kho chung (8007). */
+    /**
+     * Tạo nháp: lớp CLASS đang mở của người gọi + gói TEACHER; câu phải là kho chung hoặc câu của chính người gọi (8007).
+     * mode tuỳ chọn: không gửi = đề kiểu v2 (một lần, không giờ, không xáo, nộp đường cũ) để FE đang chạy không gãy; có
+     * mode thì bắt buộc dueAt. newQuestions lưu thành câu của giáo viên trong CÙNG giao dịch — lỗi bất kỳ thì không lưu gì.
+     */
     @Override
     @Transactional
     public QuizResponse createQuiz(UUID callerId, CreateQuizRequest req) {
         LearnerGroup group = requireOwnedClassGroup(callerId, req == null ? null : req.groupId());
         requireTeacherPlan(callerId);
-        String title = requireTitle(req == null ? null : req.title());
-        List<UUID> ids = requireQuestionIds(req == null ? null : req.questionIds());
-        requireQuestionsInPool(ids);
-        requireDueAtFuture(req == null ? null : req.dueAt());
+        String title = requireTitle(req.title());
+        QuizMode mode = parseMode(req.mode(), null);   // null = đề kiểu v2
+        requireDueAtFuture(req.dueAt());
+        List<UUID> ids = collectQuestionIds(callerId, req.questionIds(), req.newQuestions());
         Quiz quiz = new Quiz();
         quiz.setOwner(group.getOwner());
         quiz.setGroup(group);
-        quiz.setTitle(title);
-        quiz.setQuestionIds(toJson(ids));
-        quiz.setDueAt(req.dueAt());
         quiz.setKind(QuizKind.CLASS_TEST);
+        applySettings(quiz, title, ids, req.dueAt(), mode, req.drawCount(), req.durationMinutes());
         quiz = quizRepo.save(quiz);
         return QuizMapper.toResponse(quiz, ids.size(), 0);
     }
@@ -227,6 +247,7 @@ public class QuizServiceImpl implements QuizService {
     @Transactional(readOnly = true)
     public List<QuizResponse> listQuizzes(UUID callerId, UUID groupId) {
         requireOwnedGroup(callerId, groupId);
+        quizAttemptService.finalizeExpiredInGroup(groupId);   // giao dịch riêng: hàm này readOnly
         Map<UUID, Long> submitted = submittedCounts(groupId);
         List<Quiz> quizzes = new ArrayList<>(quizRepo.findByGroup_Id(groupId));
         quizzes.sort(Comparator.comparing((Quiz quiz) -> quiz.getPublishedAt() == null
@@ -244,19 +265,21 @@ public class QuizServiceImpl implements QuizService {
     @Transactional(readOnly = true)
     public QuizDetailResponse getQuiz(UUID callerId, UUID quizId) {
         Quiz quiz = requireOwnedQuiz(callerId, quizId);
-        Map<UUID, Question> questions = loadQuestions(parseIds(quiz.getQuestionIds()));
+        quizAttemptService.finalizeExpiredInGroup(quiz.getGroup().getId());
+        List<UUID> ids = support.parseIds(quiz.getQuestionIds());
+        Map<UUID, Question> questions = support.loadQuestions(ids);
         List<QuestionResponse> rows = new ArrayList<>();
-        for (UUID id : parseIds(quiz.getQuestionIds())) {
+        for (UUID id : ids) {
             Question question = questions.get(id);
             if (question != null) {
-                rows.add(QuizMapper.toResponse(question, parseOptions(question.getOptions())));
+                rows.add(support.questionResponse(question, null));
             }
         }
         return new QuizDetailResponse(QuizMapper.toResponse(quiz, rows.size(),
                 submittedCount(quiz.getId())), rows);
     }
 
-    /** Sửa — chỉ khi chưa publish và không phải đề hậu trắc (8002). Publish rồi là bất biến. */
+    /** Sửa — chỉ khi chưa publish và không phải đề hậu trắc (8002). mode null = giữ chế độ cũ. */
     @Override
     @Transactional
     public QuizResponse updateQuiz(UUID callerId, UUID quizId, UpdateQuizRequest req) {
@@ -264,12 +287,10 @@ public class QuizServiceImpl implements QuizService {
         requireTeacherPlan(callerId);
         requireMutable(quiz);
         String title = requireTitle(req == null ? null : req.title());
-        List<UUID> ids = requireQuestionIds(req == null ? null : req.questionIds());
-        requireQuestionsInPool(ids);
-        requireDueAtFuture(req == null ? null : req.dueAt());
-        quiz.setTitle(title);
-        quiz.setQuestionIds(toJson(ids));
-        quiz.setDueAt(req.dueAt());
+        QuizMode mode = parseMode(req.mode(), quiz.getMode());
+        requireDueAtFuture(req.dueAt());
+        List<UUID> ids = collectQuestionIds(callerId, req.questionIds(), req.newQuestions());
+        applySettings(quiz, title, ids, req.dueAt(), mode, req.drawCount(), req.durationMinutes());
         quiz = quizRepo.save(quiz);
         return QuizMapper.toResponse(quiz, ids.size(), submittedCount(quiz.getId()));
     }
@@ -283,7 +304,7 @@ public class QuizServiceImpl implements QuizService {
         quizRepo.delete(quiz);
     }
 
-    /** Publish: từ đó học sinh thấy, đề bất biến. */
+    /** Publish: từ đó học sinh thấy, đề bất biến. Đề không có mode chạy như v2. */
     @Override
     @Transactional
     public QuizResponse publish(UUID callerId, UUID quizId) {
@@ -297,17 +318,25 @@ public class QuizServiceImpl implements QuizService {
 
     // ------------------------------------------------------------------ kết quả
 
-    /** Kết quả cả lớp: ACTIVE trước, rồi đã trả / đã xoá nhưng vẫn nộp bài; summary trên bài đã nộp. */
+    /**
+     * Kết quả cả lớp: ACTIVE trước, rồi đã trả / đã xoá nhưng vẫn nộp bài; summary trên bài đã nộp. Chốt lượt quá giờ
+     * trước khi đọc (v3) nên không readOnly; cột lượt làm lấy từ lượt đầu của mỗi em (kết quả chính thức = lần nộp đầu).
+     */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public QuizResultsResponse getClassResults(UUID callerId, UUID quizId) {
         Quiz quiz = requireOwnedQuiz(callerId, quizId);
+        quizAttemptService.finalizeExpired(quizId);
         Map<UUID, QuizResult> bySlot = new HashMap<>();
         List<QuizResult> results = quizResultRepo.findByQuiz_Id(quizId);
         for (QuizResult result : results) {
             bySlot.put(result.getSlot().getId(), result);
         }
-        int totalQuestions = questionCount(quiz);
+        Map<UUID, QuizAttempt> firstAttempts = new HashMap<>();
+        for (QuizAttempt attempt : attemptRepo.findByQuiz_IdAndAttemptNo(quizId, 1)) {
+            firstAttempts.put(attempt.getSlot().getId(), attempt);
+        }
+        int totalQuestions = support.questionsPerLearner(quiz);
         List<QuizResultResponse> rows = new ArrayList<>();
         List<LearnerSlot> allSlots = new ArrayList<>(
                 slotRepo.findByGroup_IdOrderByCreatedAtAsc(quiz.getGroup().getId()));
@@ -317,85 +346,111 @@ public class QuizServiceImpl implements QuizService {
         for (LearnerSlot slot : allSlots) {
             QuizResult result = bySlot.get(slot.getId());
             if (slot.getStatus() == SlotStatus.ACTIVE || result != null) {
-                rows.add(resultRow(slot, result, totalQuestions));
+                rows.add(resultRow(slot, result, firstAttempts.get(slot.getId()), totalQuestions));
                 emitted.add(slot.getId());
             }
         }
         // Phòng khi findByGroup_IdOrderByCreatedAtAsc vì lý do nào đó sót slot đã nộp — không được mất bài.
         for (QuizResult result : results) {
             if (!emitted.contains(result.getSlot().getId())) {
-                rows.add(resultRow(result.getSlot(), result, totalQuestions));
+                rows.add(resultRow(result.getSlot(), result, firstAttempts.get(result.getSlot().getId()),
+                        totalQuestions));
             }
         }
         Double average = results.isEmpty() ? null
                 : results.stream().mapToInt(QuizResult::getScore).average().orElse(0);
-        return new QuizResultsResponse(QuizMapper.toResponse(quiz, totalQuestions, results.size()),
+        return new QuizResultsResponse(QuizMapper.toResponse(quiz, questionCount(quiz), results.size()),
                 new QuizResultsSummaryResponse(rows.size(), results.size(), average), rows);
     }
 
-    /** Từng câu của một em (giáo viên thấy đáp án); chưa nộp → 8003. */
+    /** Từng câu của một em (giáo viên thấy đáp án); chưa nộp → 8003. v3: kèm đề riêng em đó nhận (paper). */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public QuizSlotResultResponse getSlotResult(UUID callerId, UUID quizId, UUID slotId) {
         Quiz quiz = requireOwnedQuiz(callerId, quizId);
+        quizAttemptService.finalizeExpired(quizId);
         QuizResult result = quizResultRepo.findByQuiz_IdAndSlot_Id(quizId, slotId)
                 .orElseThrow(() -> new AppException(ErrorCode.QUIZ_NOT_SUBMITTED));
+        Map<UUID, Question> questions = support.loadQuestions(support.parseIds(quiz.getQuestionIds()));
         List<QuizAnswerResponse> answers = new ArrayList<>();
         for (QuizAnswer answer : quizAnswerRepo.findByQuizResult_Id(result.getId())) {
-            answers.add(new QuizAnswerResponse(answer.getQuestion().getId(),
-                    answer.getQuestion().getStem(), answer.getChosenIndex(),
-                    answer.getQuestion().getCorrectIndex(), answer.isCorrect()));
+            Question question = questions.getOrDefault(answer.getQuestion().getId(), answer.getQuestion());
+            answers.add(new QuizAnswerResponse(question.getId(), question.getStem(), answer.getChosenIndex(),
+                    question.getCorrectIndex(), answer.isCorrect()));
         }
+        List<PaperItemResponse> paper = attemptRepo.findByQuiz_IdAndSlot_IdAndAttemptNo(quizId, slotId, 1)
+                .map(attempt -> paperOf(attempt, questions))
+                .orElse(null);
         return new QuizSlotResultResponse(slotId, result.getScore(), answers.size(),
-                result.getSubmittedAt(), answers);
+                result.getSubmittedAt(), answers, paper);
     }
 
-    // ------------------------------------------------------------------ cờ hậu trắc
+    /** Đề riêng của em theo thứ tự em thấy, cho người lớn: vị trí em chọn và vị trí đáp án đúng trong thứ tự đó. */
+    private List<PaperItemResponse> paperOf(QuizAttempt attempt, Map<UUID, Question> questions) {
+        List<PaperEntry> paper = support.parsePaper(attempt.getPaper());
+        Map<Integer, Integer> chosen = support.parseAnswers(attempt.getAnswers());
+        List<PaperItemResponse> out = new ArrayList<>(paper.size());
+        for (int pos = 0; pos < paper.size(); pos++) {
+            PaperEntry entry = paper.get(pos);
+            Question question = questions.get(entry.q());
+            List<String> original = support.parseOptions(question.getOptions());
+            Integer pick = chosen.get(pos);
+            int correctPos = entry.o().indexOf(question.getCorrectIndex());
+            out.add(new PaperItemResponse(pos, question.getId(), question.getStem(),
+                    entry.o().stream().map(original::get).toList(), pick,
+                    pick != null && pick == correctPos, correctPos));
+        }
+        return out;
+    }
 
     // ------------------------------------------------------------------ học sinh
 
     /**
-     * Danh sách của em: đề giáo viên đã publish + hậu trắc — ĐÂY LÀ CHỖ "TỰ MỞ": với mỗi chương
-     * em đã xong mà lớp chưa có đề hậu trắc và chương có câu thì tạo ngay lúc đọc. Em chỉ thấy
-     * hậu trắc chương mình đã xong (dù đề tồn tại vì bạn xong trước); lớp tắt cờ thì hậu trắc
-     * biến khỏi pending, bài đã nộp vẫn trong completed.
+     * Danh sách của em: đề giáo viên đã publish (chỉ lớp) + hậu trắc — ĐÂY LÀ CHỖ "TỰ MỞ": với mỗi chương
+     * em đã xong mà nhóm chưa có đề hậu trắc và chương có câu thì tạo ngay lúc đọc. Em chỉ thấy
+     * hậu trắc chương mình đã xong (dù đề tồn tại vì bạn xong trước); nhóm tắt cờ thì hậu trắc
+     * biến khỏi pending, bài đã nộp vẫn trong completed. Gia đình (v3) chỉ có hậu trắc.
      */
     @Override
     @Transactional
     public LearnerQuizListResponse listForLearner(UUID slotId) {
-        LearnerSlot slot = requireLearnerSlot(slotId);
+        LearnerSlot slot = support.requireLearnerSlot(slotId);
         LearnerGroup group = slot.getGroup();
-        if (group.getContext() != LearningContext.CLASS) {
-            return new LearnerQuizListResponse(List.of(), List.of());
-        }
-        List<Integer> done = chaptersDone(slotId);
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
+        boolean isClass = group.getContext() == LearningContext.CLASS;
+        List<Integer> done = support.chaptersDone(slotId);
         if (group.getPostTestEnabledAt() != null) {
             ensurePostTests(group, done);
         }
+        List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
         Set<UUID> myResultQuizIds = new HashSet<>();
-        for (QuizResult result : quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId)) {
+        for (QuizResult result : myResults) {
             myResultQuizIds.add(result.getQuiz().getId());
         }
         Instant now = Instant.now(clock);
-        Map<UUID, Long> submitted = submittedCounts(group.getId());
+        Map<UUID, UUID> latestAttempt = new HashMap<>();   // quizId → lượt mới nhất (đọc theo attemptNo tăng dần)
+        for (QuizAttempt attempt : attemptRepo.findBySlot_IdOrderByAttemptNoAsc(slotId)) {
+            latestAttempt.put(attempt.getQuiz().getId(), attempt.getId());
+        }
 
         List<LearnerQuizPendingResponse> pending = new ArrayList<>();
-        List<Quiz> quizzes = quizRepo.findByGroup_Id(group.getId());
-        for (Quiz quiz : quizzes) {
+        for (Quiz quiz : quizRepo.findByGroup_Id(group.getId())) {
             if (quiz.getPublishedAt() == null || myResultQuizIds.contains(quiz.getId())) {
                 continue;
             }
-            if (isPostTest(quiz)) {
-                // Hậu trắc: chỉ khi lớp đang bật và em đã xong đúng chương đó.
+            if (QuizSupport.isPostTest(quiz)) {
+                // Hậu trắc: chỉ khi nhóm đang bật và em đã xong đúng chương đó.
                 if (group.getPostTestEnabledAt() == null || quiz.getChapter() == null
                         || !done.contains(quiz.getChapter())) {
                     continue;
                 }
+            } else if (!isClass) {
+                continue;   // gia đình không có đề giáo viên
             }
             boolean overdue = quiz.getDueAt() != null && quiz.getDueAt().isBefore(now);
             pending.add(new LearnerQuizPendingResponse(quiz.getId(), QuizMapper.kindName(quiz),
-                    quiz.getChapter(), quiz.getTitle(), questionCount(quiz), quiz.getDueAt(),
-                    overdue));
+                    quiz.getChapter(), quiz.getTitle(), support.questionsPerLearner(quiz), quiz.getDueAt(),
+                    overdue, QuizMapper.modeName(quiz), quiz.getDurationSeconds(), latestAttempt.get(quiz.getId())));
         }
         pending.sort(Comparator
                 .comparing((LearnerQuizPendingResponse p) -> p.kind())
@@ -403,37 +458,42 @@ public class QuizServiceImpl implements QuizService {
                 .thenComparing(p -> p.chapter() == null ? Integer.MAX_VALUE : p.chapter()));
 
         List<LearnerQuizCompletedResponse> completed = new ArrayList<>();
-        for (QuizResult result : quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId)) {
+        for (QuizResult result : myResults) {
             Quiz quiz = result.getQuiz();
             completed.add(new LearnerQuizCompletedResponse(quiz.getId(), QuizMapper.kindName(quiz),
-                    quiz.getChapter(), quiz.getTitle(), result.getScore(),
+                    quiz.getChapter(), quiz.getTitle(), visibleScore(quiz, result, now),
                     quizAnswerRepo.findByQuizResult_Id(result.getId()).size(),
-                    result.getSubmittedAt()));
+                    result.getSubmittedAt(), QuizMapper.modeName(quiz), latestAttempt.get(quiz.getId())));
         }
         return new LearnerQuizListResponse(pending, completed);
     }
 
-    /** Đề để làm: KHÔNG có correctIndex. Đáp án không bao giờ xuống trẻ. */
+    /**
+     * Đề để làm: KHÔNG có correctIndex. Đáp án không bao giờ xuống trẻ. Đề có mode (v3) trả questions rỗng: câu chỉ xuống
+     * qua lượt làm (đã xáo, đã rút) — trả đủ M câu theo thứ tự gốc ở đây là lộ cả bộ đề Kiểm tra.
+     */
     @Override
     @Transactional(readOnly = true)
     public LearnerQuizResponse getForLearner(UUID slotId, UUID quizId) {
-        LearnerSlot slot = requireLearnerSlot(slotId);
-        Quiz quiz = requireLearnerQuiz(slot, quizId);
-        List<UUID> ids = parseIds(quiz.getQuestionIds());
-        Map<UUID, Question> questions = loadQuestions(ids);
+        LearnerSlot slot = support.requireLearnerSlot(slotId);
+        Quiz quiz = support.requireLearnerQuiz(slot, quizId);
+        List<UUID> ids = quiz.getMode() == null ? support.parseIds(quiz.getQuestionIds()) : List.of();
+        Map<UUID, Question> questions = support.loadQuestions(ids);
         List<LearnerQuestionResponse> rows = new ArrayList<>();
         for (UUID id : ids) {
             Question question = questions.get(id);
             if (question != null) {
                 rows.add(new LearnerQuestionResponse(question.getId(), question.getStem(),
-                        parseOptions(question.getOptions())));
+                        support.parseOptions(question.getOptions())));
             }
         }
+        Instant now = Instant.now(clock);
         LearnerQuizCompletedResponse submission = quizResultRepo
                 .findByQuiz_IdAndSlot_Id(quizId, slotId)
                 .map(result -> new LearnerQuizCompletedResponse(quiz.getId(),
                         QuizMapper.kindName(quiz), quiz.getChapter(), quiz.getTitle(),
-                        result.getScore(), rows.size(), result.getSubmittedAt()))
+                        visibleScore(quiz, result, now), support.questionsPerLearner(quiz), result.getSubmittedAt(),
+                        QuizMapper.modeName(quiz), latestAttemptId(quizId, slotId)))
                 .orElse(null);
         return new LearnerQuizResponse(quiz.getId(), QuizMapper.kindName(quiz), quiz.getChapter(),
                 quiz.getTitle(), quiz.getDueAt(), rows, submission);
@@ -441,15 +501,19 @@ public class QuizServiceImpl implements QuizService {
 
     /**
      * Nộp một lần, máy chủ chấm. lockById dòng slot như Play: hai lần bấm nộp cùng lúc thành lần
-     * thứ hai 8005 chứ không phải 500. Câu không có trong answers = bỏ trống = sai.
+     * thứ hai 8005 chứ không phải 500. Câu không có trong answers = bỏ trống = sai. Đề có mode (v3) → 8010: phải làm
+     * qua lượt làm, không để đường cũ vòng qua xáo đề / đồng hồ.
      */
     @Override
     @Transactional
     public SubmitQuizResponse submitQuiz(UUID slotId, UUID quizId, SubmitQuizRequest req) {
-        LearnerSlot slot = slotRepo.lockById(slotId)
-                .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
-        checkLearnerSlot(slot);
-        Quiz quiz = requireLearnerQuiz(slot, quizId);
+        LearnerSlot slot = support.lockLearnerSlot(slotId);
+        Quiz quiz = support.requireLearnerQuiz(slot, quizId);
+        if (quiz.getMode() != null
+                || (QuizSupport.isPostTest(quiz) && attemptRepo.existsByQuiz_IdAndSlot_Id(quizId, slotId))) {
+            // hậu trắc em đã mở lượt làm (đề đã xáo) thì đi tiếp đường đó, không nộp chỉ số gốc qua đường cũ
+            throw new AppException(ErrorCode.QUIZ_ATTEMPT_REQUIRED);
+        }
         Instant now = Instant.now(clock);
         if (quiz.getDueAt() != null && quiz.getDueAt().isBefore(now)) {
             throw new AppException(ErrorCode.QUIZ_DUE_PASSED);
@@ -458,39 +522,21 @@ public class QuizServiceImpl implements QuizService {
             throw new AppException(ErrorCode.QUIZ_ALREADY_SUBMITTED);
         }
 
-        List<UUID> ids = parseIds(quiz.getQuestionIds());
-        Map<UUID, Question> questions = loadQuestions(ids);
+        List<UUID> ids = support.parseIds(quiz.getQuestionIds());
+        Map<UUID, Question> questions = support.loadQuestions(ids);
         Map<UUID, Integer> chosen = validateAnswers(req, ids, questions);
 
-        int score = 0;
+        List<GradedAnswer> graded = new ArrayList<>(ids.size());
         List<AnswerReviewResponse> review = new ArrayList<>(ids.size());
-        QuizResult result = new QuizResult();
-        result.setQuiz(quiz);
-        result.setSlot(slot);
-        result.setSubmittedAt(now);
-        // save trước vì QuizAnswer.trỏ vào id của bài; score điền sau khi đếm xong.
-        result.setScore(0);
-        result = quizResultRepo.save(result);
-        List<QuizAnswer> answers = new ArrayList<>(ids.size());
         for (UUID id : ids) {
             Question question = questions.get(id);
             Integer picked = chosen.get(id);
             boolean correct = picked != null && picked.equals(question.getCorrectIndex());
-            if (correct) {
-                score++;
-            }
-            QuizAnswer answer = new QuizAnswer();
-            answer.setQuizResult(result);
-            answer.setQuestion(question);
-            answer.setChosenIndex(picked);
-            answer.setCorrect(correct);
-            answers.add(answer);
+            graded.add(new GradedAnswer(question, picked, correct));
             review.add(new AnswerReviewResponse(id, picked, correct));
         }
-        quizAnswerRepo.saveAll(answers);
-        result.setScore(score);
-        result = quizResultRepo.save(result);
-        return new SubmitQuizResponse(quizId, score, ids.size(), result.getSubmittedAt(), review);
+        QuizResult result = support.writeOfficialResult(quiz, slot, now, graded);
+        return new SubmitQuizResponse(quizId, result.getScore(), ids.size(), result.getSubmittedAt(), review);
     }
 
     // ------------------------------------------------------------------ hậu trắc tự tạo
@@ -505,7 +551,7 @@ public class QuizServiceImpl implements QuizService {
         if (done.isEmpty()) {
             return;
         }
-        // lockById như closeGroup/openSlot: tuần tự hoá việc tạo đề hậu trắc theo lớp.
+        // lockById như closeGroup/openSlot: tuần tự hoá việc tạo đề hậu trắc theo nhóm.
         group = groupRepo.lockById(group.getId()).orElse(group);
         for (Integer chapter : done) {
             if (quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, chapter)
@@ -523,7 +569,7 @@ public class QuizServiceImpl implements QuizService {
                 quiz.setOwner(group.getOwner());
                 quiz.setGroup(group);
                 quiz.setTitle("Hậu trắc chương " + chapter);
-                quiz.setQuestionIds(toJson(ids));
+                quiz.setQuestionIds(support.toJson(ids));
                 quiz.setKind(QuizKind.POST_TEST);
                 quiz.setChapter(chapter);
                 quiz.setPublishedAt(Instant.now(clock));
@@ -535,41 +581,6 @@ public class QuizServiceImpl implements QuizService {
     }
 
     // ------------------------------------------------------------------ kiểm chung
-
-    /** Học sinh: slot phải có (3007), chưa WIPED (3007) và chưa ARCHIVED (3009) — cùng luật dashboard. */
-    private LearnerSlot requireLearnerSlot(UUID slotId) {
-        LearnerSlot slot = slotRepo.findById(slotId)
-                .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
-        checkLearnerSlot(slot);
-        return slot;
-    }
-
-    private static void checkLearnerSlot(LearnerSlot slot) {
-        if (slot.getStatus() == SlotStatus.WIPED) {
-            throw new AppException(ErrorCode.SLOT_NOT_FOUND);
-        }
-        if (slot.getStatus() == SlotStatus.ARCHIVED) {
-            throw new AppException(ErrorCode.SLOT_ARCHIVED);
-        }
-    }
-
-    /** Đề hợp lệ với em: của đúng lớp, đã publish; hậu trắc thêm điều kiện lớp bật cờ + chương đã xong. */
-    private Quiz requireLearnerQuiz(LearnerSlot slot, UUID quizId) {
-        Quiz quiz = quizRepo.findById(quizId)
-                .orElseThrow(() -> new AppException(ErrorCode.QUIZ_NOT_FOUND));
-        if (quiz.getPublishedAt() == null || quiz.getGroup() == null
-                || !quiz.getGroup().getId().equals(slot.getGroup().getId())) {
-            throw new AppException(ErrorCode.QUIZ_NOT_FOUND);
-        }
-        if (isPostTest(quiz)) {
-            List<Integer> done = chaptersDone(slot.getId());
-            if (slot.getGroup().getPostTestEnabledAt() == null || quiz.getChapter() == null
-                    || !done.contains(quiz.getChapter())) {
-                throw new AppException(ErrorCode.QUIZ_NOT_FOUND);
-            }
-        }
-        return quiz;
-    }
 
     /** Giáo viên: đề phải có (8001) và của người gọi (3004). */
     private Quiz requireOwnedQuiz(UUID callerId, UUID quizId) {
@@ -583,7 +594,7 @@ public class QuizServiceImpl implements QuizService {
     }
 
     private void requireMutable(Quiz quiz) {
-        if (isPostTest(quiz) || quiz.getPublishedAt() != null) {
+        if (QuizSupport.isPostTest(quiz) || quiz.getPublishedAt() != null) {
             throw new AppException(ErrorCode.QUIZ_IMMUTABLE);
         }
     }
@@ -619,36 +630,99 @@ public class QuizServiceImpl implements QuizService {
         if (title == null || title.isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "title: bắt buộc");
         }
-        if (title.trim().length() > 120) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "title: tối đa 120 ký tự");
+        if (title.trim().length() > QuizRules.MAX_TITLE_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "title: tối đa " + QuizRules.MAX_TITLE_LENGTH + " ký tự");
         }
         return title.trim();
     }
 
-    private List<UUID> requireQuestionIds(List<UUID> ids) {
-        if (ids == null || ids.isEmpty()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "questionIds: cần ít nhất một câu");
+    /** v3: không gửi mode thì giữ fallback (tạo: null = đề kiểu v2; sửa: chế độ đang có). */
+    private static QuizMode parseMode(String mode, QuizMode fallback) {
+        if (mode == null || mode.isBlank()) {
+            return fallback;
         }
-        if (ids.size() > 100) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "questionIds: tối đa 100 câu");
+        try {
+            return QuizMode.valueOf(mode.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "mode: chỉ PRACTICE hoặc TEST");
         }
-        if (new HashSet<>(ids).size() != ids.size()) {
+    }
+
+    /**
+     * questionIds (kho chung / câu của tôi) + newQuestions (lưu thành câu của tôi, cùng giao dịch); câu mới trùng câu đã
+     * chọn thì không lặp. Tổng 1..100 câu (1001); questionIds trùng / lạ / đã rút / hậu trắc / của người khác → 8007.
+     */
+    private List<UUID> collectQuestionIds(UUID callerId, List<UUID> questionIds, List<NewQuestionDto> newQuestions) {
+        List<UUID> given = questionIds == null ? List.of() : questionIds;
+        if (given.size() > QuizRules.MAX_QUESTIONS) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "questionIds: tối đa " + QuizRules.MAX_QUESTIONS + " câu");
+        }
+        if (new HashSet<>(given).size() != given.size()) {
             // Trùng câu là lỗi của NGƯỜI RA ĐỀ (quiz.md ghi 8007) — 8006 là lỗi học sinh nộp bài.
             throw new AppException(ErrorCode.QUESTION_INVALID, "questionIds: có câu trùng");
         }
-        return ids;
+        requireQuestionsAllowed(callerId, given);
+        Set<UUID> ids = new LinkedHashSet<>(given);
+        if (newQuestions != null && !newQuestions.isEmpty()) {
+            for (SavedQuestionResponse saved : teacherQuestionService.saveMine(callerId, newQuestions)) {
+                ids.add(saved.id());
+            }
+        }
+        if (ids.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "questionIds: cần ít nhất một câu");
+        }
+        if (ids.size() > QuizRules.MAX_QUESTIONS) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "đề: tối đa " + QuizRules.MAX_QUESTIONS + " câu");
+        }
+        return new ArrayList<>(ids);
     }
 
-    /** Mọi câu phải thật, chưa rút và là kho chung — câu hậu trắc không được cho vào đề giáo viên (8007). */
-    private void requireQuestionsInPool(List<UUID> ids) {
-        Map<UUID, Question> questions = loadQuestions(ids);
+    /** Câu được vào đề giáo viên: kho chung (không chủ, không chương) hoặc câu của chính người gọi, chưa rút (8007). */
+    private void requireQuestionsAllowed(UUID callerId, List<UUID> ids) {
+        Map<UUID, Question> questions = support.loadQuestions(ids);
         for (UUID id : ids) {
             Question question = questions.get(id);
-            if (question == null || question.getRetiredAt() != null
-                    || question.getChapter() != null) {
+            boolean allowed = question != null && question.getRetiredAt() == null && question.getChapter() == null
+                    && (question.getOwner() == null || question.getOwner().getId().equals(callerId));
+            if (!allowed) {
                 throw new AppException(ErrorCode.QUESTION_INVALID);
             }
         }
+    }
+
+    /**
+     * Ghi các trường đề + cấu hình chế độ. Có mode thì dueAt bắt buộc (1001); không mode = luật v2. TEST: drawCount 1..số câu (null = hết), durationMinutes 1..180 (null = 1 phút ×
+     * số câu mỗi em). PRACTICE: bỏ qua hai trường đó.
+     */
+    private void applySettings(Quiz quiz, String title, List<UUID> ids, Instant dueAt, QuizMode mode,
+                               Integer drawCount, Integer durationMinutes) {
+        if (mode != null && dueAt == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "dueAt: bắt buộc với đề có chế độ (PRACTICE / TEST)");
+        }
+        quiz.setTitle(title);
+        quiz.setQuestionIds(support.toJson(ids));
+        quiz.setDueAt(dueAt);
+        quiz.setMode(mode);
+        if (mode != QuizMode.TEST) {
+            quiz.setDrawCount(null);
+            quiz.setDurationSeconds(null);
+            return;
+        }
+        if (drawCount != null && (drawCount < 1 || drawCount > ids.size())) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "drawCount: 1.." + ids.size());
+        }
+        if (durationMinutes != null && (durationMinutes < QuizRules.MIN_DURATION_MINUTES
+                || durationMinutes > QuizRules.MAX_DURATION_MINUTES)) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "durationMinutes: "
+                    + QuizRules.MIN_DURATION_MINUTES + ".." + QuizRules.MAX_DURATION_MINUTES);
+        }
+        int perLearner = drawCount == null ? ids.size() : drawCount;
+        quiz.setDrawCount(drawCount);
+        quiz.setDurationSeconds(durationMinutes == null
+                ? QuizRules.DEFAULT_SECONDS_PER_QUESTION * perLearner
+                : (int) Duration.ofMinutes(durationMinutes).toSeconds());
     }
 
     private void requireDueAtFuture(Instant dueAt) {
@@ -676,7 +750,7 @@ public class QuizServiceImpl implements QuizService {
             if (out.put(answer.questionId(), answer.chosenIndex()) != null) {
                 throw new AppException(ErrorCode.QUIZ_ANSWER_MISMATCH);   // trùng câu
             }
-            int options = parseOptions(questions.get(answer.questionId()).getOptions()).size();
+            int options = support.parseOptions(questions.get(answer.questionId()).getOptions()).size();
             if (answer.chosenIndex() < 0 || answer.chosenIndex() >= options) {
                 throw new AppException(ErrorCode.QUIZ_ANSWER_MISMATCH);
             }
@@ -686,8 +760,10 @@ public class QuizServiceImpl implements QuizService {
 
     // ------------------------------------------------------------------ tiện ích
 
-    private static boolean isPostTest(Quiz quiz) {
-        return quiz.getKind() == QuizKind.POST_TEST;
+    /** Đề Kiểm tra: trước hạn nộp em chỉ biết đã nộp, không thấy điểm (v3) — em nộp trước không mách được em nộp sau. */
+    private static Integer visibleScore(Quiz quiz, QuizResult result, Instant now) {
+        boolean hidden = quiz.getMode() == QuizMode.TEST && quiz.getDueAt() != null && now.isBefore(quiz.getDueAt());
+        return hidden ? null : result.getScore();
     }
 
     private int submittedCount(UUID quizId) {
@@ -702,64 +778,13 @@ public class QuizServiceImpl implements QuizService {
         return out;
     }
 
+    private UUID latestAttemptId(UUID quizId, UUID slotId) {
+        List<QuizAttempt> attempts = attemptRepo.findByQuiz_IdAndSlot_IdOrderByAttemptNoAsc(quizId, slotId);
+        return attempts.isEmpty() ? null : attempts.get(attempts.size() - 1).getId();
+    }
+
     private int questionCount(Quiz quiz) {
-        return parseIds(quiz.getQuestionIds()).size();
-    }
-
-    private Map<UUID, Question> loadQuestions(List<UUID> ids) {
-        Map<UUID, Question> out = new LinkedHashMap<>();
-        for (Question question : questionRepo.findAllById(ids)) {
-            out.put(question.getId(), question);
-        }
-        return out;
-    }
-
-    /** chaptersDone của em (RunState, play.md); chưa chơi → rỗng. */
-    private List<Integer> chaptersDone(UUID slotId) {
-        RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
-        if (run == null || run.getChaptersDone() == null || run.getChaptersDone().isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode node = objectMapper.readTree(run.getChaptersDone());
-            List<Integer> out = new ArrayList<>();
-            if (node.isArray()) {
-                node.forEach(n -> out.add(n.asInt()));
-            }
-            return out;
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "chaptersDone hong trong DB");
-        }
-    }
-
-    private List<String> parseOptions(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() { });
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "options hong trong DB");
-        }
-    }
-
-    private List<UUID> parseIds(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<UUID>>() { });
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "questionIds hong trong DB");
-        }
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "khong ghi duoc JSON");
-        }
+        return support.parseIds(quiz.getQuestionIds()).size();
     }
 
     private static int statusRank(SlotStatus status) {
@@ -769,12 +794,20 @@ public class QuizServiceImpl implements QuizService {
         return status == SlotStatus.ARCHIVED ? 1 : 2;
     }
 
-    private static QuizResultResponse resultRow(LearnerSlot slot, QuizResult result,
+    /** Một dòng kết quả lớp; cột v3 lấy từ lượt đầu của em (null với đề cũ / em chưa mở). */
+    private static QuizResultResponse resultRow(LearnerSlot slot, QuizResult result, QuizAttempt attempt,
                                                 int totalQuestions) {
         boolean wiped = slot.getStatus() == SlotStatus.WIPED;
+        String state = result != null ? "SUBMITTED" : attempt != null ? "IN_PROGRESS" : "NOT_OPENED";
+        Integer took = attempt == null || attempt.getSubmittedAt() == null ? null
+                : (int) Duration.between(attempt.getStartedAt(), attempt.getSubmittedAt()).toSeconds();
         return new QuizResultResponse(slot.getId(), wiped ? null : slot.getCode(),
                 wiped ? null : slot.getDisplayName(), slot.getStatus().name(), result != null,
                 result == null ? null : result.getScore(), totalQuestions,
-                result == null ? null : result.getSubmittedAt());
+                result == null ? null : result.getSubmittedAt(),
+                attempt == null ? null : attempt.getId().toString().substring(0, QuizRules.ATTEMPT_CODE_LENGTH),
+                attempt == null ? null : attempt.getStartedAt(), took,
+                attempt == null ? null : attempt.getLeaveCount(),
+                attempt == null ? null : attempt.isAutoSubmitted(), state);
     }
 }

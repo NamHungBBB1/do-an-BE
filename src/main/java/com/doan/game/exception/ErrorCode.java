@@ -133,9 +133,16 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST),
     QUESTION_INVALID(8007, "Câu hỏi không có trong kho, đã rút, hoặc là câu hậu trắc",
             HttpStatus.BAD_REQUEST),
-    GROUP_NOT_CLASS_OR_CLOSED(8008, "Chỉ lớp đang mở mới có quiz / hậu trắc", HttpStatus.CONFLICT),
+    GROUP_NOT_CLASS_OR_CLOSED(8008, "Nhóm đã đóng, hoặc không phải lớp (đề giáo viên chỉ cho lớp đang mở)",
+            HttpStatus.CONFLICT),
     QUESTION_IN_USE(8009, "Câu đã nằm trong đề đã phát hành — không sửa nội dung được, hãy rút rồi tạo câu mới thay thế",
             HttpStatus.CONFLICT),
+    // 16/11 quiz v3 (build/thiet-ke-be-quiz-v3-2026-11-16.md mục 5): chế độ + lượt làm + xáo.
+    QUIZ_ATTEMPT_REQUIRED(8010, "Đề này làm qua lượt làm (POST /api/learner/quizzes/{id}/attempts), không nộp đường cũ",
+            HttpStatus.CONFLICT),
+    ATTEMPT_CLOSED(8011, "Lượt làm đã nộp hoặc đã hết giờ", HttpStatus.CONFLICT),
+    TEST_SINGLE_ATTEMPT(8012, "Chế độ Kiểm tra chỉ làm một lần", HttpStatus.CONFLICT),
+    ATTEMPT_NOT_FOUND(8013, "Không có lượt làm này", HttpStatus.NOT_FOUND),
 
     // 9xxx — AI (24/10): khoá nhà cung cấp, hàng đợi việc AI nhiều tầng.
     AI_KEY_INVALID(9001, "Khoá AI không hợp lệ", HttpStatus.BAD_REQUEST),

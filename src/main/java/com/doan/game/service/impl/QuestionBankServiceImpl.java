@@ -6,14 +6,10 @@ import com.doan.game.entity.Question;
 import com.doan.game.enums.Role;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
-import com.doan.game.mapper.QuizMapper;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.QuestionRepository;
 import com.doan.game.repository.QuizRepository;
 import com.doan.game.service.QuestionBankService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +41,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     private final QuestionRepository questionRepo;
     private final QuizRepository quizRepo;
     private final AccountRoleRepository accountRoleRepo;
-    private final ObjectMapper objectMapper;
+    private final QuizSupport support;
     private final Clock clock;
 
     /** Toàn kho (kể cả bộ hậu trắc); câu đã rút chỉ khi includeRetired. Xếp: kho chung trước, rồi theo chương, rồi externalId. */
@@ -59,6 +55,9 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .thenComparing(x -> x.getExternalId() == null ? "" : x.getExternalId()));
         List<QuestionResponse> out = new ArrayList<>();
         for (Question question : rows) {
+            if (question.getOwner() != null) {
+                continue;   // câu của giáo viên (quiz v3) không hiện trong Studio, không vào kho chung
+            }
             if (!includeRetired && question.getRetiredAt() != null) {
                 continue;
             }
@@ -78,7 +77,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                     || !question.getStem().toLowerCase(Locale.ROOT).contains(q.toLowerCase(Locale.ROOT)))) {
                 continue;
             }
-            out.add(QuizMapper.toResponse(question, parseOptions(question.getOptions())));
+            out.add(support.questionResponse(question, null));
         }
         return out;
     }
@@ -103,8 +102,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         question.setExternalId(externalId);
         question.setCreatedAt(now);
         if (req.replacesId() != null) {
-            Question old = questionRepo.findById(req.replacesId())
-                    .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có câu " + req.replacesId()));
+            Question old = require(req.replacesId());
             if (old.getRetiredAt() == null) {
                 old.setRetiredAt(now);   // câu cũ rút ngay: đề mới không chụp nó nữa, đề cũ vẫn giữ
                 questionRepo.save(old);
@@ -113,7 +111,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         }
         apply(question, req);
         question = questionRepo.save(question);
-        return QuizMapper.toResponse(question, parseOptions(question.getOptions()));
+        return support.questionResponse(question, null);
     }
 
     /** Sửa; câu đã nằm trong đề đã phát thì chữ / lựa chọn / đáp án phải giữ nguyên (8009), nhãn thì sửa được. */
@@ -125,7 +123,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         validate(req);
         if (quizRepo.existsByPublishedAtIsNotNullAndQuestionIdsContaining(questionId.toString())) {
             boolean sameContent = Objects.equals(question.getStem(), req.stem().trim())
-                    && parseOptions(question.getOptions()).equals(req.options())
+                    && support.parseOptions(question.getOptions()).equals(req.options())
                     && Objects.equals(question.getCorrectIndex(), req.correctIndex());
             if (!sameContent) {
                 throw new AppException(ErrorCode.QUESTION_IN_USE);
@@ -133,7 +131,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         }
         apply(question, req);
         question = questionRepo.save(question);
-        return QuizMapper.toResponse(question, parseOptions(question.getOptions()));
+        return support.questionResponse(question, null);
     }
 
     /** Rút khỏi kho (idempotent): đề mới không chụp, đề cũ giữ nguyên. */
@@ -146,7 +144,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
             question.setRetiredAt(Instant.now(clock));
             question = questionRepo.save(question);
         }
-        return QuizMapper.toResponse(question, parseOptions(question.getOptions()));
+        return support.questionResponse(question, null);
     }
 
     /** Đưa lại vào kho (idempotent). */
@@ -159,7 +157,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
             question.setRetiredAt(null);
             question = questionRepo.save(question);
         }
-        return QuizMapper.toResponse(question, parseOptions(question.getOptions()));
+        return support.questionResponse(question, null);
     }
 
     // ------------------------------------------------------------------ phụ trợ
@@ -178,7 +176,9 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         if (questionId == null) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu id câu");
         }
+        // Câu của giáo viên (quiz v3) không thuộc kho Studio: coi như không có (1003), Studio không sửa / rút được.
         return questionRepo.findById(questionId)
+                .filter(question -> question.getOwner() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có câu " + questionId));
     }
 
@@ -211,7 +211,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     private void apply(Question question, UpsertQuestionRequest req) {
         question.setPool(req.pool());
         question.setStem(req.stem().trim());
-        question.setOptions(toJson(req.options()));
+        question.setOptions(support.toJson(req.options()));
         question.setCorrectIndex(req.correctIndex());
         question.setStandard(req.standard());
         question.setConcept(req.concept());
@@ -222,24 +222,5 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
-    }
-
-    private List<String> parseOptions(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() { });
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "options hong trong DB");
-        }
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED, "khong ghi duoc JSON");
-        }
     }
 }
