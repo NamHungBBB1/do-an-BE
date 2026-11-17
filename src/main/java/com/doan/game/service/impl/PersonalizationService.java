@@ -2,7 +2,6 @@ package com.doan.game.service.impl;
 
 import com.doan.game.DTO.response.PersonalizationResponse;
 import com.doan.game.entity.LearnerSlot;
-import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
@@ -24,16 +23,17 @@ import java.util.UUID;
 /**
  * Khảo sát cá nhân hoá của một trẻ (spec build/spec-ca-nhan-hoa-2026-11-11.md, Hưng chốt 11/11).
  *
- * <p>Lưu ở {@code learner_slot.personalization}: {@code {"PARENT":{…},"CHILD":{…},"GAME":{…}}} — có khoá nguồn nghĩa là nguồn đó
- * ĐÃ gửi (map rỗng = bỏ trống / bỏ qua hết). Nhãn cuối và trạng thái TÍNH RA bằng {@link Personalizer#resolve}, không lưu.
- * Wipe slot → NULL (SlotServiceImpl).
+ * <p>Lưu ở {@code learner_slot.personalization}: {@code {"CHILD":{…},"GAME":{…}}} — có khoá nguồn nghĩa là nguồn đó ĐÃ gửi (map
+ * rỗng = bỏ qua hết). Nhãn cuối và trạng thái TÍNH RA bằng {@link Personalizer#resolve}, không lưu. Wipe slot → NULL (SlotServiceImpl).
  *
- * <p>Ai hỏi gì: trẻ được hỏi những chiều phụ huynh để trống (Hưng: "phần nào không biết ta hỏi trực tiếp trẻ"); còn chiều nào chưa
- * ra nhãn thì game chọn phụ hỏi — chỉ giới tính và sở thích, không hỏi tuổi trong game.
+ * <p>Chỉ bé trả lời (Hưng 17/11): phụ huynh và giáo viên không trả lời thay, cùng chỉ thấy trạng thái. Bé được hỏi cả 3 chiều; chiều
+ * nào chưa ra nhãn thì game chọn phụ hỏi — chỉ giới tính và sở thích, không hỏi tuổi trong game. Khoá "PARENT" cũ bị bỏ qua và xoá
+ * ở lần ghi kế tiếp.
  */
 @Service
 public class PersonalizationService {
 
+    /** Nguồn cũ trước 17/11 — chỉ còn để dọn khỏi dữ liệu đã lưu. */
     static final String PARENT = "PARENT";
     static final String CHILD = "CHILD";
     static final String GAME = "GAME";
@@ -56,38 +56,20 @@ public class PersonalizationService {
         this.objectMapper = objectMapper;
     }
 
-    // ------------------------------------------------------------------ phụ huynh (chủ nhóm)
+    // ------------------------------------------------------------------ người lớn (chủ nhóm: phụ huynh / giáo viên)
 
+    /** Chỉ trạng thái (Hưng 17/11): nhãn là dữ liệu cá nhân của trẻ, người lớn không trả lời thay nên không cần xem. */
     @Transactional(readOnly = true)
-    public PersonalizationResponse forParent(UUID callerId, UUID slotId) {
+    public PersonalizationResponse forOwner(UUID callerId, UUID slotId) {
         LearnerSlot slot = requireOwned(callerId, slotId, slotRepo.findById(slotId));
-        Map<String, Map<String, String>> a = read(slot);
-        PersonalizationResponse v = view(a, a.getOrDefault(PARENT, Map.of()));
-        if (slot.getGroup().getContext() != LearningContext.FAMILY) {
-            // Giáo viên chỉ thấy trạng thái (spec mục 8): nhãn của học sinh là dữ liệu cá nhân trẻ, giáo viên không cần để dạy.
-            return new PersonalizationResponse(v.status(), null, null, List.of(), List.of(), personalizer.catalog());
-        }
-        return v;
-    }
-
-    /** Ghi đè toàn bộ câu trả lời của phụ huynh. Giá trị null / rỗng = "không biết, để bé chọn". Chỉ nhóm gia đình (H2 chờ Hưng). */
-    @Transactional
-    public PersonalizationResponse saveParent(UUID callerId, UUID slotId, Map<String, String> answers) {
-        LearnerSlot slot = requireOwned(callerId, slotId, slotRepo.lockById(slotId));
-        if (slot.getGroup().getContext() != LearningContext.FAMILY) {
-            throw new AppException(ErrorCode.FORBIDDEN, "nhóm lớp: học sinh tự trả lời khi vào game, giáo viên không trả lời thay");
-        }
-        Map<String, Map<String, String>> a = read(slot);
-        a.put(PARENT, clean(answers, personalizer.catalog().keySet().stream().toList()));
-        write(slot, a);
-        return view(a, a.get(PARENT));
+        return new PersonalizationResponse(view(read(slot)).status(), null, List.of(), List.of(), personalizer.catalog());
     }
 
     // ------------------------------------------------------------------ trẻ (token SLOT)
 
     @Transactional(readOnly = true)
     public PersonalizationResponse forChild(UUID slotId) {
-        return view(read(requireActive(slotRepo.findById(slotId))), null);
+        return view(read(requireActive(slotRepo.findById(slotId))));
     }
 
     /** Trẻ trả lời ({@code CHILD}) hoặc kết quả game chọn phụ ({@code GAME}). Ghi đè câu trước của cùng nguồn. */
@@ -99,8 +81,9 @@ public class PersonalizationService {
         LearnerSlot slot = requireActive(slotRepo.lockById(slotId));
         Map<String, Map<String, String>> a = read(slot);
         a.put(source, clean(answers, GAME.equals(source) ? GAME_DIMENSIONS : personalizer.catalog().keySet().stream().toList()));
+        a.remove(PARENT);   // câu phụ huynh trước 17/11: không còn dùng, không giữ dữ liệu trẻ thừa
         write(slot, a);
-        return view(a, null);
+        return view(a);
     }
 
     /** Chương của bản {@code version} đã ghép theo nhãn hiện tại của trẻ. FE giữ {@code variantKey} + bản tới hết chương. */
@@ -121,23 +104,21 @@ public class PersonalizationService {
     // ------------------------------------------------------------------ luật
 
     /**
-     * Trạng thái + câu cần hỏi. {@code parent} = câu của phụ huynh (chỉ trả cho phụ huynh; trẻ không thấy).
-     * NOT_STARTED: chưa nguồn nào gửi. COMPLETED: mọi chiều có nhãn. WAITING_CHILD: trẻ chưa trả lời mà còn câu cần hỏi trẻ.
-     * WAITING_GAME: còn giới tính / sở thích chưa có nhãn và game chọn phụ chưa chạy. SKIPPED: đã qua đủ bước, vẫn thiếu → bản gốc.
+     * Trạng thái + câu cần hỏi. NOT_STARTED: bé chưa trả lời, game chưa chạy. COMPLETED: mọi chiều có nhãn. WAITING_CHILD: bé chưa
+     * trả lời. WAITING_GAME: còn giới tính / sở thích chưa có nhãn và game chọn phụ chưa chạy. SKIPPED: đã qua đủ bước, vẫn thiếu → bản gốc.
      */
-    PersonalizationResponse view(Map<String, Map<String, String>> a, Map<String, String> parent) {
+    PersonalizationResponse view(Map<String, Map<String, String>> a) {
         Map<String, String> labels = personalizer.resolve(a);
-        Map<String, String> p = a.getOrDefault(PARENT, Map.of());
         List<String> askChild = new ArrayList<>();
         if (!a.containsKey(CHILD)) {
-            personalizer.catalog().keySet().stream().filter(d -> !p.containsKey(d) && !labels.containsKey(d)).forEach(askChild::add);
+            personalizer.catalog().keySet().stream().filter(d -> !labels.containsKey(d)).forEach(askChild::add);
         }
         List<String> askInGame = new ArrayList<>();
         if (!a.containsKey(GAME)) {
             GAME_DIMENSIONS.stream().filter(d -> !labels.containsKey(d)).forEach(askInGame::add);
         }
         String status;
-        if (a.isEmpty()) {
+        if (!a.containsKey(CHILD) && !a.containsKey(GAME)) {
             status = "NOT_STARTED";
         } else if (labels.size() == personalizer.catalog().size()) {
             status = "COMPLETED";
@@ -152,7 +133,7 @@ public class PersonalizationService {
             askChild.clear();
             askInGame.clear();
         }
-        return new PersonalizationResponse(status, labels, parent, askChild, askInGame, personalizer.catalog());
+        return new PersonalizationResponse(status, labels, askChild, askInGame, personalizer.catalog());
     }
 
     /** Chỉ nhận chiều trong {@code allowed}, giá trị trong danh mục; null / rỗng bỏ qua (= chưa biết). Sai → 1001. */
