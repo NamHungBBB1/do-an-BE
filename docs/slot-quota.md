@@ -187,7 +187,7 @@ cáo đã đóng băng nên không đổi). Xoá **tài khoản** người lớn
 | `POST /api/payments/webhook` | nhánh `purpose = ADDON` → cấp `slot_addon`, idempotent theo `transaction_id` |
 | `POST /api/groups` | CLASS: nhiều lớp, `plannedSize` **bắt buộc** `≥ 5` và `≤ free`; FAMILY: 1 nhóm |
 | `GET /api/groups` | `slotLimit` = `limit` của ví (FAMILY) hoặc `plannedSize` (CLASS) |
-| `GET /api/groups/{id}/capacity` | CLASS: `min(plannedSize − createdInClass, free)`; FAMILY: `free` |
+| `GET /api/groups/{id}/capacity` | CLASS: `plannedSize − createdInClass` (chỗ này đã nằm trong `reserved`, **không** trừ `free` lần nữa); FAMILY: `free` |
 | `PATCH /api/groups/{id}` | sửa `plannedSize`: `max(5, createdInClass) ≤ mới`, phần tăng `≤ free` |
 | `POST /api/slots`, `/bulk` | FAMILY: `free ≥ 1` (3006); CLASS: `createdInClass < plannedSize` (3026) |
 | `PATCH /api/slots/{id}` | **mới (Q18)**: đổi tên (+ PIN); tên không trùng slot `ACTIVE` khác trong nhóm |
@@ -311,7 +311,7 @@ hạn, nhắc hết hạn (xoá `PlanExpiryReminderJob`).
 | `service/SlotQuotaService.java`, `SlotQuota.java` | còn `base/extra/limit/used/reserved/free`; bỏ trần + mốc kỳ |
 | `service/impl/SlotQuotaServiceImpl.java` | đếm mọi slot của tài khoản; tính `reserved` trên lớp CLASS đang mở; bỏ mốc kỳ |
 | `repository/EntitlementRepository.java` | xoá `findActiveTermStart/End`, `countExpiringBetween`, `findTopBy...ExpiresOnDesc` |
-| `service/EntitlementFactory.java` | bỏ nối tiếp `plusDays(1)`; `startsOn = today`, `expiresOn = 9999-12-31` |
+| `service/EntitlementFactory.java` | thêm `createPermanent` (sentinel `9999-12-31`); **giữ** `create(months)` cho admin cấp tay |
 | `service/PlanExpiryReminderJob.java` | **xoá file** |
 | `service/PlanServiceImpl.java` | bỏ `months` khỏi API; thêm CRUD giá add-on |
 | `DTO/response/PlanResponse.java` | bỏ `months`, thêm `addonSlots`, `addonPrice` |
@@ -396,6 +396,9 @@ Nhánh này **chưa đẩy GitHub** — cần push để nhóm soát.
   `updated_by_id` như hiện tại.
 - **(mở)** Xoá **tài khoản người lớn** (quyền xoá dữ liệu theo luật) — **ngoài đợt này**, làm sau.
 - **(đã đóng)** PayOS add-on + ALTER CHECK: Hưng duyệt 17/11 qua tệp bổ sung.
+- **(đã đóng)** P1 (18/11): ví vĩnh viễn + `reserved`/`free` + sentinel `9999-12-31` đã code, 238 test xanh.
+  Còn lại: `months` của **admin cấp tay** vẫn giữ (công cụ cấp thử / xử lý khiếu nại) — khác với gói
+  mua qua PayOS là vĩnh viễn.
 - **(đã đóng)** `used_baseline`: không cần, vì §3.2 UPDATE toàn bộ entitlement thành vĩnh viễn và
   chấp nhận `free = 0` với tài khoản thử đã dùng quá ví.
 - **(đã đóng)** PII sau khi xoá: xoá thật (`display_name`, PIN, cá nhân hoá, badge → NULL), không
