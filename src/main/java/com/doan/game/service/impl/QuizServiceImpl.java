@@ -77,7 +77,7 @@ import java.util.UUID;
  * Ruột quiz hai kiểu (quiz.md v2, Hưng chốt 16/10; v3 16/11).
  *
  * Đề giáo viên (CLASS_TEST): chọn câu kho chung (chapter null) hoặc câu của chính mình (v3), publish rồi bất biến.
- * Hậu trắc (POST_TEST): nhóm bật cờ postTestEnabledAt thì MỖI lần đọc danh sách của em, nếu em đã
+ * Hậu trắc (POST_TEST): luôn có cho mọi nhóm (17/11, Hưng — bỏ cờ postTestEnabledAt). MỖI lần đọc danh sách của em, nếu em đã
  * xong chương N mà nhóm chưa có đề hậu trắc chương N và chương đó có câu → BE tự tạo (chụp
  * questionIds lúc tạo, published ngay, không hạn). Một điểm tạo duy nhất, không chạm PlayService;
  * bật cờ muộn hay thêm chương sau đều tự đúng ở lần gọi kế tiếp. Từ v3 gia đình cũng có hậu trắc.
@@ -419,9 +419,7 @@ public class QuizServiceImpl implements QuizService {
         quizAttemptService.finalizeExpiredInGroup(group.getId());
         boolean isClass = group.getContext() == LearningContext.CLASS;
         List<Integer> done = support.chaptersDone(slotId);
-        if (group.getPostTestEnabledAt() != null) {
-            ensurePostTests(group, done);
-        }
+        ensurePostTests(group, done);   // 17/11 (Hưng): hậu trắc luôn có cho mọi nhóm, không còn bật / tắt
         List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
         Set<UUID> myResultQuizIds = new HashSet<>();
         for (QuizResult result : myResults) {
@@ -439,8 +437,8 @@ public class QuizServiceImpl implements QuizService {
                 continue;
             }
             if (QuizSupport.isPostTest(quiz)) {
-                // Hậu trắc: chỉ khi nhóm đang bật và em đã xong đúng chương đó.
-                if (group.getPostTestEnabledAt() == null || quiz.getChapter() == null
+                // Hậu trắc: em đã xong đúng chương đó (17/11: luôn bật, bỏ cờ nhóm).
+                if (quiz.getChapter() == null
                         || !done.contains(quiz.getChapter())) {
                     continue;
                 }

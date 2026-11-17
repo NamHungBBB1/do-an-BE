@@ -101,7 +101,7 @@ class QuizSupport {
             throw new AppException(ErrorCode.QUIZ_NOT_FOUND);
         }
         if (isPostTest(quiz)) {
-            if (slot.getGroup().getPostTestEnabledAt() == null || quiz.getChapter() == null
+            if (quiz.getChapter() == null
                     || !chaptersDone(slot.getId()).contains(quiz.getChapter())) {
                 throw new AppException(ErrorCode.QUIZ_NOT_FOUND);
             }
