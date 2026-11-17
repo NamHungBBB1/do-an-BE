@@ -97,19 +97,26 @@ public class GroupServiceImpl implements GroupService {
         }
 
         SlotQuota quota = quotaService.quota(ownerId, context);
-        if (quota.remaining() <= 0) {
-            // Hết lượt mở slot trong kỳ: mở nhóm cũng vô nghĩa vì không mở được slot nào.
-            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
-        }
         Integer plannedSize = null;
         if (context == LearningContext.CLASS) {
-            plannedSize = req.plannedSize() == null ? quota.remaining() : req.plannedSize();
-            if (plannedSize < 1) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: ít nhất 1");
+            // 18/11/2026 (Q17): sĩ số BẮT BUỘC và phải giữ chỗ tối thiểu MIN_CLASS_SIZE trong ví —
+            // lớp rỗng / lớp 1 em là cách lách hạn mức cũ, giờ chỗ giữ trừ thẳng vào free.
+            Integer asked = req.plannedSize();
+            if (asked == null) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "plannedSize: bắt buộc, ít nhất " + SlotQuotaService.MIN_CLASS_SIZE);
             }
-            if (plannedSize > quota.remaining()) {
+            if (asked < SlotQuotaService.MIN_CLASS_SIZE) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "plannedSize: ít nhất " + SlotQuotaService.MIN_CLASS_SIZE);
+            }
+            if (asked > quota.free()) {
                 throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
             }
+            plannedSize = asked;
+        } else if (quota.free() <= 0) {
+            // Nhà còn 0 chỗ thì mở nhóm cũng vô nghĩa vì không mở được slot nào.
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
         }
 
         Account owner = accountRepo.findById(ownerId)
@@ -229,8 +236,9 @@ public class GroupServiceImpl implements GroupService {
     }
 
     /**
-     * Chỗ còn mở được của MỘT nhóm = min(ví còn lại, sĩ số còn trống). Nhóm đã đóng → 0 (mở slot sẽ
-     * 5002, đừng báo FE "còn 40 chỗ"). FAMILY không có sĩ số riêng: ví là trần duy nhất.
+     * Chỗ còn mở được của MỘT nhóm. FAMILY: ví là trần duy nhất. CLASS: sĩ số còn trống (mọi slot đã
+     * tạo trong lớp đều ăn chỗ, kể cả slot đã xoá — 18/11/2026), KHÔNG trừ `free` lần nữa vì chỗ này
+     * đã nằm trong `reserved` của ví. Nhóm đã đóng → 0.
      */
     @Override
     @Transactional(readOnly = true)
@@ -240,19 +248,15 @@ public class GroupServiceImpl implements GroupService {
             return 0;
         }
         SlotQuota quota = quotaService.quota(callerId, group.getContext());
-        int byQuota = quota.remaining();
         if (group.getContext() != LearningContext.CLASS || group.getSlotLimit() == null) {
-            return byQuota;
+            return quota.free();
         }
-        int bySize = group.getSlotLimit()
-                - (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
-        return Math.max(0, Math.min(byQuota, bySize));
+        return Math.max(0, group.getSlotLimit() - (int) slotRepo.countByGroup_Id(groupId));
     }
 
     /**
-     * Sửa sĩ số lớp (17/11/2026). Không nhỏ hơn số slot đang ACTIVE — nếu không lớp đang có 30 em mà
-     * hạ sĩ số xuống 20 thì dữ liệu tự mâu thuẫn. Không vượt ví: sĩ số tương lai = ACTIVE + slot còn
-     * mở được, vì mỗi chỗ trống trong lớp sẽ tiêu một lượt của ví.
+     * Sửa sĩ số lớp (18/11/2026). Không nhỏ hơn số slot ĐÃ TẠO trong lớp (kể cả đã xoá — chỗ đã tiêu
+     * hao), không nhỏ hơn MIN_CLASS_SIZE; phần tăng thêm phải còn `free` trong ví.
      */
     @Override
     @Transactional
@@ -265,20 +269,24 @@ public class GroupServiceImpl implements GroupService {
             throw new AppException(ErrorCode.GROUP_CLOSED);
         }
         Integer planned = req == null ? null : req.plannedSize();
-        if (planned == null || planned < 1) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: ít nhất 1");
-        }
-        int active = (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
-        if (planned < active) {
+        if (planned == null || planned < SlotQuotaService.MIN_CLASS_SIZE) {
             throw new AppException(ErrorCode.VALIDATION_FAILED,
-                    "plannedSize: không nhỏ hơn số slot đang mở (" + active + ")");
+                    "plannedSize: ít nhất " + SlotQuotaService.MIN_CLASS_SIZE);
         }
+        int created = (int) slotRepo.countByGroup_Id(groupId);
+        if (planned < created) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "plannedSize: không nhỏ hơn số slot đã tạo trong lớp (" + created + ")");
+        }
+        int current = group.getSlotLimit() == null ? created : group.getSlotLimit();
+        int growing = Math.max(0, planned - current);
         SlotQuota quota = quotaService.quota(callerId, LearningContext.CLASS);
-        if (planned > active + quota.remaining()) {
+        if (growing > quota.free()) {
             throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
         }
         group.setSlotLimit(planned);
         groupRepo.save(group);
+        int active = (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
         return LearnerGroupMapper.toResponse(group, active, planned);
     }
 

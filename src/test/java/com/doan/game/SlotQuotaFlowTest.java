@@ -38,9 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Ví slot theo tài khoản (giảng viên chốt 17/11/2026): Parent 4 (+2/pack, trần 10), Teacher 40
- * (+20/pack, trần 200), mỗi kỳ gói reset một lần; slot đã mở là tiêu hao, trả/xoá/đóng lớp không
- * hoàn lượt. Đi qua HTTP thật (MockMvc + H2), token THẬT theo khuôn GroupSlotFlowTest.
+ * Ví slot theo tài khoản (giảng viên chốt 18/11/2026): gói vĩnh viễn — Parent 4 (+2/pack), Teacher 40
+ * (+20/pack), KHÔNG trần, KHÔNG reset theo kỳ. Lớp CLASS giữ chỗ tối thiểu 5 slot (trừ vào ví); slot
+ * đã mở là tiêu hao, trả/xoá/đóng lớp không hoàn lượt. Đi qua HTTP thật (MockMvc + H2), token THẬT
+ * theo khuôn GroupSlotFlowTest.
  *
  * Đồng hồ đóng băng 10:00 02/10/2026 giờ VN để gói và add-on trong test luôn còn hạn.
  */
@@ -76,9 +77,9 @@ class SlotQuotaFlowTest {
                 .andExpect(jsonPath("$.result[0].extra").value(0))
                 .andExpect(jsonPath("$.result[0].limit").value(4))
                 .andExpect(jsonPath("$.result[0].used").value(0))
-                .andExpect(jsonPath("$.result[0].remaining").value(4))
-                .andExpect(jsonPath("$.result[0].termStart").isNotEmpty())
-                .andExpect(jsonPath("$.result[0].termEnd").isNotEmpty());
+                .andExpect(jsonPath("$.result[0].reserved").value(0))
+                .andExpect(jsonPath("$.result[0].free").value(4))
+                .andExpect(jsonPath("$.result[0].wiped").value(0));
     }
 
     /** Mua thêm 2 slot: ví lên 6, slot thứ 5 và 6 mở được, thứ 7 vẫn 3006. */
@@ -99,7 +100,7 @@ class SlotQuotaFlowTest {
                 .andExpect(jsonPath("$.result[0].extra").value(2))
                 .andExpect(jsonPath("$.result[0].limit").value(6))
                 .andExpect(jsonPath("$.result[0].used").value(6))
-                .andExpect(jsonPath("$.result[0].remaining").value(0));
+                .andExpect(jsonPath("$.result[0].free").value(0));
     }
 
     /** Add-on hết hạn cùng gói: dòng đã quá hạn không cộng vào ví. */
@@ -148,7 +149,8 @@ class SlotQuotaFlowTest {
                 .andExpect(jsonPath("$.result[0].context").value("CLASS"))
                 .andExpect(jsonPath("$.result[0].base").value(40))
                 .andExpect(jsonPath("$.result[0].used").value(40))
-                .andExpect(jsonPath("$.result[0].remaining").value(0));
+                .andExpect(jsonPath("$.result[0].reserved").value(0))
+                .andExpect(jsonPath("$.result[0].free").value(0));
     }
 
     /** Sĩ số lớp: không vượt ví, không nhỏ hơn số slot đang mở. */
@@ -195,12 +197,53 @@ class SlotQuotaFlowTest {
 
         mvc.perform(get("/api/me/quota").header("Authorization", "Bearer " + jwt))
                 .andExpect(jsonPath("$.result[0].used").value(4))
-                .andExpect(jsonPath("$.result[0].remaining").value(36));
+                .andExpect(jsonPath("$.result[0].reserved").value(0))
+                .andExpect(jsonPath("$.result[0].free").value(36));
         // Mở lớp mới chỉ còn 36 chỗ: xin 37 → 3006, xin 36 → được.
         mvc.perform(openGroupJson(jwt, "Lop moi qua", "CLASS", 37))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(3006));
         openClass(jwt, "Lop moi", 36);
+    }
+
+    /** Lớp CLASS phải giữ chỗ tối thiểu 5 slot, chỗ giữ trừ thẳng vào ví (Q17). */
+    @Test
+    void classMustReserveAtLeastFiveSeats() throws Exception {
+        String jwt = teacherToken("giucho");
+
+        mvc.perform(openGroupJson(jwt, "Lop 4", "CLASS", 4))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        // 8 lớp × 5 chỗ = 40 → ví còn 0 chỗ dù chưa mở slot nào.
+        for (int i = 1; i <= 8; i++) {
+            openClass(jwt, "Lop " + i, 5);
+        }
+        mvc.perform(get("/api/me/quota").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result[0].limit").value(40))
+                .andExpect(jsonPath("$.result[0].used").value(0))
+                .andExpect(jsonPath("$.result[0].reserved").value(40))
+                .andExpect(jsonPath("$.result[0].free").value(0));
+
+        mvc.perform(openGroupJson(jwt, "Lop 9", "CLASS", 5))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3006));
+    }
+
+    /** Mở slot TRONG lớp lấy từ chỗ đã giữ, không trừ `free` lần nữa. */
+    @Test
+    void slotsInsideClassComeFromReservedNotFree() throws Exception {
+        String jwt = teacherToken("giucho2");
+        String groupId = openClass(jwt, "Lop 30", 30);
+
+        mvc.perform(bulk(jwt, groupId, 3, 0)).andExpect(status().isOk());
+
+        mvc.perform(get("/api/me/quota").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result[0].used").value(3))
+                .andExpect(jsonPath("$.result[0].reserved").value(27))
+                .andExpect(jsonPath("$.result[0].free").value(10));
+        mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result").value(27));
     }
 
     /** FAMILY vẫn độc quyền: một nhóm đang mở thì nhóm thứ hai 5001, không phải 500. */

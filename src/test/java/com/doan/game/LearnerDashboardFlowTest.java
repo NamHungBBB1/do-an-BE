@@ -256,7 +256,7 @@ class LearnerDashboardFlowTest {
         return post("/api/groups")
                 .header("Authorization", "Bearer " + jwt)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\"}");
+                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\",\"plannedSize\":40}");
     }
 
     private static MockHttpServletRequestBuilder slotRequest(String jwt, String groupId,

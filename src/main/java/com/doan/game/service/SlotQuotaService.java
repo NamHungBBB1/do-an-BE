@@ -6,11 +6,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Nơi DUY NHẤT tính hạn mức slot. Trước 17/11/2026 hạn mức chép vào learner_group.slot_limit lúc mở
- * nhóm (4 / 40) và mỗi tài khoản chỉ mở được một nhóm mỗi loại; nay hạn mức nằm trên TÀI KHOẢN, còn
- * nhóm chỉ khai sĩ số.
+ * Nơi DUY NHẤT tính hạn mức slot. Hạn mức nằm trên TÀI KHOẢN (ví slot), nhóm chỉ khai sĩ số.
  *
- * Bảng phụ trách: SlotAddon (phần cộng thêm), Entitlement (kỳ gói), LearnerSlot (đã dùng).
+ * 18/11/2026 — gói vĩnh viễn: bỏ mọi khái niệm kỳ / trần tổng. Lớp CLASS phải GIỮ CHỖ tối thiểu
+ * {@link #MIN_CLASS_SIZE} slot, chỗ giữ trừ thẳng vào ví (chống mở lớp rỗng ôm chỗ).
+ *
+ * Bảng phụ trách: SlotAddon (phần cộng thêm), Entitlement (có gói), LearnerSlot (đã dùng),
+ * LearnerGroup (chỗ đã giữ).
  */
 public interface SlotQuotaService {
 
@@ -18,10 +20,8 @@ public interface SlotQuotaService {
     int PARENT_BASE_SLOTS = 4;
     /** Slot mặc định của gói Teacher (chốt Q3). */
     int TEACHER_BASE_SLOTS = 40;
-    /** Trần ví phụ huynh, tính cả add-on (chốt Q2). */
-    int PARENT_MAX_SLOTS = 10;
-    /** Trần ví giáo viên mỗi kỳ, tính cả add-on (chốt Q3). */
-    int TEACHER_MAX_SLOTS = 200;
+    /** Sĩ số tối thiểu của một lớp CLASS — lớp nhỏ hơn thì không mở được (chốt Q17). */
+    int MIN_CLASS_SIZE = 5;
 
     /** Ví của tài khoản theo loại nhóm: FAMILY → gói PARENT, CLASS → gói TEACHER. */
     SlotQuota quota(UUID accountId, LearningContext context);

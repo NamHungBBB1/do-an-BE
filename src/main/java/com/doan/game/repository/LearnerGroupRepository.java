@@ -1,6 +1,7 @@
 package com.doan.game.repository;
 
 import com.doan.game.entity.LearnerGroup;
+import com.doan.game.enums.LearningContext;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 @Repository
 public interface LearnerGroupRepository extends JpaRepository<LearnerGroup, UUID> {
@@ -35,4 +37,24 @@ public interface LearnerGroupRepository extends JpaRepository<LearnerGroup, UUID
      */
     boolean existsByOwner_IdAndContextAndClosedAtIsNull(UUID ownerId,
                                                        com.doan.game.enums.LearningContext context);
+
+    /**
+     * Chỗ đã GIỮ của các lớp CLASS đang mở (18/11/2026). Một câu cho cả trang: sĩ số + số slot đã tạo
+     * trong lớp (mọi trạng thái — slot đã xoá vẫn ăn chỗ của lớp), để tính `reserved` cho ví.
+     */
+    @Query("select g.id as groupId, g.slotLimit as plannedSize, "
+            + "(select count(s) from LearnerSlot s where s.group.id = g.id) as created "
+            + "from LearnerGroup g "
+            + "where g.owner.id = :ownerId and g.context = :context and g.closedAt is null")
+    List<GroupCapacityRow> openCapacity(@Param("ownerId") UUID ownerId,
+                                        @Param("context") LearningContext context);
+
+    /** Dòng kết quả của openCapacity — interface projection, không cần class mới. */
+    interface GroupCapacityRow {
+        UUID getGroupId();
+
+        Integer getPlannedSize();
+
+        long getCreated();
+    }
 }

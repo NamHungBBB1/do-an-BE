@@ -197,18 +197,20 @@ public class SlotServiceImpl implements SlotService {
     }
 
     /**
-     * Còn chỗ mở thêm {@code opening} slot không: ví của tài khoản (3006) và sĩ số lớp (3026). FAMILY
-     * không có sĩ số riêng — ví là trần duy nhất. Gọi SAU khi đã khoá dòng tài khoản.
+     * Còn chỗ mở thêm {@code opening} slot không. CLASS: sĩ số lớp (3026) — chỗ này đã được GIỮ trong
+     * `reserved` của ví nên KHÔNG kiểm `free` lần nữa. FAMILY: ví là trần duy nhất (3006).
+     * Gọi SAU khi đã khoá dòng tài khoản.
      */
     private void requireSlotRoom(UUID callerId, LearnerGroup group, int opening) {
         if (group.getContext() == LearningContext.CLASS && group.getSlotLimit() != null) {
-            long active = slotRepo.countByGroup_IdAndStatus(group.getId(), SlotStatus.ACTIVE);
-            if (active + opening > group.getSlotLimit()) {
+            long created = slotRepo.countByGroup_Id(group.getId());
+            if (created + opening > group.getSlotLimit()) {
                 throw new AppException(ErrorCode.CLASS_FULL);
             }
+            return;
         }
         SlotQuota quota = quotaService.quota(callerId, group.getContext());
-        if (quota.remaining() < opening) {
+        if (quota.free() < opening) {
             throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
         }
     }

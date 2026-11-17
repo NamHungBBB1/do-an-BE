@@ -48,6 +48,22 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);
 
+    /** Mọi slot đã tạo trong một nhóm, KHÔNG lọc status — slot đã xoá vẫn ăn chỗ của lớp (18/11). */
+    long countByGroup_Id(UUID groupId);
+
+    /** Số slot đã tạo của tài khoản trong một loại nhóm, KHÔNG lọc status và KHÔNG mốc ngày. */
+    @Query("select count(s) from LearnerSlot s "
+            + "where s.group.owner.id = :ownerId and s.group.context = :context")
+    long countCreatedByOwnerAndContext(@Param("ownerId") UUID ownerId,
+                                       @Param("context") com.doan.game.enums.LearningContext context);
+
+    /** Số slot đã xoá (WIPED) của tài khoản trong một loại nhóm — chỉ để hiển thị ở ví. */
+    @Query("select count(s) from LearnerSlot s "
+            + "where s.group.owner.id = :ownerId and s.group.context = :context and s.status = :status")
+    long countByOwnerAndContextAndStatus(@Param("ownerId") UUID ownerId,
+                                         @Param("context") com.doan.game.enums.LearningContext context,
+                                         @Param("status") SlotStatus status);
+
     /**
      * Slot đã tạo TRONG KỲ của một loại nhóm (17/11/2026) — cơ sở của ví slot. Cố ý KHÔNG lọc status:
      * slot đã trả hay đã xoá vẫn là slot đã mở, không hoàn lượt (Q6, giảng viên chốt).

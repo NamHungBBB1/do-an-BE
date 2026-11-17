@@ -41,9 +41,9 @@ public class QuotaController {
                     q.extra(),
                     q.limit(),
                     q.used(),
-                    q.remaining(),
-                    q.termStart(),
-                    q.termEnd()));
+                    q.reserved(),
+                    q.free(),
+                    q.wiped()));
         }
         return ApiResponse.ok(result);
     }
