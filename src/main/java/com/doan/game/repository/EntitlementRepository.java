@@ -46,6 +46,22 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
             + "where e.account.id = :id and e.startsOn <= :today and e.expiresOn >= :today")
     Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("today") LocalDate today);
 
+    /**
+     * Ngày bắt đầu KỲ GÓI đang chạy của một loại — mốc để đếm "slot đã dùng trong kỳ" (17/11/2026).
+     * Lấy min(startsOn) để không bao giờ đếm thiếu: dữ liệu cũ có hai dòng chồng lấn thì mốc sớm hơn
+     * là mốc chặt hơn.
+     */
+    @Query("select min(e.startsOn) from Entitlement e "
+            + "where e.account.id = :id and e.kind = :kind and e.startsOn <= :today and e.expiresOn >= :today")
+    LocalDate findActiveTermStart(@Param("id") UUID accountId, @Param("kind") PlanKind kind,
+                                  @Param("today") LocalDate today);
+
+    /** Ngày kết thúc kỳ gói đang chạy (max expiresOn) — hiển thị cho người dùng biết ví reset khi nào. */
+    @Query("select max(e.expiresOn) from Entitlement e "
+            + "where e.account.id = :id and e.kind = :kind and e.startsOn <= :today and e.expiresOn >= :today")
+    LocalDate findActiveTermEnd(@Param("id") UUID accountId, @Param("kind") PlanKind kind,
+                                @Param("today") LocalDate today);
+
     /** Như trên cho cả một trang tài khoản trong một truy vấn: mỗi dòng [accountId, kind] (25/10). */
     @Query("select distinct e.account.id, e.kind from Entitlement e "
             + "where e.account.id in :ids and e.startsOn <= :today and e.expiresOn >= :today")
