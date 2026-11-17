@@ -20,6 +20,8 @@ import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
 import com.doan.game.service.ReportService;
+import com.doan.game.service.SlotQuota;
+import com.doan.game.service.SlotQuotaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,34 +38,38 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
+ * Vòng đời nhóm: mở nhóm gia đình (gói PARENT) hoặc lớp (gói TEACHER), kết thúc nhóm, đếm chỗ trống,
+ * giáo viên xác nhận đã có đồng ý của phụ huynh.
  *
- * CÓ RUỘT openGroup + confirmConsent (07/10, feat/group-slot), getMyGroups / listSlots /
- * countFreeSlots (PR 2a) và closeGroup (PR 2b).
+ * 17/11/2026 — đổi mô hình hạn mức (giảng viên chốt): hạn mức nằm trên TÀI KHOẢN (SlotQuotaService),
+ * không chép 4/40 vào nhóm nữa. Mỗi tài khoản tối đa MỘT nhóm FAMILY đang mở; CLASS mở bao nhiêu lớp
+ * cũng được, chỉ bị chặn bởi ví slot. Sĩ số lớp do giáo viên đặt (slot_limit).
  */
 @Service
 @RequiredArgsConstructor
 public class GroupServiceImpl implements GroupService {
-
-    /** Hạn mức chép vào nhóm lúc mở (ERD): gia đình 4, lớp 40. */
-    static final int FAMILY_SLOT_LIMIT = 4;
-    static final int CLASS_SLOT_LIMIT = 40;
 
     private final LearnerGroupRepository groupRepo;
     private final LearnerSlotRepository slotRepo;
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
+    private final SlotQuotaService quotaService;
     private final ReportService reportService;
     private final Clock clock;
 
     /**
-     * Mở nhóm. Thứ tự kiểm: name → context → gói còn hạn → ghi.
+     * Mở nhóm. Thứ tự kiểm: name → context → gói còn hạn (3005) → còn nhóm FAMILY đang mở? (5001)
+     * → ví slot còn lượt? (3006) → sĩ số lớp hợp lệ (1001 / 3006) → ghi.
      *
-     * Trùng (owner, openContext): hai request song song cùng vượt qua kiểm gói rồi cùng chèn.
-     * Bắt DataIntegrityViolationException nhưng CHỈ đổi thành 5001 khi là khoá thật (23505) —
-     * bài học 06/10: cột NOT NULL sót trong DB production từng bị báo nhầm thành lỗi nghiệp vụ.
-     * saveAndFlush trong try để lỗi nổ ngay tại chỗ, không lẫn với lỗi của câu lệnh sau.
+     * CLASS: openContext = NULL nên UNIQUE(owner_id, open_context) không chặn — đó là cách cho giáo
+     * viên mở nhiều lớp mà KHÔNG phải đổi ràng buộc CSDL (H2 không có partial unique index; production
+     * đang chạy ddl-auto=update nên bỏ một unique constraint sẽ không tự xoá dưới DB). FAMILY vẫn giữ
+     * openContext = FAMILY để độc quyền một nhóm.
+     *
+     * Trùng (owner, openContext): hai request song song cùng vượt qua kiểm gói rồi cùng chèn. Bắt
+     * DataIntegrityViolationException nhưng CHỈ đổi thành 5001 khi là khoá thật (23505) — bài học
+     * 06/10: cột NOT NULL sót trong DB production từng bị báo nhầm thành lỗi nghiệp vụ.
      */
     @Override
     @Transactional
@@ -84,15 +91,36 @@ public class GroupServiceImpl implements GroupService {
             // phải bắt cả hai, mà 3005 đúng nghĩa "cần mua gói trước" và chưa nơi nào dùng.
             throw new AppException(ErrorCode.PLAN_REQUIRED);
         }
+        if (context == LearningContext.FAMILY
+                && groupRepo.existsByOwner_IdAndContextAndClosedAtIsNull(ownerId, context)) {
+            throw new AppException(ErrorCode.GROUP_ALREADY_OPEN);
+        }
+
+        SlotQuota quota = quotaService.quota(ownerId, context);
+        if (quota.remaining() <= 0) {
+            // Hết lượt mở slot trong kỳ: mở nhóm cũng vô nghĩa vì không mở được slot nào.
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
+        }
+        Integer plannedSize = null;
+        if (context == LearningContext.CLASS) {
+            plannedSize = req.plannedSize() == null ? quota.remaining() : req.plannedSize();
+            if (plannedSize < 1) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: ít nhất 1");
+            }
+            if (plannedSize > quota.remaining()) {
+                throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
+            }
+        }
+
         Account owner = accountRepo.findById(ownerId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + ownerId));
 
         LearnerGroup group = new LearnerGroup();
         group.setOwner(owner);
         group.setContext(context);
-        group.setOpenContext(context);
+        group.setOpenContext(context == LearningContext.FAMILY ? context : null);
         group.setName(name.trim());
-        group.setSlotLimit(context == LearningContext.FAMILY ? FAMILY_SLOT_LIMIT : CLASS_SLOT_LIMIT);
+        group.setSlotLimit(plannedSize);   // CLASS: sĩ số giáo viên đặt; FAMILY: NULL (ví quyết định)
         group.setOpenedAt(Instant.now(clock));
         try {
             groupRepo.saveAndFlush(group);
@@ -102,12 +130,14 @@ public class GroupServiceImpl implements GroupService {
             }
             throw new AppException(ErrorCode.GROUP_ALREADY_OPEN);
         }
-        return LearnerGroupMapper.toResponse(group);
+        return LearnerGroupMapper.toResponse(group, 0, displayLimit(context, quota, plannedSize));
     }
 
     /**
-     * Nhóm của người gọi: đang mở trước, đã đóng sau. slotUsed lấy từ MỘT câu đếm gộp
-     * (countByStatusGroupedByGroup) thay vì N+1 từng nhóm.
+     * Nhóm của người gọi: đang mở trước, đã đóng sau. "Đang mở" = closedAt == null (17/11/2026: không
+     * dùng openContext nữa vì CLASS đang mở cũng có openContext = NULL). slotUsed lấy từ MỘT câu đếm
+     * gộp (countByStatusGroupedByGroup) thay vì N+1 từng nhóm; slotLimit hiệu lực tính một lần cho mỗi
+     * loại nhóm.
      */
     @Override
     @Transactional(readOnly = true)
@@ -118,23 +148,26 @@ public class GroupServiceImpl implements GroupService {
             used.put(row.getGroupId(), row.getUsed());
         }
         List<LearnerGroup> groups = groupRepo.findByOwner_IdOrderByOpenedAtDesc(callerId);
-        // Mới mở đến đóng: openContext = NULL nghĩa là đã đóng (UNIQUE(owner, openContext) ở entity).
         List<LearnerGroup> open = new ArrayList<>();
         List<LearnerGroup> closed = new ArrayList<>();
         for (LearnerGroup g : groups) {
-            (g.getOpenContext() == null ? closed : open).add(g);
+            (g.getClosedAt() == null ? open : closed).add(g);
         }
         open.addAll(closed);
+
+        Map<LearningContext, SlotQuota> quotas = new EnumMap<>(LearningContext.class);
         List<LearnerGroupResponse> result = new ArrayList<>(open.size());
         for (LearnerGroup g : open) {
-            result.add(LearnerGroupMapper.toResponse(g, used.getOrDefault(g.getId(), 0L).intValue()));
+            SlotQuota quota = quotas.computeIfAbsent(g.getContext(), c -> quotaService.quota(callerId, c));
+            result.add(LearnerGroupMapper.toResponse(g, used.getOrDefault(g.getId(), 0L).intValue(),
+                    displayLimit(g.getContext(), quota, g.getSlotLimit())));
         }
         return result;
     }
 
     /**
-     * Slot của một nhóm — MỌI trạng thái (cả ARCHIVED / WIPED) vì FE danh sách phải thấy được
-     * lịch sử; locked tính theo đồng hồ của service, mapper không có đồng hồ.
+     * Slot của một nhóm — MỌI trạng thái (cả ARCHIVED / WIPED) vì FE danh sách phải thấy được lịch sử;
+     * locked tính theo đồng hồ của service, mapper không có đồng hồ.
      */
     @Override
     @Transactional(readOnly = true)
@@ -164,20 +197,21 @@ public class GroupServiceImpl implements GroupService {
     }
 
     /**
-     * Kết thúc nhóm. Đóng lần hai thì 5002 (đã đóng — ghi vào PR hỏi lại nếu Hưng muốn idempotent).
+     * Kết thúc nhóm. Đóng lần hai thì 5002. ERD mục 4: đông cứng báo cáo, lưu trữ nhóm và slot, không
+     * xoá gì.
      *
-     * ERD mục 4: "đông cứng báo cáo nhóm, lưu trữ nhóm và các slot, trả lại hạn mức, không xoá gì".
-     * Đông cứng (ReportService.freezeOnClose, 12/10) chạy TRƯỚC khi lưu trữ và CÙNG transaction:
-     * một lỗi ở đóng băng thì cả closeGroup rollback; và summary.active = số slot đang ACTIVE đúng
-     * lúc đóng, không phải 0 sau khi mọi slot đã ARCHIVED. openContext = NULL trả chỗ cho
-     * UNIQUE(ownerId, openContext) để mở nhóm mới. Hưng chốt 07/10: không có API khôi phục.
+     * 17/11/2026: đóng nhóm KHÔNG trả lượt slot. Slot đã mở là tiêu hao của kỳ (Q6) — đóng lớp rồi mở
+     * lớp mới trong cùng kỳ vẫn bị trừ đúng số slot đã mở. openContext = NULL chỉ để mở được nhóm
+     * FAMILY mới và để "đang mở" suy từ closedAt.
+     *
+     * Đông cứng (ReportService.freezeOnClose, 12/10) chạy TRƯỚC khi lưu trữ và CÙNG transaction: một
+     * lỗi ở đóng băng thì cả closeGroup rollback; summary.active = số slot đang ACTIVE đúng lúc đóng.
      */
     @Override
     @Transactional
     public void closeGroup(UUID callerId, UUID groupId) {
         // lockById (FOR UPDATE) chứ không phải findById: openSlot/bulk đang chèn song song thì
-        // closeGroup phải đứng sau nó — nếu không, hai bên commit song song và nhóm ĐÃ ĐÓNG vẫn
-        // còn một slot ACTIVE (Kidz góp ý review PR 2b, 07/10).
+        // closeGroup phải đứng sau nó — nếu không, nhóm ĐÃ ĐÓNG vẫn còn một slot ACTIVE (07/10).
         LearnerGroup group = groupRepo.lockById(groupId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
         if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
@@ -194,16 +228,58 @@ public class GroupServiceImpl implements GroupService {
         slotRepo.archiveActiveSlots(groupId, now, SlotStatus.ACTIVE, SlotStatus.ARCHIVED);
     }
 
-    /** Chỗ trống = hạn mức − slot ACTIVE; ARCHIVED / WIPED đã trả lại chỗ (ERD mục 5). */
+    /**
+     * Chỗ còn mở được của MỘT nhóm = min(ví còn lại, sĩ số còn trống). Nhóm đã đóng → 0 (mở slot sẽ
+     * 5002, đừng báo FE "còn 40 chỗ"). FAMILY không có sĩ số riêng: ví là trần duy nhất.
+     */
     @Override
     @Transactional(readOnly = true)
     public int countFreeSlots(UUID callerId, UUID groupId) {
         LearnerGroup group = requireOwnedGroup(callerId, groupId);
         if (group.getClosedAt() != null) {
-            return 0;   // nhóm đã kết thúc không mở thêm được (5002) — đừng báo FE "40 chỗ trống" (G-05)
+            return 0;
         }
-        int limit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
-        return limit - (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
+        SlotQuota quota = quotaService.quota(callerId, group.getContext());
+        int byQuota = quota.remaining();
+        if (group.getContext() != LearningContext.CLASS || group.getSlotLimit() == null) {
+            return byQuota;
+        }
+        int bySize = group.getSlotLimit()
+                - (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
+        return Math.max(0, Math.min(byQuota, bySize));
+    }
+
+    /**
+     * Sửa sĩ số lớp (17/11/2026). Không nhỏ hơn số slot đang ACTIVE — nếu không lớp đang có 30 em mà
+     * hạ sĩ số xuống 20 thì dữ liệu tự mâu thuẫn. Không vượt ví: sĩ số tương lai = ACTIVE + slot còn
+     * mở được, vì mỗi chỗ trống trong lớp sẽ tiêu một lượt của ví.
+     */
+    @Override
+    @Transactional
+    public LearnerGroupResponse updatePlannedSize(UUID callerId, UUID groupId, UpdateGroupRequest req) {
+        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        if (group.getContext() != LearningContext.CLASS) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: chỉ lớp CLASS mới có sĩ số");
+        }
+        if (group.getClosedAt() != null) {
+            throw new AppException(ErrorCode.GROUP_CLOSED);
+        }
+        Integer planned = req == null ? null : req.plannedSize();
+        if (planned == null || planned < 1) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: ít nhất 1");
+        }
+        int active = (int) slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE);
+        if (planned < active) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "plannedSize: không nhỏ hơn số slot đang mở (" + active + ")");
+        }
+        SlotQuota quota = quotaService.quota(callerId, LearningContext.CLASS);
+        if (planned > active + quota.remaining()) {
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
+        }
+        group.setSlotLimit(planned);
+        groupRepo.save(group);
+        return LearnerGroupMapper.toResponse(group, active, planned);
     }
 
     /** Nhóm phải tồn tại (1003) và phải là của người gọi (3004) — một cửa cho mọi thao tác. */
@@ -241,6 +317,17 @@ public class GroupServiceImpl implements GroupService {
             group.setPostTestEnabledAt(null);
             groupRepo.save(group);
         }
+    }
+
+    /**
+     * slotLimit trả ra FE: FAMILY = trần ví (base + add-on) để mua thêm slot là con số tự lớn; CLASS =
+     * sĩ số đã đặt, bỏ trống thì bằng trần ví.
+     */
+    private static int displayLimit(LearningContext context, SlotQuota quota, Integer plannedSize) {
+        if (context == LearningContext.CLASS && plannedSize != null) {
+            return plannedSize;
+        }
+        return quota.limit();
     }
 
     private static LearningContext parseContext(String context) {

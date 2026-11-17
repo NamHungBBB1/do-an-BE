@@ -40,7 +40,7 @@ public enum ErrorCode {
     UNAUTHENTICATED(3003, "Chưa đăng nhập hoặc token đã hết hạn", HttpStatus.UNAUTHORIZED),
     FORBIDDEN(3004, "Không có quyền thực hiện", HttpStatus.FORBIDDEN),
     PLAN_REQUIRED(3005, "Cần mua gói phụ huynh hoặc giáo viên trước", HttpStatus.PAYMENT_REQUIRED),
-    SLOT_LIMIT_REACHED(3006, "Đã hết slot — phụ huynh 4, giáo viên 40", HttpStatus.CONFLICT),
+    SLOT_LIMIT_REACHED(3006, "Đã hết slot — mua thêm slot hoặc dùng slot còn trống", HttpStatus.CONFLICT),
     SLOT_NOT_FOUND(3007, "Không tìm thấy slot", HttpStatus.NOT_FOUND),
     SLOT_LOCKED(3008, "Nhập sai PIN quá nhiều lần, thử lại sau 15 phút", HttpStatus.LOCKED),
     SLOT_ARCHIVED(3009, "Lớp học đã kết thúc, mã này không dùng được nữa", HttpStatus.GONE),
@@ -77,6 +77,8 @@ public enum ErrorCode {
             + " cho một tài khoản riêng", HttpStatus.CONFLICT),
     INTERNAL_ACCOUNT_NOT_CUSTOMER(3025, "Tài khoản nội bộ không mua gói, không nhận gói và không mở nhóm",
             HttpStatus.FORBIDDEN),
+    // 17/11/2026 — ví slot theo tài khoản: lớp đầy sĩ số khác với hết lượt trong ví, FE cần phân biệt.
+    CLASS_FULL(3026, "Lớp đã đủ sĩ số — tăng sĩ số lớp hoặc mở lớp mới", HttpStatus.CONFLICT),
     // 4xxx  thanh toán và gói
     PLAN_KIND_INVALID(4001, "Loại gói không hợp lệ — chỉ PARENT hoặc TEACHER", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_NOT_SET(4002, "Admin chưa đặt giá cho gói này", HttpStatus.CONFLICT),

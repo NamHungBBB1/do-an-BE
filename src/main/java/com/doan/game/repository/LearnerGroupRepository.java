@@ -28,4 +28,11 @@ public interface LearnerGroupRepository extends JpaRepository<LearnerGroup, UUID
 
     /** Nhóm của người gọi, mới mở đến đóng — GET /api/groups sắp xếp lại trong service. */
     java.util.List<LearnerGroup> findByOwner_IdOrderByOpenedAtDesc(UUID ownerId);
+
+    /**
+     * Còn nhóm FAMILY đang mở không (17/11/2026: chỉ FAMILY còn độc quyền; CLASS mở bao nhiêu lớp cũng
+     * được — kiểm bằng câu này thay vì để UNIQUE ném 500).
+     */
+    boolean existsByOwner_IdAndContextAndClosedAtIsNull(UUID ownerId,
+                                                       com.doan.game.enums.LearningContext context);
 }

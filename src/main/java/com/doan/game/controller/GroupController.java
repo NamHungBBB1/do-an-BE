@@ -2,6 +2,7 @@ package com.doan.game.controller;
 
 import com.doan.game.DTO.request.CreateGroupRequest;
 import com.doan.game.DTO.request.PostTestRequest;
+import com.doan.game.DTO.request.UpdateGroupRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.LearnerGroupResponse;
 import com.doan.game.service.GroupService;
@@ -25,7 +26,7 @@ public class GroupController {
 
     private final GroupService groupService;
 
-    /** Mở nhóm: FAMILY (cần gói PARENT, 4 slot) hoặc CLASS (cần gói TEACHER, 40 slot). */
+    /** Mở nhóm: FAMILY (gói PARENT, 1 nhóm đang mở) hoặc CLASS (gói TEACHER, nhiều lớp; plannedSize = sĩ số). */
     @PostMapping
     public ApiResponse<LearnerGroupResponse> openGroup(@AuthenticationPrincipal Jwt jwt,
                                                        @RequestBody CreateGroupRequest req) {
@@ -45,10 +46,21 @@ public class GroupController {
         return ApiResponse.ok(groupService.listSlots(currentAccountId(jwt), id));
     }
 
-    /** Chỗ trống = slotLimit − số slot ACTIVE; chỉ chủ nhóm. */
+    /** Chỗ còn mở = min(ví slot còn lại, sĩ số còn trống); nhóm đã đóng → 0. Chỉ chủ nhóm. */
     @GetMapping("/{id}/capacity")
     public ApiResponse<Integer> countFreeSlots(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return ApiResponse.ok(groupService.countFreeSlots(currentAccountId(jwt), id));
+    }
+
+    /**
+     * 17/11/2026: sửa sĩ số lớp, body {plannedSize}. Chỉ lớp CLASS đang mở, >= số slot ACTIVE và
+     * không vượt ví còn lại. Chỉ chủ nhóm.
+     */
+    @PatchMapping("/{id}")
+    public ApiResponse<LearnerGroupResponse> updatePlannedSize(@AuthenticationPrincipal Jwt jwt,
+                                                              @PathVariable UUID id,
+                                                              @RequestBody UpdateGroupRequest req) {
+        return ApiResponse.ok(groupService.updatePlannedSize(currentAccountId(jwt), id, req));
     }
 
     /**

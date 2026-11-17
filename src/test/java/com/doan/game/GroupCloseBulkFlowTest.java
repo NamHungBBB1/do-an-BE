@@ -194,7 +194,11 @@ class GroupCloseBulkFlowTest {
                 .andExpect(jsonPath("$.code").value(5003));
     }
 
-    /** TCH-1: after consent a CLASS group takes a pasted list of 40 seats in one call; the 41st seat → 3006. */
+    /**
+     * TCH-1: after consent a CLASS group takes a pasted list of 40 seats in one call. 17/11/2026: sĩ số
+     * lớp là trần riêng (3026), ví giáo viên là trần thứ hai (3006) — ở đây cả hai cùng bằng 40 nên
+     * chỗ thứ 41 báo 3026 "lớp đủ sĩ số", tăng sĩ số lên nữa mới đụng ví.
+     */
     @Test
     void classGroupTakesFortySeatsAndRefusesTheFortyFirst() throws Exception {
         String teacher = teacherToken("lop40");
@@ -208,20 +212,20 @@ class GroupCloseBulkFlowTest {
         // 41 in one lot is refused as a whole.
         mvc.perform(bulkRequest(teacher, groupId, 41))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(3006));
+                .andExpect(jsonPath("$.code").value(3026));
         mvc.perform(bulkRequest(teacher, groupId, 40))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.length()").value(40));
         mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + teacher))
                 .andExpect(jsonPath("$.result").value(0));
 
-        // The 41st seat, singly or in a lot of one.
+        // The 41st seat, singly or in a lot of one: lớp đã đủ 40 em.
         openSlot(teacher, groupId, "Hoc sinh 41", "123456")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(3006));
+                .andExpect(jsonPath("$.code").value(3026));
         mvc.perform(bulkRequest(teacher, groupId, 1))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(3006));
+                .andExpect(jsonPath("$.code").value(3026));
         mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + teacher))
                 .andExpect(jsonPath("$.result.length()").value(40));
     }

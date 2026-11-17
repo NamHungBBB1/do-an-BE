@@ -15,9 +15,12 @@ import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.SlotMapper;
+import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
+import com.doan.game.service.SlotQuota;
+import com.doan.game.service.SlotQuotaService;
 import com.doan.game.service.SlotService;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
@@ -59,8 +62,10 @@ public class SlotServiceImpl implements SlotService {
 
     private final LearnerSlotRepository slotRepo;
     private final LearnerGroupRepository groupRepo;
+    private final AccountRepository accountRepo;
     private final TokenService tokenService;
     private final EntitlementService entitlementService;
+    private final SlotQuotaService quotaService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -70,7 +75,7 @@ public class SlotServiceImpl implements SlotService {
      * Thứ tự kiểm (Hưng chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
      * → nhóm chưa đóng (5002) → gói còn hạn đúng loại (3005, Hưng chốt thêm 07/10) →
      * nhóm CLASS đã có consent (5003, FAMILY không cần) → tên / PIN hợp lệ (1001) →
-     * còn chỗ (3006).
+     * ví còn lượt (3006) và lớp còn sĩ số (3026, 17/11/2026).
      *
      * Kiểm gói TẠI ĐÂY (PR 2b): mở nhóm đã kiểm rồi, nhưng gói có thể hết hạn sau khi mở nhóm —
      * đúng loại FAMILY→PARENT, CLASS→TEACHER như openGroup. Slot cũ vẫn chơi bình thường.
@@ -98,10 +103,12 @@ public class SlotServiceImpl implements SlotService {
         }
         validateSlotInput(req.displayName(), req.pin(), req.badge());
 
-        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
-        if (slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) >= slotLimit) {
-            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
-        }
+        // 17/11/2026: hạn mức nằm trên TÀI KHOẢN. Khoá dòng tài khoản trước khi đếm để hai request mở
+        // slot ở HAI lớp khác nhau không cùng đọc "còn 1 lượt" rồi cùng chèn (khoá nhóm chỉ tuần tự
+        // hoá trong cùng một lớp). Thứ tự khoá: nhóm → tài khoản, mọi đường đều vậy nên không deadlock.
+        accountRepo.lockById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + callerId));
+        requireSlotRoom(callerId, group, 1);
 
         LearnerSlot slot = new LearnerSlot();
         slot.setGroup(group);
@@ -155,11 +162,9 @@ public class SlotServiceImpl implements SlotService {
         for (CreateSlotRequest item : items) {
             validateSlotInput(item.displayName(), item.pin(), item.badge());
         }
-        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
-        long willHave = slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) + items.size();
-        if (willHave > slotLimit) {
-            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
-        }
+        accountRepo.lockById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + callerId));
+        requireSlotRoom(callerId, group, items.size());
 
         Instant now = Instant.now(clock);
         List<SlotResponse> result = new ArrayList<>(items.size());
@@ -188,6 +193,23 @@ public class SlotServiceImpl implements SlotService {
                 ? PlanKind.PARENT : PlanKind.TEACHER;
         if (!entitlementService.activePlans(callerId).contains(required)) {
             throw new AppException(ErrorCode.PLAN_REQUIRED);
+        }
+    }
+
+    /**
+     * Còn chỗ mở thêm {@code opening} slot không: ví của tài khoản (3006) và sĩ số lớp (3026). FAMILY
+     * không có sĩ số riêng — ví là trần duy nhất. Gọi SAU khi đã khoá dòng tài khoản.
+     */
+    private void requireSlotRoom(UUID callerId, LearnerGroup group, int opening) {
+        if (group.getContext() == LearningContext.CLASS && group.getSlotLimit() != null) {
+            long active = slotRepo.countByGroup_IdAndStatus(group.getId(), SlotStatus.ACTIVE);
+            if (active + opening > group.getSlotLimit()) {
+                throw new AppException(ErrorCode.CLASS_FULL);
+            }
+        }
+        SlotQuota quota = quotaService.quota(callerId, group.getContext());
+        if (quota.remaining() < opening) {
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
         }
     }
 
@@ -237,8 +259,10 @@ public class SlotServiceImpl implements SlotService {
 
     /**
      * Trả slot: ACTIVE → ARCHIVED, ghi archivedAt. Giữ nguyên tên và mã — chỉ là trạng thái đổi,
-     * trẻ dùng lại mã thì loginSlot trả 3009 (đã có từ trước). Trả lại chỗ cho hạn mức vì
-     * đếm slot đang làm trên ACTIVE (ERD mục 5).
+     * trẻ dùng lại mã thì loginSlot trả 3009 (đã có từ trước).
+     *
+     * 17/11/2026: KHÔNG trả lại lượt cho ví. Giảng viên chốt: slot đã mở cho học sinh học rồi thì
+     * không dùng lại nữa (chống một slot chia cho nhiều em). Muốn thêm em khác phải mua thêm slot.
      */
     @Override
     @Transactional

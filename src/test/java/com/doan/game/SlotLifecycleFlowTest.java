@@ -119,9 +119,13 @@ class SlotLifecycleFlowTest {
     }
 
     // ------------------------------------------------------------------ trả slot
-    /** Trả slot: giữ tên, mã hết hiệu lực (3009 khi trẻ login lại), trả lại chỗ cho hạn mức. */
+    /**
+     * Trả slot: giữ tên, mã hết hiệu lực (3009 khi trẻ login lại), NHƯNG KHÔNG trả lại lượt cho ví
+     * (giảng viên chốt 17/11/2026: slot đã mở cho học sinh học rồi thì không dùng lại nữa) — mở slot
+     * thứ 5 vẫn 3006.
+     */
     @Test
-    void returnSlotArchivesKeepsCodeDeadAndFreesCapacity() throws Exception {
+    void returnSlotArchivesKeepsCodeDeadAndKeepsQuotaConsumed() throws Exception {
         String jwt = parentToken("tralot");
         String groupId = openFamilyGroup(jwt);
         for (int i = 1; i <= 4; i++) {
@@ -146,8 +150,10 @@ class SlotLifecycleFlowTest {
                 .andExpect(status().isGone())
                 .andExpect(jsonPath("$.code").value(3009));
 
-        // Trả lại chỗ: mở slot thứ 5 giờ qua được; capacity còn 0.
-        openSlot(jwt, groupId, "Be 5", "123456").andExpect(status().isOk());
+        // Slot đã mở là tiêu hao: trả xong KHÔNG mở lại được slot thứ 5, capacity vẫn 0.
+        mvc.perform(slotRequest(jwt, groupId, "Be 5", "123456"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(3006));
         mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
                 .andExpect(jsonPath("$.result").value(0));
 
@@ -200,7 +206,8 @@ class SlotLifecycleFlowTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(3007));
 
-        // Dòng vẫn giữ cho báo cáo cũ, nhưng tên và mã đã về null, hết ACTIVE nên không ăn chỗ.
+        // Dòng vẫn giữ cho báo cáo cũ, tên và mã đã về null; nhưng slot đã mở vẫn tiêu một lượt của ví
+        // (chốt 17/11/2026) nên capacity còn 3, không phải 4.
         mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.length()").value(1))
@@ -208,7 +215,7 @@ class SlotLifecycleFlowTest {
                 .andExpect(jsonPath("$.result[0].displayName").doesNotExist())
                 .andExpect(jsonPath("$.result[0].code").doesNotExist());
         mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
-                .andExpect(jsonPath("$.result").value(4));
+                .andExpect(jsonPath("$.result").value(3));
 
         // Xoá lần hai: hết ACTIVE → 5004.
         mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
