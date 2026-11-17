@@ -24,7 +24,6 @@ import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -34,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Cá nhân hoá trong luồng nội dung thật (spec build/spec-ca-nhan-hoa-2026-11-11.md): lưu nháp có biến thể hỏng → chỉ cảnh báo;
- * gửi duyệt → chặn 1001; chương hợp lệ phát hành xong thì đường công khai trả BẢN GỐC đã ghép — không lộ {{token}} / variants.
+ * gửi duyệt vẫn qua (ràng buộc mềm, Hưng 17/11), Reviewer thấy cảnh báo trong GET …/draft; chương hợp lệ phát hành xong thì đường công khai trả BẢN GỐC đã ghép — không lộ {{token}} / variants.
  */
 @SpringBootTest(properties = {
         "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true",
@@ -72,7 +71,7 @@ class PersonalizationContentFlowTest {
     }
 
     @Test
-    void brokenVariantWarnsOnSaveAndBlocksSubmit() throws Exception {
+    void brokenVariantOnlyWarnsAndDoesNotBlockSubmit() throws Exception {
         var admin = admin();
         mvc.perform(put("/api/studio/chapters/CH01/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content(chapter("\"nextSceneId\":\"end\"")))
@@ -80,9 +79,25 @@ class PersonalizationContentFlowTest {
                 .andExpect(jsonPath("$.result.warnings[?(@ =~ /cá nhân hoá.*nextSceneId.*/)]").isNotEmpty());
         mvc.perform(post("/api/studio/chapters/CH01/submit").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"changeClass\":\"MINOR\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+        mvc.perform(get("/api/studio/chapters/CH01/draft").with(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.warnings[?(@ =~ /cá nhân hoá.*nextSceneId.*/)]").isNotEmpty());
+    }
+
+    @Test
+    void tokenInScoringFieldStillBlocksSubmit() throws Exception {
+        var admin = admin();
+        String broken = chapter("\"text\":\"Cậu ấy muốn {{item}} giá 250.000đ\"")
+                .replace("{\"id\":\"a\",", "{\"id\":\"a\",\"category\":\"{{item}}\",");
+        mvc.perform(put("/api/studio/chapters/CH01/draft").with(admin).contentType(MediaType.APPLICATION_JSON).content(broken))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/studio/chapters/CH01/submit").with(admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"changeClass\":\"MINOR\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001))
-                .andExpect(jsonPath("$.message", containsString("cá nhân hoá")));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("category")));
     }
 
     @Test
