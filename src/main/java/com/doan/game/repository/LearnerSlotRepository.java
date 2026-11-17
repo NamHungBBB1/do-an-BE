@@ -65,14 +65,14 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
                                          @Param("status") SlotStatus status);
 
     /**
-     * Slot đã tạo TRONG KỲ của một loại nhóm (17/11/2026) — cơ sở của ví slot. Cố ý KHÔNG lọc status:
-     * slot đã trả hay đã xoá vẫn là slot đã mở, không hoàn lượt (Q6, giảng viên chốt).
+     * Tên đã có slot ACTIVE khác trong cùng nhóm chưa (Q9, 18/11/2026). Chỉ so slot ACTIVE: slot
+     * WIPED đã bị xoá tên nên không giữ chỗ tên.
      */
-    @Query("select count(s) from LearnerSlot s "
-            + "where s.group.owner.id = :ownerId and s.group.context = :context and s.createdAt >= :since")
-    long countCreatedSince(@Param("ownerId") UUID ownerId,
-                           @Param("context") com.doan.game.enums.LearningContext context,
-                           @Param("since") Instant since);
+    boolean existsByGroup_IdAndStatusAndDisplayName(UUID groupId, SlotStatus status, String displayName);
+
+    /** Như trên nhưng trừ chính slot đang sửa tên (PATCH /api/slots/{id}). */
+    boolean existsByGroup_IdAndStatusAndDisplayNameAndIdNot(UUID groupId, SlotStatus status,
+                                                           String displayName, UUID id);
 
     /** Đếm slot toàn hệ thống theo trạng thái (dashboard). */
     long countByStatus(SlotStatus status);
@@ -106,6 +106,20 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     @Modifying(clearAutomatically = true)
     @Query("update LearnerSlot s set s.failedAttempts = 0, s.lockedUntil = null where s.id = :id")
     int resetFailedPin(@Param("id") UUID id);
+
+    /**
+     * Login thành công: tăng phiên bản token bằng MỘT câu UPDATE nguyên tử (18/11/2026) — trẻ thứ hai
+     * đăng nhập là token của trẻ trước chết ngay, chặn cảnh nhiều em dùng chung một slot. Mốc NULL của
+     * dữ liệu cũ coi như 0.
+     */
+    @Transactional
+    @Modifying(clearAutomatically = true)
+    @Query("update LearnerSlot s set s.tokenVersion = coalesce(s.tokenVersion, 0) + 1 where s.id = :id")
+    int bumpTokenVersion(@Param("id") UUID id);
+
+    /** Đọc phiên bản token hiện tại — phát token ngay sau bump nên phải lấy số MỚI trong DB. */
+    @Query("select s.tokenVersion from LearnerSlot s where s.id = :id")
+    Integer findTokenVersionById(@Param("id") UUID id);
 
     /**
      * Đóng nhóm: mọi slot ACTIVE → ARCHIVED bằng một câu, không nạp 40 entity rồi save từng dòng (save cả

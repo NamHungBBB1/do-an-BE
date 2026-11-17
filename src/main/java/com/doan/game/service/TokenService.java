@@ -71,9 +71,13 @@ public class TokenService {
         return issue(accountId.toString(), "ACCOUNT", scopes, internalTtlHours, tokenVersion, true);
     }
 
-    /** Token trẻ: subject là id slot, KHÔNG phải id tài khoản — trẻ không có tài khoản. */
-    public TokenResponse issueForSlot(UUID slotId) {
-        return issue(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, -1, false);
+    /**
+     * Token trẻ: subject là id slot, KHÔNG phải id tài khoản — trẻ không có tài khoản. Mang `tv` =
+     * LearnerSlot.tokenVersion (18/11/2026): login lần sau tăng số là token cũ chết, và xoá slot cũng
+     * tăng số nên token đang cầm mất hiệu lực ngay.
+     */
+    public TokenResponse issueForSlot(UUID slotId, int tokenVersion) {
+        return issue(slotId.toString(), "SLOT", Set.of("CHILD"), childTtlHours, tokenVersion, false);
     }
 
     private TokenResponse issue(String sub, String typ, Set<String> scopes, long hours, int tokenVersion,

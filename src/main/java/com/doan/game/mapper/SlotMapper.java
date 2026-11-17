@@ -2,6 +2,7 @@ package com.doan.game.mapper;
 
 import com.doan.game.DTO.response.SlotResponse;
 import com.doan.game.entity.LearnerSlot;
+import com.doan.game.enums.SlotStatus;
 
 /**
  * Mapper viết tay, phương thức tĩnh — đúng khuôn SWP, không dùng MapStruct.
@@ -16,9 +17,11 @@ public final class SlotMapper {
 
     /** locked tính từ lockedUntil (đã do service so với now) — mapper không có đồng hồ. */
     public static SlotResponse toResponse(LearnerSlot source, boolean locked) {
+        // WIPED: mã vẫn nằm trong DB (không cấp lại cho bé khác) nhưng KHÔNG trả ra API (18/11/2026).
+        boolean wiped = source.getStatus() == SlotStatus.WIPED;
         return new SlotResponse(
                 source.getId(),
-                source.getCode(),
+                wiped ? null : source.getCode(),
                 source.getDisplayName(),
                 source.getBadge(),
                 source.getStatus() == null ? null : source.getStatus().name(),

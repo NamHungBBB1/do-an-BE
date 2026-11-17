@@ -280,9 +280,9 @@ class PlayFlowTest {
     }
 
     // ------------------------------------------------------------------ 4. cửa quyền
-    /** Token người lớn → 403/3004; slot đã trả → 410/3009 — cùng luật dashboard. */
+    /** Token người lớn → 403/3004; slot của nhóm đã đóng (ARCHIVED) → 401/3003 ở decoder (18/11/2026). */
     @Test
-    void adultTokenAndReturnedSlotRejected() throws Exception {
+    void adultTokenAndArchivedSlotRejected() throws Exception {
         String v = releaseVersion();
         String parent = parentToken("playnguolon");
 
@@ -296,13 +296,13 @@ class PlayFlowTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String child = childLogin(slotBody, "123456");
-        mvc.perform(post("/api/slots/" + subject(child) + "/return")
+        mvc.perform(post("/api/groups/" + groupId + "/close")
                         .header("Authorization", "Bearer " + parent))
                 .andExpect(status().isOk());
 
         mvc.perform(batchRequest(child, validBatch(1, 1, v)))
-                .andExpect(status().isGone())
-                .andExpect(jsonPath("$.code").value(3009));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3003));
     }
 
     // ------------------------------------------------------------------ 5. state + dashboard đợt 2

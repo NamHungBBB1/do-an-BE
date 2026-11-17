@@ -32,6 +32,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -223,7 +224,8 @@ class GroupCloseBulkFlowTest {
         openSlot(teacher, groupId, "Hoc sinh 41", "123456")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(3026));
-        mvc.perform(bulkRequest(teacher, groupId, 1))
+        // Tên phải khác 40 em đã mở: từ 18/11/2026 trùng tên slot ACTIVE là 1001, nổ TRƯỚC hạn mức.
+        mvc.perform(bulkRequest(teacher, groupId, 1, "Hoc sinh "))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(3026));
         mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + teacher))
@@ -254,8 +256,8 @@ class GroupCloseBulkFlowTest {
                 .andExpect(jsonPath("$.code").value(3005));
     }
 
-    // ------------------------------------------------------------------ xoá slot đã trả
-    /** Hưng chốt 07/10: ARCHIVED xoá được (WIPED thì vẫn 5004). */
+    // ------------------------------------------------------------------ xoá slot đã lưu trữ
+    /** Hưng chốt 07/10: ARCHIVED xoá được (WIPED thì vẫn 5004). Từ 18/11/2026 ARCHIVED chỉ sinh ra khi đóng nhóm. */
     @Test
     void archivedSlotCanBeWiped() throws Exception {
         String jwt = parentToken("xoatralai");
@@ -263,7 +265,8 @@ class GroupCloseBulkFlowTest {
         openSlot(jwt, groupId, "Be An", "123456");
         String slotId = firstSlotOf(jwt, groupId);
 
-        mvc.perform(post("/api/slots/" + slotId + "/return").header("Authorization", "Bearer " + jwt))
+        mvc.perform(post("/api/groups/" + groupId + "/close")
+                        .header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk());
         mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
@@ -280,11 +283,12 @@ class GroupCloseBulkFlowTest {
     // ------------------------------------------------------------------ hết gói vẫn giữ / xoá được (G-01, 10/10)
     /**
      * Chốt 07/10: hết hạn giữ dữ liệu cũ; WIPED là quyền xoá của phụ huynh. Trước 10/10 cửa
-     * SecurityConfig đòi SCOPE_PARENT|TEACHER cho mọi /api/slots/** nên hết cả hai gói là 403 — trả,
-     * đổi PIN, xoá đều không làm được. Giờ chỉ MỞ slot mới đòi gói.
+     * SecurityConfig đòi SCOPE_PARENT|TEACHER cho mọi /api/slots/** nên hết cả hai gói là 403 — đổi
+     * PIN, xoá đều không làm được. Giờ chỉ MỞ slot mới đòi gói. 18/11/2026: bỏ "trả slot", thay bằng
+     * PATCH đổi tên.
      */
     @Test
-    void expiredPlanCanStillReturnChangePinAndWipe() throws Exception {
+    void expiredPlanCanStillChangePinRenameAndWipe() throws Exception {
         String jwt = registerAndVerify("hetgoi-" + System.nanoTime() + "@test.local");
         grant(jwt, PlanKind.PARENT);
         String groupId = openFamilyGroup(jwt);
@@ -299,8 +303,10 @@ class GroupCloseBulkFlowTest {
         mvc.perform(post("/api/slots/" + slotId + "/pin").header("Authorization", "Bearer " + jwt)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"654321\"}"))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/slots/" + slotId + "/return").header("Authorization", "Bearer " + jwt))
-                .andExpect(status().isOk());
+        mvc.perform(patch("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Be moi ten\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.displayName").value("Be moi ten"));
         mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
@@ -416,13 +422,19 @@ class GroupCloseBulkFlowTest {
 
     /** Body bulk gồm {@code count} phần tử cùng một groupId. */
     private static MockHttpServletRequestBuilder bulkRequest(String jwt, String groupId, int count) {
+        return bulkRequest(jwt, groupId, count, "Be ");
+    }
+
+    /** {@code prefix} để lô sau không trùng tên lô trước (một nhóm chỉ cho tên ACTIVE duy nhất). */
+    private static MockHttpServletRequestBuilder bulkRequest(String jwt, String groupId, int count,
+                                                             String prefix) {
         StringBuilder slots = new StringBuilder();
         for (int i = 1; i <= count; i++) {
             if (i > 1) {
                 slots.append(',');
             }
             slots.append("{\"groupId\":\"").append(groupId)
-                    .append("\",\"displayName\":\"Be ").append(i)
+                    .append("\",\"displayName\":\"").append(prefix).append(i)
                     .append("\",\"pin\":\"123456\"}");
         }
         return post("/api/slots/bulk")
