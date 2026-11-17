@@ -17,12 +17,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 import java.util.UUID;
 
 /**
  * Cá nhân hoá (spec build/spec-ca-nhan-hoa-2026-11-11.md). Mỏng: nhận, gọi service, trả về.
- * /api/slots/** = phụ huynh (token ACCOUNT, service kiểm chủ nhóm). /api/play/** = trẻ (token SLOT, SecurityConfig chặn theo typ;
+ * /api/slots/** = chủ nhóm, phụ huynh hoặc giáo viên (token ACCOUNT, service kiểm chủ nhóm; chỉ trạng thái). /api/play/** = trẻ (token SLOT, SecurityConfig chặn theo typ;
  * slot lấy từ sub của token, FE không gửi slotId).
  */
 @RestController
@@ -32,16 +31,10 @@ public class PersonalizationController {
 
     private final PersonalizationService service;
 
+    /** Phụ huynh / giáo viên (chủ nhóm): chỉ trạng thái. Người lớn không trả lời thay — chỉ bé trả lời (Hưng 17/11). */
     @GetMapping("/slots/{id}/personalization")
-    public ApiResponse<PersonalizationResponse> parentView(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return ApiResponse.ok(service.forParent(UUID.fromString(jwt.getSubject()), id));
-    }
-
-    /** Body: {"gender":"FEMALE","age":null,"interest":"SPORT"} — null / bỏ khoá = "không biết, để bé chọn". Ghi đè cả bộ. */
-    @PutMapping("/slots/{id}/personalization")
-    public ApiResponse<PersonalizationResponse> parentSave(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
-                                                           @RequestBody Map<String, String> answers) {
-        return ApiResponse.ok(service.saveParent(UUID.fromString(jwt.getSubject()), id, answers));
+    public ApiResponse<PersonalizationResponse> ownerView(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return ApiResponse.ok(service.forOwner(UUID.fromString(jwt.getSubject()), id));
     }
 
     @GetMapping("/play/personalization")

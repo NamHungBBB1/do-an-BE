@@ -6,9 +6,10 @@ import java.util.Map;
 /**
  * Khảo sát cá nhân hoá của một trẻ (spec build/spec-ca-nhan-hoa-2026-11-11.md).
  * status: NOT_STARTED / WAITING_CHILD / WAITING_GAME / COMPLETED / SKIPPED — tính ra, không lưu.
- * labels: nhãn cuối (chiều → giá trị); chiều vắng = chưa biết → bản gốc. parent: câu của phụ huynh (chỉ trả cho phụ huynh, trẻ nhận null).
+ * labels: nhãn cuối (chiều → giá trị); chiều vắng = chưa biết → bản gốc. Người lớn (phụ huynh,
+ * giáo viên) chỉ nhận status (Hưng 17/11: chỉ bé trả lời).
  * askChild: chiều cần hỏi trẻ; askInGame: chiều game chọn phụ cần hỏi; catalog: chiều → giá trị hợp lệ (FE dựng nút).
  */
-public record PersonalizationResponse(String status, Map<String, String> labels, Map<String, String> parent,
+public record PersonalizationResponse(String status, Map<String, String> labels,
                                       List<String> askChild, List<String> askInGame, Map<String, List<String>> catalog) {
 }

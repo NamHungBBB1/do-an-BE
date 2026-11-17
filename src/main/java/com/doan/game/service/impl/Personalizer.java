@@ -91,17 +91,14 @@ public class Personalizer {
     // ------------------------------------------------------------------ nhãn cuối của trẻ
 
     /**
-     * Nhãn cuối từ câu trả lời theo nguồn ("PARENT", "CHILD", "GAME" → chiều → giá trị). Luật Hưng 11/11 (Q6):
-     * phụ huynh và trẻ cùng trả lời mà KHÁC nhau → coi như chưa biết; chưa biết thì lấy game chọn phụ; vẫn không có → không có nhãn
-     * (chơi bản gốc ở chiều đó). Game chọn phụ không bao giờ đè giá trị phụ huynh + trẻ đã thống nhất. Giá trị lạ (không có trong
-     * catalog) coi như không trả lời.
+     * Nhãn cuối từ câu trả lời theo nguồn ("CHILD", "GAME" → chiều → giá trị). Chỉ bé trả lời (Hưng 17/11 — phụ huynh và giáo viên
+     * không trả lời thay): bé chọn thì lấy; chưa có thì lấy game chọn phụ; vẫn không có → không có nhãn (chơi bản gốc ở chiều đó).
+     * Câu "PARENT" cũ (trước 17/11) bị bỏ qua. Giá trị lạ (không có trong catalog) coi như không trả lời.
      */
     public Map<String, String> resolve(Map<String, Map<String, String>> answersBySource) {
         Map<String, String> out = new TreeMap<>();
         for (String dim : catalog.keySet()) {
-            String p = valid(dim, answersBySource, "PARENT");
-            String c = valid(dim, answersBySource, "CHILD");
-            String v = (p != null && c != null) ? (p.equals(c) ? p : null) : (p != null ? p : c);
+            String v = valid(dim, answersBySource, "CHILD");
             if (v == null) {
                 v = valid(dim, answersBySource, "GAME");
             }

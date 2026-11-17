@@ -42,22 +42,18 @@ class PersonalizerTest {
 
     @Test
     void resolveFollowsHungRule() {
-        // trùng → lấy; một bên → lấy bên đó
-        assertThat(p.resolve(Map.of("PARENT", Map.of("interest", "SPORT"), "CHILD", Map.of("interest", "SPORT"))))
-                .containsEntry("interest", "SPORT");
-        assertThat(p.resolve(Map.of("PARENT", Map.of("gender", "FEMALE")))).containsEntry("gender", "FEMALE");
+        // chỉ bé trả lời (Hưng 17/11): bé chọn → lấy
         assertThat(p.resolve(Map.of("CHILD", Map.of("age", "8_10")))).containsEntry("age", "8_10");
-        // khác nhau = 0 → game chọn phụ quyết; không có game → không nhãn (bản gốc)
-        Map<String, Map<String, String>> conflict = Map.of("PARENT", Map.of("interest", "SPORT"), "CHILD", Map.of("interest", "MUSIC"));
-        assertThat(p.resolve(conflict)).doesNotContainKey("interest");
-        assertThat(p.resolve(Map.of("PARENT", Map.of("interest", "SPORT"), "CHILD", Map.of("interest", "MUSIC"),
-                "GAME", Map.of("interest", "ART")))).containsEntry("interest", "ART");
-        // game không đè giá trị đã thống nhất
-        assertThat(p.resolve(Map.of("PARENT", Map.of("gender", "MALE"), "CHILD", Map.of("gender", "MALE"),
-                "GAME", Map.of("gender", "FEMALE")))).containsEntry("gender", "MALE");
+        // câu phụ huynh cũ (trước 17/11) bị bỏ qua
+        assertThat(p.resolve(Map.of("PARENT", Map.of("gender", "FEMALE")))).doesNotContainKey("gender");
+        assertThat(p.resolve(Map.of("PARENT", Map.of("interest", "SPORT"), "CHILD", Map.of("interest", "MUSIC"))))
+                .containsEntry("interest", "MUSIC");
+        // bé bỏ qua → game chọn phụ; game không đè câu bé đã chọn
+        assertThat(p.resolve(Map.of("CHILD", Map.of(), "GAME", Map.of("interest", "ART")))).containsEntry("interest", "ART");
+        assertThat(p.resolve(Map.of("CHILD", Map.of("gender", "MALE"), "GAME", Map.of("gender", "FEMALE"))))
+                .containsEntry("gender", "MALE");
         // giá trị lạ = chưa trả lời; không ai trả lời = rỗng
-        assertThat(p.resolve(Map.of("PARENT", Map.of("interest", "HACK"), "CHILD", Map.of("interest", "TECH"))))
-                .containsEntry("interest", "TECH");
+        assertThat(p.resolve(Map.of("CHILD", Map.of("interest", "HACK")))).doesNotContainKey("interest");
         assertThat(p.resolve(Map.of())).isEmpty();
         assertThat(p.resolve(null)).isEmpty();
     }

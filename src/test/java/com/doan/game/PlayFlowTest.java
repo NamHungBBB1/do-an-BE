@@ -506,11 +506,11 @@ class PlayFlowTest {
      */
     // ------------------------------------------------------------------ cá nhân hoá (spec 11/11)
     /**
-     * Phụ huynh để trống sở thích → hỏi trẻ; trẻ chọn giới tính KHÁC phụ huynh → = 0 → game chọn phụ quyết; chương trẻ nhận đã ghép
-     * đúng nhãn, không cache công khai. Token người lớn không vào được cổng trẻ; xoá sạch slot thì mất khảo sát.
+     * Chỉ bé trả lời (Hưng 17/11): phụ huynh chỉ thấy trạng thái, không trả lời thay; bé bỏ qua giới tính → game chọn phụ quyết; chương
+     * trẻ nhận đã ghép đúng nhãn, không cache công khai. Token người lớn không vào được cổng trẻ; xoá sạch slot thì mất khảo sát.
      */
     @Test
-    void personalizationParentChildGameThenComposedChapter() throws Exception {
+    void personalizationChildThenGameThenComposedChapter() throws Exception {
         String v = ContentTestSupport.publishFresh(mvc, admin(), new ContentTestSupport.Repos(
                 releaseChapterRepo, releaseRepo, draftRepo, chapterRepo), Map.of("CH01", personalizedChapter()), "ca nhan hoa");
         version = null;   // vừa phát hành bản khác → ca sau phải phát hành lại bản của PlayFlowTest
@@ -522,23 +522,19 @@ class PlayFlowTest {
         String slotId = subject(child);
 
         mvc.perform(get("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("NOT_STARTED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("NOT_STARTED"))
+                .andExpect(jsonPath("$.result.labels").value(nullValue()));
+        // Phụ huynh không trả lời thay (API ghi đã bỏ).
         mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"gender\":\"FEMALE\",\"interest\":null}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.status").value("WAITING_CHILD"))
-                .andExpect(jsonPath("$.result.parent.gender").value("FEMALE"))
-                .andExpect(jsonPath("$.result.askChild.length()").value(2));
-        mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"interest\":\"KPOP\"}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(1001));
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"gender\":\"FEMALE\"}"))
+                .andExpect(status().isMethodNotAllowed());
 
-        // Trẻ không thấy câu của phụ huynh; chọn giới tính KHÁC → chưa biết → chờ game chọn phụ.
+        // Bé được hỏi cả 3 chiều; bỏ qua giới tính → chờ game chọn phụ.
         mvc.perform(get("/api/play/personalization").header("Authorization", "Bearer " + child))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.result.parent").value(nullValue()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.askChild.length()").value(3));
         mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"source\":\"CHILD\",\"answers\":{\"gender\":\"MALE\",\"interest\":\"SPORT\"}}"))
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"interest\":\"SPORT\"}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.status").value("WAITING_GAME"))
                 .andExpect(jsonPath("$.result.labels.interest").value("SPORT"))
@@ -551,7 +547,10 @@ class PlayFlowTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"GAME\",\"answers\":{\"gender\":\"FEMALE\"}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.labels.gender").value("FEMALE"))
-                .andExpect(jsonPath("$.result.status").value("SKIPPED"));   // tuổi: không ai trả lời, game không hỏi tuổi
+                .andExpect(jsonPath("$.result.status").value("SKIPPED"));   // tuổi: bé bỏ qua, game không hỏi tuổi
+        mvc.perform(get("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + parent))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("SKIPPED"))
+                .andExpect(jsonPath("$.result.labels").value(nullValue()));
 
         mvc.perform(get("/api/play/releases/" + v + "/chapters/CH01").header("Authorization", "Bearer " + child))
                 .andExpect(status().isOk())
@@ -590,11 +589,10 @@ class PlayFlowTest {
         mvc.perform(get("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + teacher))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.result.labels").value(nullValue()))
-                .andExpect(jsonPath("$.result.parent").value(nullValue()));
+                .andExpect(jsonPath("$.result.labels").value(nullValue()));
         mvc.perform(put("/api/slots/" + slotId + "/personalization").header("Authorization", "Bearer " + teacher)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"gender\":\"MALE\"}"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3004));
+                .andExpect(status().isMethodNotAllowed());
     }
 
     private static String personalizedChapter() {
