@@ -142,7 +142,8 @@ class PaymentFlowTest {
             assertThat(e.getSource()).isEqualTo(EntitlementSource.PAYMENT);
             LocalDate today = LocalDate.now(ClockConfig.VN);
             assertThat(e.getStartsOn()).isEqualTo(today);
-            assertThat(e.getExpiresOn()).isEqualTo(today.plusMonths(3).minusDays(1));
+            // Gói vĩnh viễn (18/11/2026): sentinel 9999-12-31, không còn cộng số tháng của đơn.
+            assertThat(e.getExpiresOn()).isEqualTo(LocalDate.of(9999, 12, 31));
         });
 
         // Receipt mail went to the buyer after commit.

@@ -104,10 +104,7 @@ class PaymentServiceImplTest {
     @Test
     void paidWebhookGrantsPlanFromToday() {
         payOSReports(123L, 2000L, "00");
-        threeMonthPlan();
         when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
-        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
-                .thenReturn(Optional.empty());
 
         svc.handleWebhook("{}");
 
@@ -115,13 +112,13 @@ class PaymentServiceImplTest {
         ArgumentCaptor<Entitlement> captor = ArgumentCaptor.forClass(Entitlement.class);
         verify(entitlementRepo).save(captor.capture());
         assertEquals(LocalDate.of(2026, 10, 2), captor.getValue().getStartsOn());
-        // 02/10 + 3 tháng = 02/01/2027, dùng hết ngày 01/01/2027
-        assertEquals(LocalDate.of(2027, 1, 1), captor.getValue().getExpiresOn());
+        // Gói vĩnh viễn (18/11/2026): sentinel 9999-12-31, không cộng số tháng của đơn.
+        assertEquals(LocalDate.of(9999, 12, 31), captor.getValue().getExpiresOn());
         assertEquals(tx, captor.getValue().getTransaction());
-        // Biên nhận: một mail, có mã đơn và hạn gói
+        // Biên nhận: một mail, có mã đơn và ghi "vĩnh viễn" thay vì in ngày sentinel.
         ArgumentCaptor<OutgoingMail> mail = ArgumentCaptor.forClass(OutgoingMail.class);
         verify(events).publishEvent(mail.capture());
-        assertTrue(mail.getValue().body().contains("123") && mail.getValue().body().contains("01/01/2027"));
+        assertTrue(mail.getValue().body().contains("123") && mail.getValue().body().contains("vĩnh viễn"));
     }
 
     @Test
@@ -143,22 +140,18 @@ class PaymentServiceImplTest {
         verify(transactionRepo, never()).saveAndFlush(any());
     }
 
+    /** Gói vĩnh viễn: mua khi đang còn gói cũ cũng KHÔNG nối tiếp hạn — luôn ghi sentinel từ hôm nay. */
     @Test
-    void earlyRenewalStartsAfterCurrentExpiry() {
+    void buyingWhileAnOldPlanIsStillValidStillGivesPermanent() {
         payOSReports(123L, 2000L, "00");
-        threeMonthPlan();
         when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
-        Entitlement old = new Entitlement();
-        old.setExpiresOn(LocalDate.of(2026, 11, 15));
-        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
-                .thenReturn(Optional.of(old));
 
         svc.handleWebhook("{}");
 
         ArgumentCaptor<Entitlement> captor = ArgumentCaptor.forClass(Entitlement.class);
         verify(entitlementRepo).save(captor.capture());
-        assertEquals(LocalDate.of(2026, 11, 16), captor.getValue().getStartsOn());
-        assertEquals(LocalDate.of(2027, 2, 15), captor.getValue().getExpiresOn());
+        assertEquals(LocalDate.of(2026, 10, 2), captor.getValue().getStartsOn());
+        assertEquals(LocalDate.of(9999, 12, 31), captor.getValue().getExpiresOn());
     }
 
     @Test
@@ -190,11 +183,8 @@ class PaymentServiceImplTest {
     @Test
     void paidAfterFailedStillGrantsWithNote() {
         payOSReports(123L, 2000L, "00");
-        threeMonthPlan();
         tx.setStatus(TransactionStatus.FAILED);
         when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
-        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
-                .thenReturn(Optional.empty());
 
         svc.handleWebhook("{}");
 
@@ -203,20 +193,18 @@ class PaymentServiceImplTest {
         assertTrue(tx.getNote().contains("FAILED"));
     }
 
-    /** P-05: số tháng lấy từ ĐƠN, không phải từ Plan hiện tại (admin đổi 3 → 1 tháng sau khi khách bấm mua). */
+    /** 18/11/2026: gói vĩnh viễn — đơn cũ có months cũng bỏ qua, luôn ghi sentinel 9999-12-31. */
     @Test
-    void monthsComeFromTheOrderNotTheCurrentPlan() {
+    void boughtPlanIsPermanentWhateverTheOrderSays() {
         payOSReports(123L, 2000L, "00");
         tx.setMonths(3);
         when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
-        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
-                .thenReturn(Optional.empty());
 
         svc.handleWebhook("{}");
 
         ArgumentCaptor<Entitlement> captor = ArgumentCaptor.forClass(Entitlement.class);
         verify(entitlementRepo).save(captor.capture());
-        assertEquals(LocalDate.of(2027, 1, 1), captor.getValue().getExpiresOn());
+        assertEquals(LocalDate.of(9999, 12, 31), captor.getValue().getExpiresOn());
         verify(planRepo, never()).findByKind(any());
     }
 

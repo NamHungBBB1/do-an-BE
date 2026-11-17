@@ -272,8 +272,7 @@ public class AdminServiceImpl implements AdminService {
                         transactionRepo.countByStatus(com.doan.game.enums.TransactionStatus.FAILED),
                         transactionRepo.countByNeedsReviewTrue()),
                 new AdminDashboardResponse.Plans(
-                        entitlementRepo.countActive(today),
-                        entitlementRepo.countExpiringBetween(today, today.plusDays(7))),
+                        entitlementRepo.countActive(today)),
                 // Đợt 1 chưa có bảng nhật ký thao tác admin chung — dùng sổ cấp / thu vai.
                 listRoleLog(null, 0, 10).items());
     }

@@ -444,13 +444,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Số tháng lấy từ ĐƠN (ghi lúc mua, P-05); đơn cũ chưa có cột thì đọc Plan (orElse chỉ để webhook không bao giờ ném).
-     * Ngày startsOn / expiresOn do EntitlementFactory tính, dùng chung với admin cấp tay.
+     * Gói mua: ghi đơn rồi cấp quyền VĨNH VIỄN. Không đọc months từ đơn / Plan — đơn cũ có months cũng
+     * bỏ qua, vì từ 18/11/2026 mọi gói bán ra đều không hạn.
      */
     private Entitlement buildEntitlementFrom(Transaction tx) {
-        int months = tx.getMonths() != null ? tx.getMonths()
-                : planRepo.findByKind(tx.getKind()).map(Plan::getMonths).orElse(PlanServiceImpl.DEFAULT_MONTHS);
-        return entitlementFactory.create(tx.getAccount(), tx.getKind(), months,
+        return entitlementFactory.createPermanent(tx.getAccount(), tx.getKind(),
                 EntitlementSource.PAYMENT, tx, null, null);
     }
 
@@ -507,14 +505,22 @@ public class PaymentServiceImpl implements PaymentService {
                         <li>Gói: <b>%s</b> (%s)</li>
                         <li>Số tiền: <b>%s đ</b></li>
                         <li>Thanh toán lúc: %s</li>
-                        <li>Thời hạn gói: %s – %s</li>
+                        <li>Thời hạn gói: %s</li>
                         </ul>
                         <p>Thắc mắc về giao dịch, trả lời mail này kèm mã đơn.</p>
                         """.formatted(AuthServiceImpl.escape(a.getDisplayName()), tx.getOrderCode(),
                         planLabel(tx.getKind()), tx.getPurpose() == TransactionPurpose.RENEW ? "gia hạn" : "mua mới",
                         String.format(Locale.ROOT, "%,d", tx.getAmount()).replace(',', '.'),
                         DMY_HM.format(tx.getPaidAt().atZone(clock.getZone())),
-                        DMY.format(e.getStartsOn()), DMY.format(e.getExpiresOn()))));
+                        termLabel(e))));
+    }
+
+    /** Gói mua là vĩnh viễn — đừng in "01/01/9999" cho khách; chỉ đơn admin cấp tay mới có ngày. */
+    private static String termLabel(Entitlement e) {
+        if (EntitlementFactory.PERMANENT_UNTIL.equals(e.getExpiresOn())) {
+            return "vĩnh viễn";
+        }
+        return DMY.format(e.getStartsOn()) + " – " + DMY.format(e.getExpiresOn());
     }
 
     public static String planLabel(PlanKind kind) {

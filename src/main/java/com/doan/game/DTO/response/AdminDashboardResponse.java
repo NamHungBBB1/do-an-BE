@@ -24,7 +24,7 @@ public record AdminDashboardResponse(Accounts accounts, Learners learners, Reven
     public record Transactions(long pending, long failed, long needsReview) {
     }
 
-    /** active = dòng gói đang chạy; expiringIn7Days = hết hạn trong 7 ngày tới. */
-    public record Plans(long active, long expiringIn7Days) {
+    /** active = dòng gói đang chạy. Gói vĩnh viễn nên không còn "sắp hết hạn 7 ngày" (18/11/2026). */
+    public record Plans(long active) {
     }
 }

@@ -470,7 +470,7 @@ class AdminRoleFlowTest {
                 .andExpect(jsonPath("$.result.transactions.failed").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.transactions.needsReview").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.plans.active").value(greaterThanOrEqualTo(0)))
-                .andExpect(jsonPath("$.result.plans.expiringIn7Days").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.plans.expiringIn7Days").doesNotExist())
                 .andExpect(jsonPath("$.result.recentAdminActions[0].targetEmail").value(lan.getEmail()))
                 .andExpect(jsonPath("$.result.recentAdminActions[0].role").value("GAME_EDITOR"))
                 .andExpect(jsonPath("$.result.recentAdminActions[0].granted").value(true))

@@ -29,11 +29,7 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     @Query("select count(e) from Entitlement e where e.startsOn <= :today and e.expiresOn >= :today")
     long countActive(@Param("today") LocalDate today);
 
-    /** Số gói hết hạn trong khoảng [today, until] — dashboard nhắc gia hạn 7 ngày. */
-    @Query("select count(e) from Entitlement e where e.expiresOn between :today and :until")
-    long countExpiringBetween(@Param("today") LocalDate today, @Param("until") LocalDate until);
-
-    /** Gói mới nhất của một loại: gia hạn nối tiếp từ expiresOn của nó. */
+    /** Gói mới nhất của một loại: admin cấp tay vẫn nối tiếp từ expiresOn của nó. */
     Optional<Entitlement> findTopByAccount_IdAndKindOrderByExpiresOnDesc(UUID accountId, PlanKind kind);
 
     /**
@@ -45,22 +41,6 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     @Query("select distinct e.kind from Entitlement e "
             + "where e.account.id = :id and e.startsOn <= :today and e.expiresOn >= :today")
     Set<PlanKind> findActivePlanKinds(@Param("id") UUID accountId, @Param("today") LocalDate today);
-
-    /**
-     * Ngày bắt đầu KỲ GÓI đang chạy của một loại — mốc để đếm "slot đã dùng trong kỳ" (17/11/2026).
-     * Lấy min(startsOn) để không bao giờ đếm thiếu: dữ liệu cũ có hai dòng chồng lấn thì mốc sớm hơn
-     * là mốc chặt hơn.
-     */
-    @Query("select min(e.startsOn) from Entitlement e "
-            + "where e.account.id = :id and e.kind = :kind and e.startsOn <= :today and e.expiresOn >= :today")
-    LocalDate findActiveTermStart(@Param("id") UUID accountId, @Param("kind") PlanKind kind,
-                                  @Param("today") LocalDate today);
-
-    /** Ngày kết thúc kỳ gói đang chạy (max expiresOn) — hiển thị cho người dùng biết ví reset khi nào. */
-    @Query("select max(e.expiresOn) from Entitlement e "
-            + "where e.account.id = :id and e.kind = :kind and e.startsOn <= :today and e.expiresOn >= :today")
-    LocalDate findActiveTermEnd(@Param("id") UUID accountId, @Param("kind") PlanKind kind,
-                                @Param("today") LocalDate today);
 
     /** Như trên cho cả một trang tài khoản trong một truy vấn: mỗi dòng [accountId, kind] (25/10). */
     @Query("select distinct e.account.id, e.kind from Entitlement e "
@@ -74,7 +54,4 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
      * người dùng cần thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
      */
     List<Entitlement> findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(UUID accountId);
-
-    /** Gói hết hạn đúng ngày này — job nhắc gia hạn dùng. */
-    List<Entitlement> findByExpiresOn(LocalDate expiresOn);
 }
