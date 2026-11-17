@@ -300,9 +300,13 @@ public class Personalizer {
         return problems.stream().limit(MAX_PROBLEMS).toList();
     }
 
-    private void checkDeclarations(JsonNode chapter, Set<String> problems) {
-        // BE chấm trên JSON THÔ (PlayServiceImpl, MiniGameGrader — không ghép), nên token chỉ được nằm ở trường bề mặt. Token ở
-        // id / nextSceneId / options của quiz / grade… thì mọi tổ hợp ghép ra giống nhau (check dưới không thấy) mà chấm vẫn sai.
+    /**
+     * Luật CỨNG duy nhất của cá nhân hoá (Hưng 17/11, mọi luật khác chỉ cảnh báo): token ở trường cấu trúc / chấm điểm.
+     * BE chấm trên JSON THÔ (PlayServiceImpl, MiniGameGrader — không ghép), nên token ở id / nextSceneId / options của quiz /
+     * grade / correctId… làm bé thấy "đúng" mà BE ghi sai vào báo cáo người lớn. Rỗng = đạt.
+     */
+    public List<String> tokensInScoringFields(JsonNode chapter) {
+        List<String> problems = new ArrayList<>();
         texts(chapter, "", (p, s) -> {
             if (p.startsWith("personalization.") || s.indexOf("{{") < 0) {
                 return;
@@ -315,6 +319,11 @@ public class Personalizer {
                 }
             }
         });
+        return problems;
+    }
+
+    private void checkDeclarations(JsonNode chapter, Set<String> problems) {
+        problems.addAll(tokensInScoringFields(chapter));
         chapter.path("personalization").path("tokens").fields().forEachRemaining(t -> {
             String name = t.getKey();
             String at = "personalization.tokens." + name;

@@ -354,7 +354,8 @@ public class ContentServiceImpl implements ContentService {
         try {
             // Gắn giọng lúc đọc: câu vừa được máy sinh nộp có voiceUrl ngay, không cần lưu lại nháp.
             return new DraftContentResponse(toDraftSummary(d),
-                    objectMapper.readTree(voiceKeys.attachJson(d.getContent()).replace(ASSET_PLACEHOLDER, assetBase)));
+                    objectMapper.readTree(voiceKeys.attachJson(d.getContent()).replace(ASSET_PLACEHOLDER, assetBase)),
+                    personalizer.check(objectMapper.readTree(d.getContent())).stream().map(p -> "cá nhân hoá: " + p).toList());
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "JSON nháp hỏng trong DB: " + code);
         }
@@ -384,12 +385,13 @@ public class ContentServiceImpl implements ContentService {
         try {
             JsonNode root = objectMapper.readTree(draft.getContent());
             contentSchema.requireCompleteFlow(root);
-            // Mọi tổ hợp nhãn phải ghép được và giữ nguyên tiền / điểm / đáp án / đường đi — bản đưa duyệt không được có biến thể hỏng.
-            List<String> personalization = personalizer.check(root);
-            if (!personalization.isEmpty()) {
+            // Cá nhân hoá là ràng buộc MỀM (Hưng 17/11): cảnh báo hiện khi lưu nháp và trong GET …/draft để Reviewer thấy.
+            // Chỉ chặn token ở trường chấm điểm / đường đi — lọt lên thì bé thấy "đúng" mà báo cáo người lớn ghi sai.
+            List<String> scoring = personalizer.tokensInScoringFields(root);
+            if (!scoring.isEmpty()) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED, "cá nhân hoá: "
-                        + String.join("; ", personalization.subList(0, Math.min(5, personalization.size())))
-                        + (personalization.size() > 5 ? "; … còn " + (personalization.size() - 5) + " chỗ" : ""));
+                        + String.join("; ", scoring.subList(0, Math.min(5, scoring.size())))
+                        + (scoring.size() > 5 ? "; … còn " + (scoring.size() - 5) + " chỗ" : ""));
             }
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: nháp không đọc được");
@@ -612,7 +614,7 @@ public class ContentServiceImpl implements ContentService {
     Normalized validateAndNormalize(JsonNode root) {
         // Bộ khuôn: loại cảnh, trường, link cảnh, lựa chọn + khoá, chỉ số, điều kiện, mini-game kind; đường đi chưa trọn chỉ cảnh báo.
         List<String> warnings = contentSchema.validate(root);
-        // Cá nhân hoá (spec 11/11): lưu nháp chỉ cảnh báo (đang soạn dở), gửi duyệt thì chặn — xem submitDraft.
+        // Cá nhân hoá: chỉ cảnh báo, kể cả lúc gửi duyệt (ràng buộc mềm, Hưng 17/11) — Reviewer thấy lại trong GET …/draft.
         personalizer.check(root).forEach(p -> warnings.add("cá nhân hoá: " + p));
         String json;
         try {
