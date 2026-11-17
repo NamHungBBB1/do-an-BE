@@ -72,6 +72,7 @@ trên web, lưu bảng `Plan` (02/10). `ClockConfig` cấp một `Clock` múi gi
 | `QuizAttemptService` **(có ruột, quiz v3 16/11)** | QuizAttempt | Lượt làm: mở đề tạo đề riêng đã xáo (`paper`, bean `Random quizRandom` = SecureRandom trong `QuizConfig`, test thay `Random(42)`), tự lưu câu, nộp (idempotent), xem lại; đồng hồ BE tính, chốt lười lượt quá `deadline + app.quiz.grace-seconds`; lần nộp đầu của (đề, em) ghi `QuizResult` + `QuizAnswer` (chỉ số gốc). Mọi đường khoá dòng slot trước. Giáo viên xem kết quả → `finalizeExpired` khoá các slot liên quan rồi chốt |
 | `QuestionBankService` **(có ruột)** | Question | Kho câu hỏi trong Studio cho ba vai nội bộ (17/10, cách 1): xem toàn kho, thêm (externalId tự sinh, `replacesId` thay câu cũ), sửa, rút / đưa lại; câu đã nằm trong đề đã phát thì khoá chữ / lựa chọn / đáp án (8009), chỉ sửa nhãn; không xoá cứng. Reviewer chỉ đọc |
 | `ReportService` | GroupReport, GroupReportRow | Đông cứng báo cáo lúc kết thúc nhóm |
+| `PersonalizationService` **(có ruột, BE #57 12/11, #62 17/11)** + `Personalizer` (bean thuần, không DB) | LearnerSlot (`personalization` JSON) | Cá nhân hoá theo bé: lưu câu trả lời theo nguồn (`CHILD`, `GAME`), tính nhãn + trạng thái mỗi lần đọc, chủ nhóm chỉ thấy trạng thái, ghép chương theo nhãn khi bé chơi. Chi tiết: mục "Cá nhân hoá — cách nó chạy" |
 | `AchievementService` | Achievement | Thành tựu, chứng chỉ (đổi thưởng đã bỏ) |
 | `PaymentService` **(có ruột)** | Transaction, Entitlement (cấp từ thanh toán) | PayOS theo SDK chính chủ: tạo link (`orderCode` do mình sinh), xem / huỷ theo `orderCode`, webhook `verify(body)` → PAID tạo Entitlement và **luôn trả 200**, admin đăng ký URL webhook, cron đối soát PENDING |
 | `PlanService` **(có ruột)** | Plan | Bảng giá công khai; admin đặt giá và số tháng từng gói (chưa có dòng thì chưa bán được gói đó) |
@@ -140,6 +141,29 @@ spring-security-test, không cần AuthService).
 
 **Còn thiếu:** đăng ký URL webhook với PayOS (`POST /api/payments/webhook/confirm`, admin, hoặc gọi API
 confirm-webhook ngay trên VPS) — chỉ làm sau khi VPS chạy bản này; và `AuthService` để có JWT thật.
+
+## Cá nhân hoá — cách nó chạy
+
+Một bản game, nhiều nhãn: mỗi chương vẫn là **một** JSON đóng băng, kèm `personalization.tokens` (từ thay theo nhãn, mỗi token một chiều)
+và `variants` trên cảnh / lựa chọn / thẻ (ghi đè trường bề mặt). Danh mục nhãn: `src/main/resources/personalization/catalog.json`
+(`gender` 2, `age` 3, `interest` 8). API và luật: `build/api-docs/personalization.md` (ngoài repo), hub `#/ca-nhan-hoa`.
+
+1. **Chỉ bé trả lời** (Hưng 17/11, BE #62). `learner_slot.personalization` = `{"CHILD":{…},"GAME":{…}}`, chỉ mã đáp án.
+   `Personalizer.resolve`: bé chọn → lấy; bé bỏ qua → game chọn phụ (chỉ `gender`, `interest`); còn lại → không nhãn = bản gốc.
+   Khoá `PARENT` cũ bị bỏ qua và xoá ở lần bé ghi kế tiếp. Xoá sạch slot → cột về NULL (`SlotServiceImpl`).
+2. **Người lớn chỉ thấy trạng thái.** `GET /api/slots/{id}/personalization` (chủ nhóm, gia đình lẫn lớp) trả `status`;
+   không có API ghi cho người lớn (PUT → 405). Trạng thái tính ra (`PersonalizationService.view`), không lưu cột.
+3. **Ghép khi bé chơi, chấm trên bản gốc.** `GET /api/play/releases/{v}/chapters/{code}` → `Personalizer.compose` theo nhãn hiện tại,
+   kèm `variantKey`, header `no-store, private`. Khảo sát hỏng → trả bản gốc, không chặn bé. `PlayServiceImpl` chấm trên JSON gốc
+   của bản phát hành, nên biến thể không bao giờ đụng điểm / tiền / đáp án / đường đi (`Personalizer.STRUCTURAL`).
+4. **Luật kiểm nội dung là ràng buộc mềm** (Hưng 17/11, BE #61). `Personalizer.check` ghép mọi tổ hợp và so với bản gốc → chỉ cảnh báo
+   (lưu nháp `PUT …/draft`, xem nháp `GET …/draft` → `warnings[]`). **Chặn gửi duyệt duy nhất** (400 / 1001):
+   `Personalizer.tokensInScoringFields` — token `{{x}}` ở trường cấu trúc / chấm điểm, vì BE chấm JSON gốc còn token → bé thấy đúng,
+   báo cáo người lớn ghi sai. Thêm luật chấm đọc khoá chữ mới thì phải thêm khoá đó vào `STRUCTURAL`.
+5. **Giọng đọc:** chương có cá nhân hoá thì `VoiceKeys` gom câu của mọi tổ hợp để sinh sẵn.
+
+Test: `PersonalizerTest`, `PersonalizationContentFlowTest`, `PlayFlowTest` (ca cá nhân hoá + giáo viên chỉ thấy trạng thái).
+Chưa làm: chụp nhãn theo lần chơi (`RunLabelSnapshot`) để báo cáo phụ huynh hiện đúng chữ bé đã thấy.
 
 ## Sinh lại
 
