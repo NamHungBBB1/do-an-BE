@@ -72,7 +72,11 @@ public class PersonalizationService {
         return view(read(requireActive(slotRepo.findById(slotId))));
     }
 
-    /** Trẻ trả lời ({@code CHILD}) hoặc kết quả game chọn phụ ({@code GAME}). Ghi đè câu trước của cùng nguồn. */
+    /**
+     * Trẻ trả lời ({@code CHILD}) hoặc kết quả game chọn phụ ({@code GAME}). GỘP vào câu trước của cùng nguồn (17/11): chiều có giá trị
+     * → cập nhật, chiều gửi null / rỗng → bỏ câu đó, chiều không gửi → giữ nguyên. Trước đây ghi đè cả nguồn nên bé đổi một câu là mất
+     * các câu còn lại.
+     */
     @Transactional
     public PersonalizationResponse saveChild(UUID slotId, String source, Map<String, String> answers) {
         if (!CHILD.equals(source) && !GAME.equals(source)) {
@@ -80,7 +84,16 @@ public class PersonalizationService {
         }
         LearnerSlot slot = requireActive(slotRepo.lockById(slotId));
         Map<String, Map<String, String>> a = read(slot);
-        a.put(source, clean(answers, GAME.equals(source) ? GAME_DIMENSIONS : personalizer.catalog().keySet().stream().toList()));
+        Map<String, String> merged = new TreeMap<>(a.getOrDefault(source, Map.of()));
+        if (answers != null) {
+            answers.forEach((dim, value) -> {
+                if (value == null || value.isBlank()) {
+                    merged.remove(dim);
+                }
+            });
+        }
+        merged.putAll(clean(answers, GAME.equals(source) ? GAME_DIMENSIONS : personalizer.catalog().keySet().stream().toList()));
+        a.put(source, merged);
         a.remove(PARENT);   // câu phụ huynh trước 17/11: không còn dùng, không giữ dữ liệu trẻ thừa
         write(slot, a);
         return view(a);
