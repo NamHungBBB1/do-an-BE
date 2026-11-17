@@ -512,12 +512,13 @@ class QuizFlowTest {
                 .andExpect(status().isOk());
         assertThat(postTestEnabled(room.teacher(), room.groupId())).isFalse();
 
-        // Nhập câu chương 2 SAU khi tắt cờ: chương đã xong + đã có câu nhưng lớp tắt → vẫn không sinh đề.
+        // 17/11 (Hưng): hậu trắc luôn có — cờ tắt không còn tác dụng. Nhập câu chương 2: chương đã xong → sinh đề.
         String ch2a = ext("H2A");
         importAsAdmin("[" + questionJson(ch2a, 2, true) + "]");
         mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.pending").isEmpty())
+                .andExpect(jsonPath("$.result.pending.length()").value(1))
+                .andExpect(jsonPath("$.result.pending[0].chapter").value(2))
                 .andExpect(jsonPath("$.result.completed.length()").value(1))
                 .andExpect(jsonPath("$.result.completed[0].chapter").value(1));
     }
@@ -618,15 +619,14 @@ class QuizFlowTest {
                 .andExpect(jsonPath("$.code").value(8001));
     }
 
-    // ------------------------------------------------------------------ 9. post-test off / on (Q6, Q7, 8001)
-    /** Q6 OPEN → HIDDEN: switching post-tests off hides an UNSUBMITTED post-test (submit → 8001); Q7 HIDDEN → OPEN on again. */
+    // ------------------------------------------------------------------ 9. hậu trắc luôn có (17/11)
+    /** 17/11 (Hưng): hậu trắc bắt buộc — lớp chưa từng bật cờ vẫn có đề sau chương; cờ tắt không ẩn đề; em chưa xong chương → 8001. */
     @Test
-    void postTestHiddenWhenSwitchedOffAndOpenAgainWhenOn() throws Exception {
+    void postTestAlwaysOnRegardlessOfFlag() throws Exception {
         releaseVersion();
         Room room = newRoom("qzanhien");
         Kid a = newKid(room, "HS A");
         Kid b = newKid(room, "HS B");
-        setPostTest(room, true);
         String q = ext("HOH");
         importAsAdmin("[" + questionJson(q, 1, true) + "]");
 
@@ -637,25 +637,13 @@ class QuizFlowTest {
                         .andExpect(jsonPath("$.result.pending[0].kind").value("POST_TEST"))
                         .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8))
                 .path("result").path("pending").get(0).path("id").asText();
-        // 8001 also for a student who has not finished the chapter yet.
+        // Em chưa xong chương: 8001.
         mvc.perform(submit(b.token(), postQuizId, answerJson(questionIdByExternal(q), 0)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(8001));
 
-        // OFF while A has not submitted: hidden from the list, opening and submitting → 8001.
+        // Cờ cũ tắt cũng không ẩn: vẫn đúng đề đó, nộp được.
         setPostTest(room, false);
-        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
-                .andExpect(jsonPath("$.result.pending").isEmpty())
-                .andExpect(jsonPath("$.result.completed").isEmpty());
-        mvc.perform(get("/api/learner/quizzes/" + postQuizId).header("Authorization", "Bearer " + a.token()))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(8001));
-        mvc.perform(submit(a.token(), postQuizId, answerJson(questionIdByExternal(q), 0)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(8001));
-
-        // ON again: the SAME post-test is back (no second one created) and can be submitted.
-        setPostTest(room, true);
         mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
                 .andExpect(jsonPath("$.result.pending.length()").value(1))
                 .andExpect(jsonPath("$.result.pending[0].id").value(postQuizId));
