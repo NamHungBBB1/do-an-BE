@@ -28,7 +28,7 @@ public class LearnerQuizController {
 
     /**
      * Danh sách của em — CHỖ HẬU TRẮC "TỰ MỞ": với mỗi chương đã xong mà lớp chưa có đề hậu trắc
-     * thì đọc danh sách này chính là lúc BE tạo (một điểm tạo duy nhất, không chạm PlayService).
+     * thì đọc danh sách này cũng tạo bù (19/11 BR-53: PlayService tạo ngay khi xong chương, cùng hàm).
      */
     @GetMapping
     public ApiResponse<LearnerQuizListResponse> listForLearner(@AuthenticationPrincipal Jwt jwt) {

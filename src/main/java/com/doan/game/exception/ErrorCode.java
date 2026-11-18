@@ -123,6 +123,7 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST),
     CHAPTER_NOT_UNLOCKED(7003, "Chưa tới lượt chương này hoặc attemptIndex không khớp",
             HttpStatus.CONFLICT),
+    POST_TEST_REQUIRED(7004, "Hãy làm bài hậu trắc chương trước để mở chương tiếp", HttpStatus.CONFLICT),   // BR-53, 19/11
 
     // 8xxx — quiz hai kiểu (quiz.md v2, Hưng chốt 16/10).
     QUIZ_NOT_FOUND(8001, "Không có đề này, hoặc đề chưa phát hành / không thuộc lớp của bạn",

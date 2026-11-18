@@ -1,7 +1,9 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.QuestionReferenceDto;
+import com.doan.game.DTO.response.PostTestRequiredResponse;
 import com.doan.game.DTO.response.QuestionResponse;
+import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Question;
 import com.doan.game.entity.Quiz;
@@ -14,6 +16,7 @@ import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.QuizMapper;
+import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.QuestionRepository;
 import com.doan.game.repository.QuizAnswerRepository;
@@ -24,8 +27,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -60,7 +65,9 @@ class QuizSupport {
     private final QuizAnswerRepository quizAnswerRepo;
     private final LearnerSlotRepository slotRepo;
     private final RunStateRepository runStateRepo;
+    private final LearnerGroupRepository groupRepo;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     // ------------------------------------------------------------------ học sinh
 
@@ -127,6 +134,77 @@ class QuizSupport {
 
     static boolean isPostTest(Quiz quiz) {
         return quiz.getKind() == QuizKind.POST_TEST;
+    }
+
+    // ------------------------------------------------------------------ hậu trắc tự tạo + BR-53
+
+    /**
+     * Với mỗi chương trong {@code chapters}: nhóm chưa có đề hậu trắc && chương có ≥ 1 câu chưa rút → tạo. Chụp questionIds
+     * (xếp theo externalId) lúc tạo, published ngay — từ đó bất biến. Hai nơi gọi: đọc danh sách của em (QuizServiceImpl) và
+     * lúc em xong chương (PlayServiceImpl, 19/11 BR-53) — gọi lại vô hại. Chỉ khoá dòng nhóm (lockById) khi thật sự phải tạo,
+     * để hai em xong chương cùng lúc không đụng UNIQUE(group, kind, chapter); vẫn đụng thì bỏ qua, lần đọc sau thấy đề của bạn.
+     */
+    void ensurePostTests(LearnerGroup group, Collection<Integer> chapters) {
+        boolean locked = false;
+        for (Integer chapter : chapters) {
+            if (quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, chapter).isPresent()) {
+                continue;
+            }
+            List<Question> questions = questionRepo.findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(chapter);
+            if (questions.isEmpty()) {
+                continue;   // chương không có câu → không tạo gì, không lỗi
+            }
+            if (!locked) {
+                group = groupRepo.lockById(group.getId()).orElse(group);
+                locked = true;
+                if (quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, chapter).isPresent()) {
+                    continue;   // bạn khác vừa tạo trong lúc chờ khoá
+                }
+            }
+            try {
+                Quiz quiz = new Quiz();
+                quiz.setOwner(group.getOwner());
+                quiz.setGroup(group);
+                quiz.setTitle("Hậu trắc chương " + chapter);
+                quiz.setQuestionIds(toJson(questions.stream().map(Question::getId).toList()));
+                quiz.setKind(QuizKind.POST_TEST);
+                quiz.setChapter(chapter);
+                quiz.setPublishedAt(Instant.now(clock));
+                quizRepo.saveAndFlush(quiz);
+            } catch (DataIntegrityViolationException e) {
+                // Bạn khác cùng xong chương: UNIQUE(group, kind, chapter) chặn; lần sau đọc lại.
+            }
+        }
+    }
+
+    /**
+     * BR-53 (Hưng 19/11): hậu trắc là bắt buộc — đề hậu trắc chương {@code chapter} của nhóm mà em CHƯA nộp (chưa có
+     * QuizResult, đường nộp cũ hay lượt làm v3 đều ghi QuizResult) → trả đề đó, chương kế tiếp bị khoá. Chương không có câu
+     * hậu trắc → null (không chặn). Nộp ở lần chơi nào cũng tính: QuizResult là một dòng / em / đề, không theo lần chơi.
+     * Tạo đề trước nếu còn thiếu (em xong chương trước khi có BR-53, hoặc kho chương vừa có câu).
+     */
+    Quiz pendingPostTest(LearnerSlot slot, int chapter) {
+        LearnerGroup group = slot.getGroup();
+        if (group == null || chapter < 1) {
+            return null;
+        }
+        ensurePostTests(group, List.of(chapter));
+        return quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, chapter)
+                .filter(quiz -> quizResultRepo.findByQuiz_IdAndSlot_Id(quiz.getId(), slot.getId()).isEmpty())
+                .orElse(null);
+    }
+
+    /**
+     * BR-53, phía đọc (GET /api/play/state, dashboard): chương kế tiếp đang khoá vì em chưa nộp hậu trắc chương trước →
+     * {chapter, quizId}; không khoá → null. Chưa chơi, hoặc xong hết chương (lần chơi mới bắt đầu từ chương 1) → null.
+     */
+    PostTestRequiredResponse postTestRequired(LearnerSlot slot, Integer totalChapters, List<Integer> done) {
+        if (done.isEmpty() || (totalChapters != null && done.size() >= totalChapters)) {
+            return null;
+        }
+        int chapter = done.get(done.size() - 1);   // chương vừa xong — cùng chương PlayServiceImpl kiểm khi gửi lô
+        Quiz quiz = pendingPostTest(slot, chapter);
+        return quiz == null ? null : new PostTestRequiredResponse(chapter, quiz.getId());
     }
 
     // ------------------------------------------------------------------ kết quả chính thức

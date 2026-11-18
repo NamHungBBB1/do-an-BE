@@ -26,9 +26,10 @@ public record LearnerDashboardResponse(
     /**
      * "Tiếp tục học" ở mức CHƯƠNG: tiến độ chỉ lưu khi xong chương, nên tiếp tục từ đầu chương
      * chưa xong. Chưa chơi gì → 1, xong hết → null. totalChapters null tới khi có API nội dung game.
+     * postTestRequired (BR-53, 19/11): continueChapter đang khoá tới khi em nộp hậu trắc chương trước; null = không khoá.
      */
     public record Progress(Integer totalChapters, int completedChapters, List<Integer> chaptersDone,
-                            Integer continueChapter, Instant lastPlayedAt) {}
+                            Integer continueChapter, Instant lastPlayedAt, PostTestRequiredResponse postTestRequired) {}
 
     public record Quizzes(List<PendingQuiz> pending, List<CompletedQuiz> completed) {}
 

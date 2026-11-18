@@ -379,6 +379,7 @@ class PlayFlowTest {
         mvc.perform(batchRequest(child, validBatch(1, 1, v)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.chaptersDone.length()").value(1));
+        passPostTest(child);
 
         mvc.perform(batchRequest(child, emptyBatch(2, 1, v)))
                 .andExpect(status().isOk())
@@ -418,6 +419,7 @@ class PlayFlowTest {
         String v = releaseVersion();
         String child = newChild("r4");
         mvc.perform(batchRequest(child, emptyBatch(1, 1, v))).andExpect(status().isOk());
+        passPostTest(child);
         mvc.perform(batchRequest(child, emptyBatch(2, 1, v)))
                 .andExpect(jsonPath("$.result.continueChapter").value(nullValue()));
         mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + child))
@@ -443,6 +445,7 @@ class PlayFlowTest {
                     .andExpect(jsonPath("$.result.totalChapters").value(3))
                     .andExpect(jsonPath("$.result.completedChapters").value(2))
                     .andExpect(jsonPath("$.result.continueChapter").value(3));
+            passPostTest(child);
             mvc.perform(batchRequest(child, emptyBatch(3, 1, longer)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result.attemptIndex").value(1))
@@ -720,6 +723,24 @@ class PlayFlowTest {
     private static String emptyBatch(int chapter, int attempt, String version) {
         return "{\"chapter\":" + chapter + ",\"attemptIndex\":" + attempt
                 + ",\"releaseVersion\":\"" + version + "\",\"choices\":[],\"miniGames\":[]}";
+    }
+
+    /**
+     * BR-53 (19/11): kho câu hậu trắc dùng chung H2 với các lớp test khác (thứ tự lớp đổi theo hệ điều hành) — chương vừa
+     * xong mà có đề hậu trắc thì nộp bài trắng (đường nộp cũ) để mở chương kế tiếp; không có thì không làm gì.
+     */
+    private void passPostTest(String child) throws Exception {
+        String state = mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + child))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        var required = new com.fasterxml.jackson.databind.ObjectMapper().readTree(state)
+                .path("result").path("postTestRequired");
+        if (required.isObject()) {
+            mvc.perform(post("/api/learner/quizzes/" + required.path("quizId").asText() + "/submit")
+                            .header("Authorization", "Bearer " + child)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"answers\":[]}"))
+                    .andExpect(status().isOk());
+        }
     }
 
     /** Một trẻ mới: chủ nhóm FAMILY + slot + login → token SLOT THẬT, độc lập với các ca khác. */

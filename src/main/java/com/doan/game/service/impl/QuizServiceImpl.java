@@ -55,7 +55,6 @@ import com.doan.game.service.TeacherQuestionService;
 import com.doan.game.service.impl.QuizSupport.GradedAnswer;
 import com.doan.game.service.impl.QuizSupport.PaperEntry;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,8 +78,8 @@ import java.util.UUID;
  * Đề giáo viên (CLASS_TEST): chọn câu kho chung (chapter null) hoặc câu của chính mình (v3), publish rồi bất biến.
  * Hậu trắc (POST_TEST): luôn có cho mọi nhóm (17/11, Hưng — bỏ cờ postTestEnabledAt). MỖI lần đọc danh sách của em, nếu em đã
  * xong chương N mà nhóm chưa có đề hậu trắc chương N và chương đó có câu → BE tự tạo (chụp
- * questionIds lúc tạo, published ngay, không hạn). Một điểm tạo duy nhất, không chạm PlayService;
- * bật cờ muộn hay thêm chương sau đều tự đúng ở lần gọi kế tiếp. Từ v3 gia đình cũng có hậu trắc.
+ * questionIds lúc tạo, published ngay, không hạn). 19/11 (BR-53): PlayService cũng tạo ngay khi ghi lô cuối chương — cùng
+ * hàm QuizSupport.ensurePostTests; thêm chương sau vẫn tự đúng ở lần gọi kế tiếp. Từ v3 gia đình cũng có hậu trắc.
  *
  * Máy chủ chấm, mỗi em nộp một lần (UNIQUE quiz + slot, khoá dòng slot bằng lockById như Play),
  * đáp án KHÔNG BAO GIỜ xuống trẻ: DTO học sinh không có correctIndex, sau khi nộp chỉ trả đúng /
@@ -419,7 +418,7 @@ public class QuizServiceImpl implements QuizService {
         quizAttemptService.finalizeExpiredInGroup(group.getId());
         boolean isClass = group.getContext() == LearningContext.CLASS;
         List<Integer> done = support.chaptersDone(slotId);
-        ensurePostTests(group, done);   // 17/11 (Hưng): hậu trắc luôn có cho mọi nhóm, không còn bật / tắt
+        support.ensurePostTests(group, done);   // 17/11 (Hưng): hậu trắc luôn có cho mọi nhóm, không còn bật / tắt
         List<QuizResult> myResults = quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId);
         Set<UUID> myResultQuizIds = new HashSet<>();
         for (QuizResult result : myResults) {
@@ -535,47 +534,6 @@ public class QuizServiceImpl implements QuizService {
         }
         QuizResult result = support.writeOfficialResult(quiz, slot, now, graded);
         return new SubmitQuizResponse(quizId, result.getScore(), ids.size(), result.getSubmittedAt(), review);
-    }
-
-    // ------------------------------------------------------------------ hậu trắc tự tạo
-
-    /**
-     * Với mỗi chương em đã xong: chưa có đề hậu trắc && chương có ≥ 1 câu chưa rút → tạo. Chụp
-     * questionIds (xếp theo externalId) lúc tạo, published ngay — từ đó bất biến. Khóa dòng nhóm
-     * (lockById) để hai em xong chương cùng lúc không đụng UNIQUE; nếu vẫn bắt
-     * DataIntegrityViolationException thì bỏ qua — lần đọc kế tiếp tự thấy đề của bạn.
-     */
-    private void ensurePostTests(LearnerGroup group, List<Integer> done) {
-        if (done.isEmpty()) {
-            return;
-        }
-        // lockById như closeGroup/openSlot: tuần tự hoá việc tạo đề hậu trắc theo nhóm.
-        group = groupRepo.lockById(group.getId()).orElse(group);
-        for (Integer chapter : done) {
-            if (quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, chapter)
-                    .isPresent()) {
-                continue;
-            }
-            List<Question> questions = questionRepo
-                    .findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(chapter);
-            if (questions.isEmpty()) {
-                continue;   // chương không có câu → không tạo gì, không lỗi
-            }
-            List<UUID> ids = questions.stream().map(Question::getId).toList();
-            try {
-                Quiz quiz = new Quiz();
-                quiz.setOwner(group.getOwner());
-                quiz.setGroup(group);
-                quiz.setTitle("Hậu trắc chương " + chapter);
-                quiz.setQuestionIds(support.toJson(ids));
-                quiz.setKind(QuizKind.POST_TEST);
-                quiz.setChapter(chapter);
-                quiz.setPublishedAt(Instant.now(clock));
-                quizRepo.saveAndFlush(quiz);
-            } catch (DataIntegrityViolationException e) {
-                // Bạn khác cùng xong chương: UNIQUE(group, kind, chapter) chặn; lần sau đọc lại.
-            }
-        }
     }
 
     // ------------------------------------------------------------------ kiểm chung

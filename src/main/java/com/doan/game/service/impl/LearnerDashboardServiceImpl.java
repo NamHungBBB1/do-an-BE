@@ -50,6 +50,7 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
     private final ChoiceEventRepository choiceEventRepo;
     private final MiniGameResultRepository miniGameResultRepo;
     private final QuizService quizService;
+    private final QuizSupport quizSupport;
 
     /**
      * Không readOnly: khối quizzes gọi listForLearner — đọc DANH SÁCH chính là chỗ BE tự tạo đề
@@ -87,9 +88,6 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
         Integer continueChapter = (totalChapters != null && done.size() >= totalChapters)
                 ? null
                 : done.size() + 1;
-        LearnerDashboardResponse.Progress progress = new LearnerDashboardResponse.Progress(
-                totalChapters, done.size(), List.copyOf(done), continueChapter,
-                run == null ? null : run.getUpdatedAt());
 
         // Đợt 2: chương đã xong trong lần chơi hiện tại, mới nhất trước, tối đa 10.
         List<LearnerDashboardResponse.RecentActivity> activities =
@@ -120,6 +118,11 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
             }
         }
 
+        // BR-53 (19/11): tính SAU khối quizzes — listForLearner đã tạo đề hậu trắc còn thiếu (khoá slot rồi mới khoá nhóm,
+        // cùng thứ tự với Play), nên ở đây chỉ còn đọc.
+        LearnerDashboardResponse.Progress progress = new LearnerDashboardResponse.Progress(
+                totalChapters, done.size(), List.copyOf(done), continueChapter,
+                run == null ? null : run.getUpdatedAt(), quizSupport.postTestRequired(slot, totalChapters, done));
         return new LearnerDashboardResponse(learner, progress, quizzes, List.of(), activities);
     }
 

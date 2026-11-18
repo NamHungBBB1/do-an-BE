@@ -1,5 +1,6 @@
 package com.doan.game.mapper;
 
+import com.doan.game.DTO.response.PostTestRequiredResponse;
 import com.doan.game.DTO.response.RunStateResponse;
 import com.doan.game.entity.RunState;
 
@@ -21,16 +22,17 @@ public final class RunStateMapper {
      * GET /api/play/state. `source` null khi trẻ chưa từng chơi → attemptIndex 1, continueChapter 1,
      * lastPlayedAt null. `chaptersDone` do service parse từ cột text (bảng JSON) rồi trao xuống —
      * mapper chỉ xếp hình, không đụng Jackson. continueChapter = size + 1, xong hết chương của bản
-     * hiện tại → null (FE hiện nút "Chơi lại").
+     * hiện tại → null (FE hiện nút "Chơi lại"). postTestRequired (BR-53) do service tính, mapper chỉ chép.
      */
     public static RunStateResponse toResponse(RunState source, String releaseVersion,
-                                              Integer totalChapters, List<Integer> chaptersDone) {
+                                              Integer totalChapters, List<Integer> chaptersDone,
+                                              PostTestRequiredResponse postTestRequired) {
         int attemptIndex = source == null || source.getAttemptIndex() == null ? 1 : source.getAttemptIndex();
         Instant lastPlayedAt = source == null ? null : source.getUpdatedAt();
         List<Integer> done = chaptersDone == null ? List.of() : chaptersDone;
         int size = done.size();
         Integer continueChapter = (totalChapters != null && size >= totalChapters) ? null : size + 1;
         return new RunStateResponse(releaseVersion, attemptIndex, totalChapters, size, done,
-                continueChapter, lastPlayedAt);
+                continueChapter, lastPlayedAt, postTestRequired);
     }
 }

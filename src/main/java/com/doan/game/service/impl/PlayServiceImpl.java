@@ -67,6 +67,7 @@ public class PlayServiceImpl implements PlayService {
     private final RunStateRepository runStateRepo;
     private final ChoiceEventRepository choiceEventRepo;
     private final MiniGameResultRepository miniGameResultRepo;
+    private final QuizSupport quizSupport;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -144,6 +145,13 @@ public class PlayServiceImpl implements PlayService {
                     "phai la chuong ke tiep — da xong " + done.size() + " chuong, loi gui chuong "
                             + req.chapter());
         }
+        // BR-53 (Hưng 19/11): hậu trắc bắt buộc — chương N (vừa xong) có đề hậu trắc mà em chưa nộp thì chưa mở chương
+        // N+1. Gửi lại chương đã xong đã trả ở trên nên không bị chặn oan; lần chơi mới bắt đầu với done rỗng (chương 1
+        // không bị chặn), chương sau dùng lại bài đã nộp ở lần trước.
+        if (!done.isEmpty() && quizSupport.pendingPostTest(slot, done.get(done.size() - 1)) != null) {
+            throw new AppException(ErrorCode.POST_TEST_REQUIRED,
+                    "chua nop hau trac chuong " + done.get(done.size() - 1));
+        }
 
         // Bước 4–5: ghi sự kiện rồi cộng chỉ số — một transaction.
         for (ChoiceRow row : choiceRows) {
@@ -180,6 +188,8 @@ public class PlayServiceImpl implements PlayService {
         run.setChaptersDone(writeJson(done));
         run.setUpdatedAt(now);
         runStateRepo.save(run);
+        // BR-53: đề hậu trắc của chương vừa xong có ngay (cùng transaction), em không phải mở danh sách quiz mới thấy.
+        quizSupport.ensurePostTests(slot.getGroup(), List.of(req.chapter()));
 
         // Bước 6: đợt 1 chưa có luật cấp thành tựu → luôn rỗng.
         return toBatchResponse(attempt, done, total);
@@ -187,7 +197,7 @@ public class PlayServiceImpl implements PlayService {
 
     // ---------------------------------------------------------- GET /api/play/state
     @Override
-    @Transactional(readOnly = true)
+    @Transactional   // không readOnly: postTestRequired có thể tạo đề hậu trắc còn thiếu (BR-53)
     public RunStateResponse getRunState(UUID slotId) {
         var slot = slotRepo.findById(slotId)
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
@@ -203,7 +213,8 @@ public class PlayServiceImpl implements PlayService {
                 : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(current.getId()).size();
         RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
         List<Integer> done = run == null ? List.of() : ChaptersDone.parse(run.getChaptersDone());
-        return RunStateMapper.toResponse(run, current == null ? null : current.getVersion(), total, done);
+        return RunStateMapper.toResponse(run, current == null ? null : current.getVersion(), total, done,
+                quizSupport.postTestRequired(slot, total, done));
     }
 
     // ---------------------------------------------------------- kiểm lô

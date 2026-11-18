@@ -10,6 +10,7 @@ import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerGroup;
+import com.doan.game.entity.Question;
 import com.doan.game.entity.Quiz;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
@@ -432,13 +433,6 @@ class QuizFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.pending").isEmpty());
 
-        // A xong chương 2 — chương CHƯA có câu → không tạo gì, không lỗi.
-        play(a.token(), 2);
-        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.pending.length()").value(1))
-                .andExpect(jsonPath("$.result.pending[0].chapter").value(1));
-
         // Đề làm không có đáp án — và đúng bộ chương (chứa 2 câu vừa nhập của ca này).
         String detail = mvc.perform(get("/api/learner/quizzes/" + postQuizId)
                         .header("Authorization", "Bearer " + a.token()))
@@ -465,6 +459,13 @@ class QuizFlowTest {
                 .andExpect(jsonPath("$.result.completed[0].kind").value("POST_TEST"))
                 .andExpect(jsonPath("$.result.completed[0].chapter").value(1))
                 .andExpect(jsonPath("$.result.completed[0].score").value(1));
+
+        // A xong chương 2 (BR-53 19/11: sau khi nộp hậu trắc chương 1) — chương CHƯA có câu → không tạo gì, không lỗi.
+        play(a.token(), 2);
+        mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + a.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.pending").isEmpty())
+                .andExpect(jsonPath("$.result.completed.length()").value(1));
 
         // Giáo viên thấy đề POST_TEST trong danh sách và kết quả: A đã nộp, B chưa.
         String teacherList = mvc.perform(get("/api/quizzes?groupId=" + room.groupId())
@@ -670,6 +671,78 @@ class QuizFlowTest {
                 .andExpect(jsonPath("$.code").value(8001));
     }
 
+    // ------------------------------------------------------------------ 10. BR-53 hậu trắc bắt buộc (19/11)
+    /** Lớp: xong CH01 → đề hậu trắc có ngay (chưa đọc danh sách); CH02 → 409/7004 tới khi nộp; chơi lại không bị chặn lần nữa. */
+    @Test
+    void postTestGatesNextChapterInClass() throws Exception {
+        assertPostTestGate(newRoom("qzbr53lop"));
+    }
+
+    /** Gia đình bị chặn y như lớp (hậu trắc luôn có từ BE #64). */
+    @Test
+    void postTestGatesNextChapterInFamily() throws Exception {
+        assertPostTestGate(newFamily("qzbr53nha"));
+    }
+
+    /** Chương không có câu hậu trắc → không chặn, postTestRequired null. */
+    @Test
+    void chapterWithoutPostTestPoolDoesNotGate() throws Exception {
+        releaseVersion();
+        Room room = newRoom("qzbr53rong");
+        Kid a = newKid(room, "HS A");
+        // Kho chương 1 dùng chung DB với các ca khác: tạm rút hết câu chương 1, trả lại trong finally.
+        List<Question> live = questionRepo.findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(1);
+        live.forEach(q -> q.setRetiredAt(Instant.parse("2026-10-01T00:00:00Z")));
+        questionRepo.saveAll(live);
+        try {
+            play(a.token(), 1);
+            mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + a.token()))
+                    .andExpect(jsonPath("$.result.continueChapter").value(2))
+                    .andExpect(jsonPath("$.result.postTestRequired").value(nullValue()));
+            play(a.token(), 2);
+        } finally {
+            live.forEach(q -> q.setRetiredAt(null));
+            questionRepo.saveAll(live);
+        }
+    }
+
+    private void assertPostTestGate(Room room) throws Exception {
+        releaseVersion();
+        Kid a = newKid(room, "Be A");
+        String q = ext("BR53");
+        importAsAdmin("[" + questionJson(q, 1, true) + "]");
+
+        play(a.token(), 1);
+        // Đề có ngay lúc xong chương — chưa ai gọi GET /api/learner/quizzes.
+        Quiz postTest = quizRepo.findByGroup_IdAndKindAndChapter(UUID.fromString(room.groupId()),
+                QuizKind.POST_TEST, 1).orElseThrow();
+        String quizId = postTest.getId().toString();
+        mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + a.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.continueChapter").value(2))
+                .andExpect(jsonPath("$.result.postTestRequired.chapter").value(1))
+                .andExpect(jsonPath("$.result.postTestRequired.quizId").value(quizId));
+        mvc.perform(get("/api/learner/dashboard").header("Authorization", "Bearer " + a.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.progress.postTestRequired.quizId").value(quizId));
+        mvc.perform(playRequest(a.token(), 2, 1))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(7004));
+
+        mvc.perform(submit(a.token(), quizId, answerJson(questionIdByExternal(q), 0)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + a.token()))
+                .andExpect(jsonPath("$.result.postTestRequired").value(nullValue()));
+        play(a.token(), 2);
+
+        // Chơi lại (lần 2): chương 1 mở ngay, chương 2 dùng lại bài nộp ở lần 1 — không chặn lần nữa.
+        mvc.perform(playRequest(a.token(), 1, 2)).andExpect(status().isOk());
+        mvc.perform(get("/api/play/state").header("Authorization", "Bearer " + a.token()))
+                .andExpect(jsonPath("$.result.attemptIndex").value(2))
+                .andExpect(jsonPath("$.result.postTestRequired").value(nullValue()));
+        mvc.perform(playRequest(a.token(), 2, 2)).andExpect(status().isOk());
+    }
+
     private void setPostTest(Room room, boolean enabled) throws Exception {
         mvc.perform(post("/api/groups/" + room.groupId() + "/post-test")
                         .header("Authorization", "Bearer " + room.teacher())
@@ -792,6 +865,16 @@ class QuizFlowTest {
         return new Room(teacher, groupId);
     }
 
+    /** Nhóm FAMILY của một phụ huynh — dùng chung record Room (teacher = chủ nhóm). */
+    private Room newFamily(String prefix) throws Exception {
+        String parent = adult(prefix, PlanKind.PARENT);
+        String groupId = openGroup(parent, "Nha " + prefix, "FAMILY");
+        mvc.perform(post("/api/groups/" + groupId + "/consent")
+                        .header("Authorization", "Bearer " + parent))
+                .andExpect(status().isOk());
+        return new Room(parent, groupId);
+    }
+
     private Kid newKid(Room room, String name) throws Exception {
         String slotBody = mvc.perform(slotRequest(room.teacher(), room.groupId(), name, "123456"))
                 .andExpect(status().isOk())
@@ -800,11 +883,14 @@ class QuizFlowTest {
     }
 
     private void play(String child, int chapter) throws Exception {
-        mvc.perform(post("/api/play/chapter").header("Authorization", "Bearer " + child)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"chapter\":" + chapter + ",\"attemptIndex\":1,\"releaseVersion\":\""
-                                + version + "\",\"choices\":[],\"miniGames\":[]}"))
-                .andExpect(status().isOk());
+        mvc.perform(playRequest(child, chapter, 1)).andExpect(status().isOk());
+    }
+
+    private MockHttpServletRequestBuilder playRequest(String child, int chapter, int attempt) {
+        return post("/api/play/chapter").header("Authorization", "Bearer " + child)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"chapter\":" + chapter + ",\"attemptIndex\":" + attempt + ",\"releaseVersion\":\""
+                        + version + "\",\"choices\":[],\"miniGames\":[]}");
     }
 
     private boolean postTestEnabled(String jwt, String groupId) throws Exception {
