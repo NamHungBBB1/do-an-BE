@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Danh tính của một trẻ (đổi tên từ ChildSlot). AVAILABLE không có dòng: chỗ trống = slotLimit −
- * slot đang dùng; mở slot (tên + PIN) mới tạo dòng và sinh mã chữ / QR. Child hay Student suy từ
- * context của nhóm. Sai PIN 5 lần khoá 15 phút: LOCKED trên slide KHÔNG lưu trong bảng mà tính từ
- * lockedUntil > now, khỏi cần job mở khoá. WIPED xoá tên, mã, PIN nhưng giữ dòng cho báo cáo cũ.
+ * Danh tính của một trẻ. Mở slot (tên + PIN) mới tạo dòng và sinh mã chữ; slot đã tạo tính vào ví
+ * mãi mãi (18/11, slot vĩnh viễn). Sai PIN 5 lần khoá 15 phút (tính từ lockedUntil). Xoá = WIPED:
+ * xoá tên, PIN, cá nhân hoá, badge (Luật BVDLCN 2025), GIỮ mã để không cấp lại, giữ kết quả học ẩn
+ * danh. tokenVersion: một phiên mỗi slot.
  */
 @Entity
 @Table(name = "learner_slot")
@@ -64,11 +64,6 @@ public class LearnerSlot {
     @Column(name = "personalization", columnDefinition = "text")
     private String personalization;
 
-    /**
-     * Phiên bản token trẻ (18/11/2026). Tăng mỗi lần login thành công hoặc khi xoá slot; token mang
-     * `tv` cũ hơn thì RevocationAwareJwtDecoder trả 401. Dùng Integer + khởi tạo 0 vì bảng production
-     * đã có dòng: cột mới thêm vào là nullable, Hibernate đọc NULL phải coi như 0.
-     */
     @Column(name = "token_version")
-    private Integer tokenVersion = 0;
+    private Integer tokenVersion;
 }

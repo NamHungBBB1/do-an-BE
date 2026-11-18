@@ -10,12 +10,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Quyền dùng một gói trong 3 tháng, TÍNH THEO NGÀY (giờ VN): dùng hết ngày expiresOn; expiresOn =
- * startsOn + 3 tháng − 1 ngày. Gia hạn tạo dòng mới, bắt đầu từ ngày sau hạn cũ nên không mất
- * ngày. Admin cấp được gói không cần thanh toán (source = ADMIN, ghi grantedById). BE kiểm bằng
- * EntitlementService.activePlans ở mọi thao tác. Ràng buộc: CHECK: source = PAYMENT thì
- * transactionId NOT NULL; source = ADMIN thì grantedById NOT NULL và reason NOT NULL (Hưng chốt
- * 06/10)
+ * Quyền dùng một gói. Từ 18/11/2026 gói mua là VĨNH VIỄN: expiresOn = 9999-12-31 (sentinel, mọi
+ * câu expiresOn >= today chạy nguyên), mỗi loại chỉ mua một lần (4008). Admin cấp được gói không
+ * cần thanh toán (source = ADMIN, ghi grantedById, có thể có hạn). BE kiểm bằng
+ * EntitlementService.activePlans. Ràng buộc: CHECK: source = PAYMENT thì transactionId NOT NULL;
+ * source = ADMIN thì grantedById NOT NULL và reason NOT NULL (Hưng chốt 06/10)
  */
 @Entity
 @Table(name = "entitlement")

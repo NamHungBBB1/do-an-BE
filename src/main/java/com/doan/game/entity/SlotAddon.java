@@ -1,6 +1,6 @@
 package com.doan.game.entity;
 
-import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,11 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Slot mua thêm (add-on) của một tài khoản — 18/11/2026: gói và add-on đều VĨNH VIỄN, nên bảng này
- * chỉ ghi phần được cộng thêm, không có hạn dùng.
- *
- * Ví slot = base của gói + tổng {@code slots} của mọi dòng. "Đã dùng" KHÔNG trừ đi khi trả / xoá
- * slot: slot đã mở là tiêu hao vĩnh viễn (Q6).
+ * Slot mua thêm (pack) của một tài khoản, vĩnh viễn: phụ huynh +2, giáo viên +20 mỗi pack. Ví =
+ * gói gốc (4 / 40) + tổng slots; đã tạo − không bao giờ hoàn. Ràng buộc: transactionId UNIQUE:
+ * webhook gọi lại không cấp pack hai lần
  */
 @Entity
 @Table(name = "slot_addon")
@@ -31,16 +29,14 @@ public class SlotAddon {
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
-    /** Loại gói được cộng thêm — PARENT cho ví gia đình, TEACHER cho ví lớp. */
     @Enumerated(EnumType.STRING)
-    @Column(name = "kind", nullable = false)
+    @Column(name = "kind")
     private PlanKind kind;
 
-    /** Số slot cộng thêm của đơn (packs × 2 với Parent, packs × 20 với Teacher). */
-    @Column(name = "slots", nullable = false)
+    @Column(name = "slots")
     private Integer slots;
 
-    /** Transaction. Một giao dịch chỉ cấp một add-on (chống webhook trùng cấp hai lần). */
+    /** Transaction. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "transaction_id", nullable = true, unique = true)
     private Transaction transaction;

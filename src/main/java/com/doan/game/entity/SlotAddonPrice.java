@@ -1,6 +1,6 @@
 package com.doan.game.entity;
 
-import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,11 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Giá một pack slot thêm, admin đặt trên web (18/11/2026) — cùng luật với {@link Plan}: không để
- * giá trong cấu hình máy chủ, chưa có dòng thì chưa bán được pack đó (4002).
- *
- * Số slot mỗi pack là hằng số nghiệp vụ (Parent 2, Teacher 20 — xem PlanServiceImpl), không phải
- * cột: đổi chia pack là đổi giá trị code có kiểm soát, không phải sửa dữ liệu giá.
+ * Giá một pack slot của mỗi loại gói, admin đặt trên web (như Plan). Chưa có dòng thì chưa bán
+ * pack đó (4002). Số slot mỗi pack là hằng số nghiệp vụ (2 / 20), không phải cột.
  */
 @Entity
 @Table(name = "slot_addon_price")
