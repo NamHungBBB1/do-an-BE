@@ -4,12 +4,15 @@ import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Achievement;
+import com.doan.game.entity.ChoiceEvent;
 import com.doan.game.entity.GroupReport;
 import com.doan.game.entity.GroupReportRow;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
+import com.doan.game.entity.MiniGameResult;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizResult;
+import com.doan.game.entity.ReleaseChapter;
 import com.doan.game.entity.RunState;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
@@ -22,6 +25,8 @@ import com.doan.game.repository.GroupReportRowRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.MiniGameResultRepository;
+import com.doan.game.repository.QuestionRepository;
+import com.doan.game.repository.QuizAnswerRepository;
 import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
@@ -29,6 +34,7 @@ import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.ReportService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,7 +47,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -57,6 +67,11 @@ import java.util.UUID;
  * dailySummary null — FE dựng giao diện một lần. Đợt 3 (quiz.md v2, 16/10): khối quizzes (slot) và
  * quizAssigned / quizSubmitted / averageScore (dòng + summary nhóm) lấy số THẬT từ QuizResult —
  * nhóm đóng băng vẫn đọc giá trị đóng băng, không tính lại.
+ *
+ * 19/11 (khung báo cáo AI mục 2.3, 2.4, 3.1, 13.1): chapters / concepts / finalReport có số thật, tính sống từ các bảng
+ * sự kiện bất biến (ChoiceEvent, MiniGameResult, QuizResult, QuizAnswer) + JSON đóng băng của bản bé đã chơi. Slot
+ * report vốn luôn tính sống (bản đóng băng nhóm chỉ giữ số của dòng nhóm), nên nhóm đã đóng vẫn ra đúng: các bảng
+ * nguồn không bao giờ sửa sau khi ghi.
  */
 @Service
 @RequiredArgsConstructor
@@ -77,6 +92,9 @@ public class ReportServiceImpl implements ReportService {
     private final GroupReportRowRepository groupReportRowRepo;
     private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
+    private final QuizAnswerRepository quizAnswerRepo;
+    private final QuestionRepository questionRepo;
+    private final Personalizer personalizer;
     private final ObjectMapper objectMapper;
     private final QuizSupport support;
     private final QuizAttemptService quizAttemptService;
@@ -148,9 +166,245 @@ public class ReportServiceImpl implements ReportService {
                 (int) quizRepo.countByGroup_IdAndPublishedAtIsNotNull(group.getId()),
                 myResults.size(), resultRows);
 
-        return new SlotReportResponse(learner, progress, indicatorsOf(run),
-                List.copyOf(achievements), List.of(), List.of(), quizzes, null);
+        ChapterBlocks blocks = chapterBlocks(slotId, group.getId(), run, myResults);
+        return new SlotReportResponse(learner, progress, indicatorsOf(run), List.copyOf(achievements),
+                blocks.concepts(), blocks.chapters(), blocks.finalReport(), quizzes, null);
     }
+
+    // ------------------------------------------------------------------ chương / khái niệm (19/11)
+
+    /** Bản tổng kết chỉ có khi xong chương này (khung báo cáo AI mục 13.1: "xong CH08"). */
+    static final int FINAL_CHAPTER = 8;
+    /** BR-44: mã có dưới 3 câu → chưa đủ dữ liệu (một câu đoán làm đổi 33 điểm %). */
+    static final int MIN_ITEMS_FOR_BAND = 3;
+    static final String NONE = "NONE";
+    static final String PENDING = "PENDING";
+    static final String SUBMITTED = "SUBMITTED";
+    static final String PARTIAL = "PARTIAL";
+    static final String COMPLETE = "COMPLETE";
+
+    private record ChapterBlocks(List<SlotReportResponse.ChapterRow> chapters,
+                                 List<SlotReportResponse.ConceptRow> concepts,
+                                 SlotReportResponse.FinalReport finalReport) {
+    }
+
+    /**
+     * chapters[] + concepts[] + finalReport cho lần chơi hiện tại. Số truy vấn cố định, không theo cảnh / chương:
+     * ChoiceEvent + MiniGameResult của lần chơi (2), JSON các bản đã chơi (1), đề của nhóm (1), kho hậu trắc (≤ 1),
+     * câu hậu trắc đã nộp (≤ 1).
+     */
+    private ChapterBlocks chapterBlocks(UUID slotId, UUID groupId, RunState run, List<QuizResult> myResults) {
+        Set<Integer> done = run == null ? Set.of() : new TreeSet<>(ChaptersDone.parse(run.getChaptersDone()));
+        if (done.isEmpty()) {
+            return new ChapterBlocks(List.of(), List.of(), new SlotReportResponse.FinalReport(NONE));
+        }
+        int attempt = run.getAttemptIndex() == null ? 1 : run.getAttemptIndex();
+
+        Map<Integer, List<ChoiceEvent>> choicesByChapter = new HashMap<>();
+        Set<String> versions = new HashSet<>();
+        for (ChoiceEvent e : choiceEventRepo.findBySlot_IdAndAttemptIndex(slotId, attempt)) {
+            if (done.contains(e.getChapter())) {
+                choicesByChapter.computeIfAbsent(e.getChapter(), k -> new ArrayList<>()).add(e);
+                versions.add(e.getBuildVersion());
+            }
+        }
+        Map<Integer, List<MiniGameResult>> minisByChapter = new HashMap<>();
+        for (MiniGameResult m : miniGameResultRepo.findBySlot_IdAndAttemptIndex(slotId, attempt)) {
+            if (done.contains(m.getChapter())) {
+                minisByChapter.computeIfAbsent(m.getChapter(), k -> new ArrayList<>()).add(m);
+                versions.add(m.getBuildVersion());
+            }
+        }
+        versions.remove(null);
+        // JSON đóng băng của đúng bản bé đã chơi (buildVersion), bản GỐC: token cá nhân hoá điền giá trị mặc định, không
+        // ghép theo nhãn của bé (chưa có RunLabelSnapshot; nhãn hiện tại có thể khác lúc bé chơi).
+        Map<String, JsonNode> played = new HashMap<>();
+        if (!versions.isEmpty()) {
+            for (ReleaseChapter rc : releaseChapterRepo.findPlayed(versions, done)) {
+                played.put(playedKey(rc.getRelease().getVersion(), rc.getChapter().getChapterNumber()),
+                        personalizer.compose(readTree(rc.getContent()), Map.of()));
+            }
+        }
+
+        // Hậu trắc của nhóm theo chương; bài của bé theo đề (QuizResult = lần nộp đầu, UNIQUE quiz + slot).
+        Map<Integer, Quiz> postTests = new HashMap<>();
+        for (Quiz q : quizRepo.findByGroup_Id(groupId)) {
+            if (QuizSupport.isPostTest(q) && q.getPublishedAt() != null && done.contains(q.getChapter())) {
+                postTests.put(q.getChapter(), q);
+            }
+        }
+        Map<UUID, QuizResult> resultByQuiz = new HashMap<>();
+        for (QuizResult r : myResults) {
+            resultByQuiz.put(r.getQuiz().getId(), r);
+        }
+        List<Integer> withoutQuiz = done.stream().filter(ch -> !postTests.containsKey(ch)).toList();
+        Set<Integer> hasPool = new HashSet<>();
+        if (!withoutQuiz.isEmpty()) {
+            for (Object[] row : questionRepo.countLiveByChapter(withoutQuiz)) {
+                hasPool.add(((Number) row[0]).intValue());
+            }
+        }
+
+        Map<String, int[]> concepts = new TreeMap<>();   // mã → [đúng game, tổng game, đúng hậu trắc, tổng hậu trắc]
+        List<UUID> submittedPostTests = new ArrayList<>();
+        List<SlotReportResponse.ChapterRow> chapters = new ArrayList<>(done.size());
+        for (int ch : done) {
+            List<ChoiceEvent> events = choicesByChapter.getOrDefault(ch, List.of());
+            List<MiniGameResult> minis = minisByChapter.getOrDefault(ch, List.of());
+            Instant finishedAt = null;
+
+            List<ChoiceEvent> ordered = new ArrayList<>(events);
+            ordered.sort(Comparator.comparingInt(e -> sceneIndex(played.get(playedKey(e.getBuildVersion(), ch)),
+                    e.getSceneId())));
+            List<SlotReportResponse.ChoiceRow> choices = new ArrayList<>(ordered.size());
+            for (ChoiceEvent e : ordered) {
+                finishedAt = later(finishedAt, e.getReceivedAt());
+                JsonNode json = played.get(playedKey(e.getBuildVersion(), ch));
+                JsonNode scene = json == null ? null : PlayServiceImpl.findScene(json.path("scenes"), e.getSceneId());
+                JsonNode option = scene == null ? null : PlayServiceImpl.byId(scene.path("options"), e.getChoiceId());
+                choices.add(new SlotReportResponse.ChoiceRow(e.getSceneId(), e.getChoiceId(),
+                        option == null ? null : option.path("text").asText(option.path("label").asText(null)),
+                        deliberate(option)));
+            }
+
+            int correct = 0;
+            List<SlotReportResponse.WrongItem> wrong = new ArrayList<>();
+            for (MiniGameResult m : minis) {
+                finishedAt = later(finishedAt, m.getReceivedAt());
+                String concept = resolveConcept(played.get(playedKey(m.getBuildVersion(), ch)), m);
+                if (concept != null && !concept.isBlank()) {
+                    int[] c = concepts.computeIfAbsent(concept, k -> new int[4]);
+                    c[1]++;
+                    c[0] += m.isCorrect() ? 1 : 0;
+                }
+                if (m.isCorrect()) {
+                    correct++;
+                } else {
+                    wrong.add(new SlotReportResponse.WrongItem(m.getGameId(), m.getItemId(), concept, m.getChosen()));
+                }
+            }
+            wrong.sort(Comparator.comparing(SlotReportResponse.WrongItem::gameId)
+                    .thenComparing(SlotReportResponse.WrongItem::itemId));
+
+            SlotReportResponse.PostTest postTest;
+            Quiz quiz = postTests.get(ch);
+            QuizResult result = quiz == null ? null : resultByQuiz.get(quiz.getId());
+            if (result != null) {
+                submittedPostTests.add(result.getId());
+                postTest = new SlotReportResponse.PostTest(quiz.getId(), SUBMITTED,
+                        result.getScore() == null ? 0 : result.getScore(), support.questionsPerLearner(quiz));
+            } else if (quiz != null || hasPool.contains(ch)) {
+                // Đề chưa tạo (bé chưa mở danh sách bài) mà chương có câu → vẫn "chờ hậu trắc", quizId null.
+                postTest = new SlotReportResponse.PostTest(quiz == null ? null : quiz.getId(), PENDING, null, null);
+            } else {
+                postTest = new SlotReportResponse.PostTest(null, NONE, null, null);
+            }
+            chapters.add(new SlotReportResponse.ChapterRow(ch, attempt, finishedAt, choices,
+                    new SlotReportResponse.MiniGames(correct, minis.size(), wrong), postTest,
+                    PENDING.equals(postTest.status()) ? PARTIAL : COMPLETE, null));
+        }
+
+        if (!submittedPostTests.isEmpty()) {
+            for (Object[] row : quizAnswerRepo.conceptAnswers(submittedPostTests)) {
+                int[] c = concepts.computeIfAbsent((String) row[1], k -> new int[4]);
+                c[3]++;
+                c[2] += Boolean.TRUE.equals(row[2]) ? 1 : 0;
+            }
+        }
+        List<SlotReportResponse.ConceptRow> conceptRows = new ArrayList<>(concepts.size());
+        concepts.forEach((concept, c) -> conceptRows.add(new SlotReportResponse.ConceptRow(concept,
+                new SlotReportResponse.Count(c[0], c[1]), new SlotReportResponse.Count(c[2], c[3]),
+                c[0] + c[2], c[1] + c[3], band(c[0] + c[2], c[1] + c[3]))));
+
+        String finalStatus = !done.contains(FINAL_CHAPTER) ? NONE
+                : chapters.stream().allMatch(c -> COMPLETE.equals(c.reportStatus())) ? COMPLETE : PARTIAL;
+        return new ChapterBlocks(chapters, conceptRows, new SlotReportResponse.FinalReport(finalStatus));
+    }
+
+    /** BR-44, chỉ số nguyên: < 3 câu NO_DATA; < 50 % PRACTICE; < 70 % FAMILIAR; còn lại GOOD. */
+    static String band(int correct, int total) {
+        if (total < MIN_ITEMS_FOR_BAND) {
+            return "NO_DATA";
+        }
+        if (2 * correct < total) {
+            return "PRACTICE";
+        }
+        return 10 * correct < 7 * total ? "FAMILIAR" : "GOOD";
+    }
+
+    /**
+     * BR-45 — "có bước cân nhắc", không phải đúng / sai: evidenceScores có I, C hoặc P ≥ 1 → true; có điểm mà toàn 0 →
+     * false; không có điểm → null (không tính vào mẫu số, không coi là 0).
+     */
+    static Boolean deliberate(JsonNode option) {
+        JsonNode scores = option == null ? null : option.get("evidenceScores");
+        if (scores == null || !scores.isObject()) {
+            return null;
+        }
+        boolean scored = false;
+        for (String key : List.of("I", "C", "P")) {
+            JsonNode v = scores.get(key);
+            if (v != null && v.isNumber()) {
+                if (v.asDouble() >= 1) {
+                    return true;
+                }
+                scored = true;
+            }
+        }
+        return scored ? Boolean.FALSE : null;
+    }
+
+    /**
+     * Mã của một câu mini-game, tra lúc đọc từ JSON bản đã chơi bằng đúng hàm của bộ chấm: câu grade → grade.concept hoặc
+     * mã duy nhất của cảnh; mini-game kiểu cũ → mã duy nhất của cảnh. Không tra được (không còn JSON) → cột đã lưu.
+     */
+    private static String resolveConcept(JsonNode chapterJson, MiniGameResult m) {
+        JsonNode scene = chapterJson == null ? null
+                : PlayServiceImpl.findGameScene(chapterJson.path("scenes"), m.getGameId());
+        if (scene == null) {
+            return m.getConcept();
+        }
+        List<MiniGameGrader.Question> questions = MiniGameGrader.questions(scene);
+        if (questions.isEmpty()) {
+            return MiniGameGrader.singleConcept(scene);
+        }
+        for (MiniGameGrader.Question q : questions) {
+            if (m.getItemId().equals(q.id())) {
+                return q.concept();
+            }
+        }
+        return m.getConcept();
+    }
+
+    /** Vị trí cảnh trong chương (thứ tự truyện) để xếp lựa chọn; không tra được → cuối. */
+    private static int sceneIndex(JsonNode chapterJson, String sceneId) {
+        JsonNode scenes = chapterJson == null ? null : chapterJson.path("scenes");
+        if (scenes != null && scenes.isArray()) {
+            for (int i = 0; i < scenes.size(); i++) {
+                if (sceneId.equals(scenes.get(i).path("id").asText(null))) {
+                    return i;
+                }
+            }
+        }
+        return Integer.MAX_VALUE;
+    }
+
+    private static String playedKey(String version, Integer chapter) {
+        return version + "#" + chapter;
+    }
+
+    private static Instant later(Instant a, Instant b) {
+        return a == null || (b != null && b.isAfter(a)) ? b : a;
+    }
+
+    private JsonNode readTree(String content) {
+        try {
+            return objectMapper.readTree(content);
+        } catch (JsonProcessingException e) {
+            throw new AppException(ErrorCode.UNCATEGORIZED, "JSON chuong hong trong release_chapter");
+        }
+    }
+
 
     // ------------------------------------------------------------------ group report
 

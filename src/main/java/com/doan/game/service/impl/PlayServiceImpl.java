@@ -481,7 +481,7 @@ public class PlayServiceImpl implements PlayService {
         }
     }
 
-    private static JsonNode findScene(JsonNode scenes, String sceneId) {
+    static JsonNode findScene(JsonNode scenes, String sceneId) {
         if (!scenes.isArray()) {
             return null;
         }
@@ -494,7 +494,7 @@ public class PlayServiceImpl implements PlayService {
     }
 
     /** scenes[].game — một chương nhiều mini-game, tìm theo game.id. */
-    private static JsonNode findGameScene(JsonNode scenes, String gameId) {
+    static JsonNode findGameScene(JsonNode scenes, String gameId) {
         if (!scenes.isArray()) {
             return null;
         }
@@ -507,7 +507,7 @@ public class PlayServiceImpl implements PlayService {
         return null;
     }
 
-    private static JsonNode byId(JsonNode array, String id) {
+    static JsonNode byId(JsonNode array, String id) {
         if (array == null || !array.isArray()) {
             return null;
         }

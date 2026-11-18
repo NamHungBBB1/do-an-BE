@@ -10,6 +10,7 @@ import com.doan.game.entity.Account;
 import com.doan.game.entity.AccountRole;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.LearnerSlot;
+import com.doan.game.entity.Question;
 import com.doan.game.entity.RunState;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
@@ -18,6 +19,7 @@ import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.LearnerSlotRepository;
+import com.doan.game.repository.QuestionRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.OutgoingMail;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,6 +78,7 @@ class ReportFlowTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-10-02T03:00:00Z"), ClockConfig.VN);
     private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
     /** Bản của test này — ContentFlowTest 1.0.0/1.0.1, PlayFlowTest 1.0.2 nên 1.0.3 luôn trống. */
     /** Số hiệu BE tính khi phát hành (PR C 23/10) — một lần mỗi class, xem ContentTestSupport. */
@@ -91,6 +94,7 @@ class ReportFlowTest {
     @Autowired EntitlementRepository entitlementRepo;
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired RunStateRepository runStateRepo;
+    @Autowired QuestionRepository questionRepo;
     @Autowired AuthFlowTest.MailCatcher mailCatcher;
 
     @BeforeEach
@@ -141,8 +145,13 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.indicators.risk").value(30))
                 .andExpect(jsonPath("$.result.indicators.goal").value(50))
                 .andExpect(jsonPath("$.result.achievements").isEmpty())
+                // 19/11: chương đã xong luôn có dòng; RunState ghi tay, không có lô → không lựa chọn, không mini-game.
                 .andExpect(jsonPath("$.result.concepts").isEmpty())
-                .andExpect(jsonPath("$.result.chapters").isEmpty())
+                .andExpect(jsonPath("$.result.chapters.length()").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].chapter").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].choices").isEmpty())
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.total").value(0))
+                .andExpect(jsonPath("$.result.finalReport.status").value("NONE"))
                 // Quiz v3 (16/11): gia đình có khối quizzes (chỉ hậu trắc), không còn null.
                 .andExpect(jsonPath("$.result.quizzes.assigned").value(0))
                 .andExpect(jsonPath("$.result.quizzes.results").isEmpty())
@@ -315,6 +324,155 @@ class ReportFlowTest {
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu
+    // ------------------------------------------------------------------ 7. chương + khái niệm (19/11)
+    /**
+     * Bé chơi CH01 qua lô thật → chapters[0]: nhãn lựa chọn tra từ JSON bản đã chơi, deliberate theo evidenceScores
+     * (true / false / null), mini-game x/y + câu sai kèm mã tra lúc đọc; hậu trắc PENDING → PARTIAL (quizId null rồi có
+     * id khi đề được tạo); nộp → SUBMITTED + COMPLETE, concepts cộng câu hậu trắc có mã. Mốc 3 câu: T01.02 có đúng 3 câu
+     * → có mức (PRACTICE), T01.01 2 câu → NO_DATA, sau hậu trắc 3/4 → GOOD.
+     */
+    @Test
+    void chapterReportShowsChoicesMiniGamesAndPostTest() throws Exception {
+        String v = releaseVersion();
+        Question p1 = postTestQuestion("T01.01");
+        Question p2 = postTestQuestion("T01.01");
+        String parent = adult("repchuong", PlanKind.PARENT);
+        String groupId = openGroup(parent, "Nha repchuong", "FAMILY");
+        String slotBody = mvc.perform(slotRequest(parent, groupId, "Be Chuong", "123456"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String slotId = extractId(slotBody);
+        String child = childLogin(slotBody, "123456");
+
+        mvc.perform(post("/api/play/chapter").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + v + "\",\"choices\":["
+                                + "{\"sceneId\":\"choice-3\",\"optionId\":\"opt-plain\"},"
+                                + "{\"sceneId\":\"choice-1\",\"optionId\":\"opt-think\"},"
+                                + "{\"sceneId\":\"choice-2\",\"optionId\":\"opt-rush\"}],\"miniGames\":["
+                                + "{\"gameId\":\"NEEDS_OR_WANTS_CH01\",\"itemId\":\"ITEM_MEAL\",\"chosen\":\"NEEDS\"},"
+                                + "{\"gameId\":\"NEEDS_OR_WANTS_CH01\",\"itemId\":\"ITEM_UPGRADE\",\"chosen\":\"NEEDS\"},"
+                                + "{\"gameId\":\"CALC_V3\",\"itemId\":\"Q_A\",\"chosen\":5},"
+                                + "{\"gameId\":\"CALC_V3\",\"itemId\":\"Q_B\",\"chosen\":1},"
+                                + "{\"gameId\":\"CALC_V3\",\"itemId\":\"Q_C\",\"chosen\":1}]}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(slotReport(parent, slotId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.chapters.length()").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].chapter").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].attemptIndex").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].finishedAt").value(notNullValue()))
+                // Thứ tự truyện (vị trí cảnh), không theo thứ tự lô.
+                .andExpect(jsonPath("$.result.chapters[0].choices[0].sceneId").value("choice-1"))
+                .andExpect(jsonPath("$.result.chapters[0].choices[0].optionId").value("opt-think"))
+                .andExpect(jsonPath("$.result.chapters[0].choices[0].label").value("So gia truoc khi mua"))
+                .andExpect(jsonPath("$.result.chapters[0].choices[0].deliberate").value(true))
+                .andExpect(jsonPath("$.result.chapters[0].choices[1].label").value("Mua ngay"))
+                .andExpect(jsonPath("$.result.chapters[0].choices[1].deliberate").value(false))
+                .andExpect(jsonPath("$.result.chapters[0].choices[2].label").value("Di tiep"))
+                .andExpect(jsonPath("$.result.chapters[0].choices[2].deliberate").value(nullValue()))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.correct").value(2))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.total").value(5))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong.length()").value(3))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].gameId").value("CALC_V3"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].itemId").value("Q_B"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].concept").value("T01.02"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].chosen").value("1"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[2].itemId").value("ITEM_UPGRADE"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[2].concept").value("T01.01"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[2].chosen").value("NEEDS"))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("PENDING"))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(nullValue()))
+                .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
+                .andExpect(jsonPath("$.result.chapters[0].summary").value(nullValue()))
+                .andExpect(jsonPath("$.result.concepts.length()").value(2))
+                .andExpect(jsonPath("$.result.concepts[0].concept").value("T01.01"))
+                .andExpect(jsonPath("$.result.concepts[0].game.correct").value(1))
+                .andExpect(jsonPath("$.result.concepts[0].game.total").value(2))
+                .andExpect(jsonPath("$.result.concepts[0].postTest.total").value(0))
+                .andExpect(jsonPath("$.result.concepts[0].band").value("NO_DATA"))
+                .andExpect(jsonPath("$.result.concepts[1].concept").value("T01.02"))
+                .andExpect(jsonPath("$.result.concepts[1].correct").value(1))
+                .andExpect(jsonPath("$.result.concepts[1].total").value(3))
+                .andExpect(jsonPath("$.result.concepts[1].band").value("PRACTICE"))
+                .andExpect(jsonPath("$.result.finalReport.status").value("NONE"))
+                .andExpect(jsonPath("$.result.dailySummary").value(nullValue()));
+
+        // Bé mở danh sách bài → BE tạo đề hậu trắc chương 1 (chụp mọi câu chương 1 còn sống — ca khác cùng DB cũng nhập).
+        int chapterOneCount = questionRepo.findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(1).size();
+        String list = mvc.perform(get("/api/learner/quizzes").header("Authorization", "Bearer " + child))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String quizId = null;
+        for (var n : MAPPER.readTree(list).path("result").path("pending")) {
+            if ("POST_TEST".equals(n.path("kind").asText()) && n.path("chapter").asInt() == 1) {
+                quizId = n.path("id").asText();
+            }
+        }
+        assertThat(quizId).isNotNull();
+        mvc.perform(slotReport(parent, slotId))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("PENDING"))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(quizId))
+                .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"));
+
+        // Nộp: hai câu của ca này đúng (correctIndex 0); câu chương 1 của ca khác bỏ trống = sai.
+        mvc.perform(post("/api/learner/quizzes/" + quizId + "/submit").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answers\":[{\"questionId\":\"" + p1.getId() + "\",\"chosenIndex\":0},"
+                                + "{\"questionId\":\"" + p2.getId() + "\",\"chosenIndex\":0}]}"))
+                .andExpect(status().isOk());
+        mvc.perform(slotReport(parent, slotId))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(quizId))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.correct").value(2))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.total").value(chapterOneCount))
+                .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("COMPLETE"))
+                .andExpect(jsonPath("$.result.concepts[0].concept").value("T01.01"))
+                .andExpect(jsonPath("$.result.concepts[0].game.correct").value(1))
+                .andExpect(jsonPath("$.result.concepts[0].game.total").value(2))
+                .andExpect(jsonPath("$.result.concepts[0].postTest.correct").value(2))
+                .andExpect(jsonPath("$.result.concepts[0].postTest.total").value(2))
+                .andExpect(jsonPath("$.result.concepts[0].correct").value(3))
+                .andExpect(jsonPath("$.result.concepts[0].total").value(4))
+                .andExpect(jsonPath("$.result.concepts[0].band").value("GOOD"))
+                .andExpect(jsonPath("$.result.finalReport.status").value("NONE"));
+    }
+
+    // ------------------------------------------------------------------ 8. hậu trắc NONE + bản tổng kết
+    /** Chương không có câu hậu trắc → NONE, COMPLETE; chưa xong CH08 → finalReport NONE; xong CH08 mà còn chờ hậu trắc → PARTIAL. */
+    @Test
+    void postTestNoneAndFinalReportStatus() throws Exception {
+        releaseVersion();
+        // Chương 9 không ca nào nhập câu — kho hậu trắc chắc chắn rỗng.
+        assertThat(questionRepo.findByChapterAndRetiredAtIsNullOrderByExternalIdAsc(9)).isEmpty();
+        String parent = adult("reptongket", PlanKind.PARENT);
+        String groupId = openGroup(parent, "Nha reptongket", "FAMILY");
+        String slotA = extractId(mvc.perform(slotRequest(parent, groupId, "Be A", "123456"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        seedRun(slotA, "[9]", 50, 1);
+        mvc.perform(slotReport(parent, slotA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.chapters[0].chapter").value(9))
+                .andExpect(jsonPath("$.result.chapters[0].choices").isEmpty())
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.total").value(0))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("NONE"))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(nullValue()))
+                .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("COMPLETE"))
+                .andExpect(jsonPath("$.result.concepts").isEmpty())
+                .andExpect(jsonPath("$.result.finalReport.status").value("NONE"));
+
+        postTestQuestion("T01.01");   // chương 1 chắc chắn có câu → chương 1 chờ hậu trắc
+        String slotB = extractId(mvc.perform(slotRequest(parent, groupId, "Be B", "123456"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        seedRun(slotB, "[1,2,3,4,5,6,7,8]", 50, 1);
+        mvc.perform(slotReport(parent, slotB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.chapters.length()").value(8))
+                .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
+                .andExpect(jsonPath("$.result.finalReport.status").value("PARTIAL"));
+    }
+
     /**
      * Bản "1.0.3" của test này, idempotent: đã là current thì qua; đã tồn tại mà chưa current
      * (6001) thì chỉ đưa con trỏ về. Một chương tối giản — hợp đồng chỉ cần CÓ bản để slot
@@ -337,18 +495,56 @@ class ReportFlowTest {
                 .path("result").path("chapters").size();
     }
 
-    /** CH01 tối giản — chỉ để bản có ít nhất một chương (đủ để progress.totalChapters không null). */
+    /**
+     * CH01 của class: 3 cảnh lựa chọn (evidenceScores có bước cân nhắc / toàn 0 / không có) + mini-game kiểu cũ (một mã
+     * cảnh T01.01) + mini-game grade (mã T01.02 ở câu). Mã T01.* chỉ có ở test này nên concepts không lẫn ca khác.
+     */
     private static String minimalChapter() {
         return """
                 {"id":"chapter-1","title":"Chuong 1 cho test report","version":"1.0.0",
                  "initialStats":{"SAVING":50,"HAPPINESS":50,"RISK":30,"GOAL":50,"WEALTH":0},
                  "sprites":{"MOM":{"neutral":"{{ASSET_BASE}}/a/abc.webp"}},
                  "scenes":[
-                   {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/a/bg1.webp","text":"Chao","nextSceneId":"end"},
+                   {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/a/bg1.webp","text":"Chao","nextSceneId":"choice-1"},
+                   {"id":"choice-1","type":"choice","options":[
+                     {"id":"opt-think","text":"So gia truoc khi mua","deltaStats":{"SAVING":5},
+                      "evidenceScores":{"I":1,"C":0,"P":0},"nextSceneId":"choice-2"},
+                     {"id":"opt-buy","text":"Mua luon","deltaStats":{"SAVING":-5},
+                      "evidenceScores":{"I":0,"C":0,"P":0},"nextSceneId":"choice-2"}]},
+                   {"id":"choice-2","type":"choice","options":[
+                     {"id":"opt-rush","text":"Mua ngay","deltaStats":{"SAVING":-5},
+                      "evidenceScores":{"I":0,"C":0,"P":0},"nextSceneId":"choice-3"},
+                     {"id":"opt-wait","text":"Cho mot tuan","deltaStats":{"SAVING":5},
+                      "evidenceScores":{"I":0,"C":1,"P":2},"nextSceneId":"choice-3"}]},
+                   {"id":"choice-3","type":"choice","options":[
+                     {"id":"opt-plain","text":"Di tiep","nextSceneId":"game-1"}]},
+                   {"id":"game-1","type":"minigame","knowledgeUnits":["T01.01"],"nextSceneId":"game-2",
+                    "game":{"id":"NEEDS_OR_WANTS_CH01","mechanic":"DRAG_AND_DROP","items":[
+                      {"id":"ITEM_MEAL","category":"NEEDS","text":"Bua an"},
+                      {"id":"ITEM_UPGRADE","category":"WANTS","text":"Nang cap tai nghe"}]}},
+                   {"id":"game-2","type":"minigame","nextSceneId":"end",
+                    "game":{"id":"CALC_V3","questions":[
+                      {"id":"Q_A","grade":{"concept":"T01.02","rule":{"eq":5}}},
+                      {"id":"Q_B","grade":{"concept":"T01.02","rule":{"eq":7}}},
+                      {"id":"Q_C","grade":{"concept":"T01.02","rule":{"eq":9}}}]}},
                    {"id":"end","type":"ending"}
                  ],
                  "endingRules":{"priorityOrder":["x"],"endings":[]}}
                 """;
+    }
+
+    /** Một câu hậu trắc chương 1 (kho FINTEEN_POST) có mã, đáp án đúng ở vị trí 0. */
+    private Question postTestQuestion(String concept) {
+        Question q = new Question();
+        q.setExternalId("RPT" + System.nanoTime());
+        q.setPool("FINTEEN_POST");
+        q.setStem("Cau " + q.getExternalId());
+        q.setOptions("[\"Dung\",\"Sai\"]");
+        q.setCorrectIndex(0);
+        q.setConcept(concept);
+        q.setChapter(1);
+        q.setCreatedAt(Instant.now(FIXED_CLOCK));
+        return questionRepo.save(q);
     }
 
     /** Ghi RunState bằng repo — số liệu test độc lập với lô chơi HTTP; CHECK 0..100 vẫn phải qua. */
