@@ -315,6 +315,7 @@ CREATE TABLE public.learner_slot (
     locked_until timestamp(6) with time zone,
     pin_hash character varying(72),
     status character varying(255),
+    token_version integer,
     wiped_at timestamp(6) with time zone,
     group_id uuid NOT NULL,
     CONSTRAINT learner_slot_status_check CHECK (((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'ARCHIVED'::character varying, 'WIPED'::character varying])::text[])))
@@ -468,6 +469,33 @@ CREATE TABLE public.run_state (
 
 
 --
+-- Name: slot_addon; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.slot_addon (
+    id uuid NOT NULL,
+    created_at timestamp(6) with time zone,
+    kind character varying(255) NOT NULL,
+    slots integer NOT NULL,
+    account_id uuid NOT NULL,
+    transaction_id uuid
+);
+
+
+--
+-- Name: slot_addon_price; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.slot_addon_price (
+    id uuid NOT NULL,
+    kind character varying(255),
+    price bigint,
+    updated_at timestamp(6) with time zone,
+    updated_by_id uuid
+);
+
+
+--
 -- Name: transaction; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -489,10 +517,11 @@ CREATE TABLE public.transaction (
     qr_code character varying(512),
     transfer_note character varying(64),
     months integer,
+    packs integer,
     needs_review boolean DEFAULT false NOT NULL,
     note character varying(255),
     CONSTRAINT transaction_kind_check CHECK (((kind)::text = ANY ((ARRAY['PARENT'::character varying, 'TEACHER'::character varying])::text[]))),
-    CONSTRAINT transaction_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['NEW'::character varying, 'RENEW'::character varying])::text[]))),
+    CONSTRAINT transaction_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['NEW'::character varying, 'RENEW'::character varying, 'ADDON'::character varying])::text[]))),
     CONSTRAINT transaction_status_check CHECK (((status)::text = ANY ((ARRAY['FAILED'::character varying, 'PAID'::character varying, 'PENDING'::character varying])::text[])))
 );
 
@@ -723,6 +752,22 @@ ALTER TABLE ONLY public.run_state
 
 
 --
+-- Name: slot_addon slot_addon_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon
+    ADD CONSTRAINT slot_addon_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: slot_addon_price slot_addon_price_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon_price
+    ADD CONSTRAINT slot_addon_price_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: transaction transaction_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -907,6 +952,22 @@ ALTER TABLE ONLY public.account
 
 
 --
+-- Name: slot_addon uk_slot_addon_transaction; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon
+    ADD CONSTRAINT uk_slot_addon_transaction UNIQUE (transaction_id);
+
+
+--
+-- Name: slot_addon_price uk_slot_addon_price_kind; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon_price
+    ADD CONSTRAINT uk_slot_addon_price_kind UNIQUE (kind);
+
+
+--
 -- Name: plan ukqkn1ldn2vui1iymrqcar9xll7; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1072,6 +1133,30 @@ ALTER TABLE ONLY public.quiz_result
 
 ALTER TABLE ONLY public.entitlement
     ADD CONSTRAINT fke8t4d6kdt11cn2oiwxsl9px3x FOREIGN KEY (transaction_id) REFERENCES public.transaction(id);
+
+
+--
+-- Name: slot_addon fk_slot_addon_account; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon
+    ADD CONSTRAINT fk_slot_addon_account FOREIGN KEY (account_id) REFERENCES public.account(id);
+
+
+--
+-- Name: slot_addon fk_slot_addon_transaction; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon
+    ADD CONSTRAINT fk_slot_addon_transaction FOREIGN KEY (transaction_id) REFERENCES public.transaction(id);
+
+
+--
+-- Name: slot_addon_price fk_slot_addon_price_updated_by; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.slot_addon_price
+    ADD CONSTRAINT fk_slot_addon_price_updated_by FOREIGN KEY (updated_by_id) REFERENCES public.account(id);
 
 
 --

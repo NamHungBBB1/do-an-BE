@@ -8,13 +8,15 @@ Line breaks inside draw.io labels are written as a single space.
 ## Transaction lifecycle
 
 A payment transaction starts PENDING and ends PAID; a FAILED transaction can still become PAID if payment is confirmed late.
+`purpose` says what is being paid for: `NEW` (a permanent base plan) or `ADDON` (a pack of extra slots); `RENEW` is only
+kept for old rows because plans no longer expire.
 
 ```mermaid
 ---
 title: state machine Transaction
 ---
 stateDiagram-v2
-    [*] --> PENDING : buy
+    [*] --> PENDING : buy plan, buy add-on
     PENDING --> PAID : paymentConfirmed
     PENDING --> FAILED : cancel, linkExpired, paymentFailed
     FAILED --> PAID : paymentConfirmed
@@ -23,7 +25,9 @@ stateDiagram-v2
 
 ## LearnerSlot lifecycle
 
-A learner slot is ACTIVE (UNLOCKED or temporarily LOCKED by wrong PINs) until it is archived or wiped; WIPED is terminal.
+A learner slot is ACTIVE (UNLOCKED or temporarily LOCKED by wrong PINs) until a group closes (ARCHIVED) or the owner
+wipes it (WIPED); WIPED is terminal. Wiping anonymises the row in place (name, PIN, personalisation, badge are cleared,
+the code is kept but never handed out again) and bumps `token_version`, so a child token in the wild dies immediately.
 
 ```mermaid
 ---
@@ -36,7 +40,7 @@ stateDiagram-v2
         UNLOCKED --> LOCKED : wrongPin [5th in a row]
         LOCKED --> UNLOCKED : after (15 min), changePin
     }
-    ACTIVE --> ARCHIVED : returnSlot, closeGroup
+    ACTIVE --> ARCHIVED : closeGroup
     ACTIVE --> WIPED : wipeSlot
     ARCHIVED --> WIPED : wipeSlot
     WIPED --> [*]

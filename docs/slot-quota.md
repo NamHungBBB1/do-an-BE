@@ -330,8 +330,9 @@ hạn, nhắc hết hạn (xoá `PlanExpiryReminderJob`).
 
 Test phải **viết lại**: `SlotQuotaFlowTest` (bỏ kỳ gói, thêm `reserved`/`free`), `SlotLifecycleFlowTest`
 (bỏ `/return`, xoá có bài vẫn giữ báo cáo, PATCH tên), `GroupSlotFlowTest` (`MIN_CLASS_SIZE`),
-`GroupCloseBulkFlowTest`, `SlotLoginFlowTest` (assert token chết). Test mới: `SlotAddonPaymentTest`,
-`SlotDeleteFraudTest`.
+`GroupCloseBulkFlowTest`, `SlotLoginFlowTest` (assert token chết). Test mới: `SlotDeleteFraudTest`; ca
+pack end-to-end nằm trong `PaymentFlowTest` (webhook ký thật, gọi lại không cộng hai lần) + 5 ca đơn vị
+trong `PaymentServiceImplTest` (không tách tệp `SlotAddonPaymentTest` để dùng lại hạ tầng PayOS giả).
 
 Ghi chú: 2 commit P1 cũ (`fa3a373`, `1bb0cfd`, nhánh `feat/slot-quota`) làm theo mô hình **theo
 kỳ**; phần nhiều lớp + `plannedSize` dùng lại được, phần quota/`termStart-termEnd` phải sửa lại.
