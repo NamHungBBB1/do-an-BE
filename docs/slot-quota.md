@@ -164,6 +164,11 @@ Thay toàn bộ §3.2 của v2:
 Xoá slot đã `WIPED` → 5004. Xoá slot `ARCHIVED` (nhóm đã đóng) → **được** (chỉ ẩn danh hoá, số báo
 cáo đã đóng băng nên không đổi). Xoá **tài khoản** người lớn: **ngoài đợt này**, ghi vào việc sau.
 
+**Token trẻ đã phát** (18/11/2026): request mang token của slot `ARCHIVED` / `WIPED`, token thiếu
+`tv` hoặc `tv` lệch `learner_slot.token_version` → **401 kèm mã 3003** (`UNAUTHENTICATED`) ở tầng
+decoder, **không** phải 3009/3007. Hai mã 3009 / 3007 chỉ dùng cho **đăng nhập bằng mã slot**
+(sai mã / mã của slot đã xoá); FE thấy 401 thì đưa trẻ về màn nhập mã, đừng hiện "mã sai".
+
 ## 5. Báo cáo sau khi xoá
 
 - Báo cáo nhóm **không được lọc status**: liệt kê mọi slot của nhóm, gồm cả `WIPED`.
