@@ -9,11 +9,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một gia đình (4 slot) hoặc một lớp (40 slot). Mỗi tài khoản tối đa 1 nhóm đang mở cho mỗi
- * context: openContext = context khi đang mở, NULL khi đã đóng, nên UNIQUE(ownerId, openContext)
- * chạy được trên cả H2 lẫn PostgreSQL. consentConfirmedAt: giáo viên xác nhận đã có đồng ý của phụ
- * huynh học sinh. Kết thúc nhóm thì đông cứng báo cáo, trả hạn mức. Ràng buộc: UNIQUE(ownerId,
- * openContext)
+ * Một gia đình hoặc một lớp. Từ 18/11/2026 slot lấy từ VÍ của tài khoản, không chép 4/40 vào nhóm:
+ * FAMILY slotLimit = NULL, mỗi tài khoản 1 gia đình đang mở (openContext = FAMILY); CLASS mở nhiều
+ * lớp (openContext = NULL), slotLimit = sĩ số giáo viên đặt (≥ 5), giữ chỗ trừ vào ví.
+ * consentConfirmedAt: giáo viên xác nhận đã có đồng ý của phụ huynh. Kết thúc nhóm thì đông cứng
+ * báo cáo; chỗ giữ chưa dùng về ví, slot đã tạo vẫn tính. Ràng buộc: UNIQUE(ownerId, openContext)
  */
 @Entity
 @Table(name = "learner_group", uniqueConstraints = {

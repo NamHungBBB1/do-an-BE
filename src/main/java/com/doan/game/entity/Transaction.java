@@ -9,13 +9,14 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một lần thanh toán PayOS: mua mới hoặc gia hạn gói Phụ huynh / Giáo viên. orderCode là số do
- * mình sinh, PayOS bắt buộc (02/10, theo tài liệu SDK); gatewayRef là paymentLinkId PayOS trả về.
- * Trạng thái chỉ chuyển tiến; webhook trùng bỏ qua. Bỏ UPGRADE. QR + tài khoản nhận + hạn lưu lại
- * (07/10, Hưng chốt hiện QR trong app) để bấm Mua lại khi còn đơn chờ cùng gói thì trả đúng đơn
- * đó, không tạo đơn mới. 09/10 (rà soát): months chép số tháng lúc mua (đổi giá / tháng sau không
- * ảnh hưởng); needsReview + note ghi lại tiền về mà không cấp gói (lệch số, về sau khi đơn hết
- * hạn) để admin đối soát thay vì chỉ nằm trong log.
+ * Một lần thanh toán PayOS: mua gói gốc vĩnh viễn (NEW) hoặc mua thêm pack slot (ADDON, từ 18/11;
+ * RENEW chỉ còn ở dòng cũ, months chỉ còn ở dòng cũ). orderCode là số do mình sinh, PayOS bắt buộc
+ * (02/10, theo tài liệu SDK); gatewayRef là paymentLinkId PayOS trả về. Trạng thái chỉ chuyển
+ * tiến; webhook trùng bỏ qua. Bỏ UPGRADE. QR + tài khoản nhận + hạn lưu lại (07/10, Hưng chốt hiện
+ * QR trong app) để bấm Mua lại khi còn đơn chờ cùng gói thì trả đúng đơn đó, không tạo đơn mới.
+ * 09/10 (rà soát): months chép số tháng lúc mua (đổi giá / tháng sau không ảnh hưởng); needsReview
+ * + note ghi lại tiền về mà không cấp gói (lệch số, về sau khi đơn hết hạn) để admin đối soát thay
+ * vì chỉ nằm trong log.
  */
 @Entity
 @Table(name = "transaction")
@@ -78,21 +79,15 @@ public class Transaction {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
-    /** Số tháng của đơn — chỉ còn ở dòng CŨ; đơn mới (gói vĩnh viễn) để NULL. */
     @Column(name = "months")
     private Integer months;
-
-    /**
-     * Số pack của đơn {@code purpose = ADDON} (18/11/2026). NULL với đơn mua gói gốc. Số slot cộng
-     * thêm = packs × (2 hoặc 20); chép vào đơn để webhook gọi lại vẫn cấp đúng phần đã mua dù admin
-     * đổi cách chia pack sau đó.
-     */
-    @Column(name = "packs")
-    private Integer packs;
 
     @Column(name = "note", length = 255)
     private String note;
 
     @Column(name = "needs_review", nullable = false, columnDefinition = "boolean default false not null")
     private boolean needsReview;
+
+    @Column(name = "packs")
+    private Integer packs;
 }
