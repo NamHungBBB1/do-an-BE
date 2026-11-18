@@ -96,6 +96,11 @@ public class GroupServiceImpl implements GroupService {
             throw new AppException(ErrorCode.GROUP_ALREADY_OPEN);
         }
 
+        // Khoá dòng tài khoản trước khi tính `free` (spec §7): hai request mở lớp song song cùng đọc
+        // `free` cũ rồi cùng giữ chỗ → `reserved` vượt ví. Mở slot / bulk đã khoá đúng như vậy.
+        accountRepo.lockById(ownerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + ownerId));
+
         SlotQuota quota = quotaService.quota(ownerId, context);
         Integer plannedSize = null;
         if (context == LearningContext.CLASS) {
@@ -261,7 +266,13 @@ public class GroupServiceImpl implements GroupService {
     @Override
     @Transactional
     public LearnerGroupResponse updatePlannedSize(UUID callerId, UUID groupId, UpdateGroupRequest req) {
-        LearnerGroup group = requireOwnedGroup(callerId, groupId);
+        // Khoá NHÓM rồi TÀI KHOẢN — cùng thứ tự với các đường khác để không deadlock; khoá tài khoản
+        // trước khi tính `free` để hai request tăng sĩ số song song không cùng giữ một chỗ.
+        LearnerGroup group = groupRepo.lockById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        if (callerId == null || group.getOwner() == null || !callerId.equals(group.getOwner().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
         if (group.getContext() != LearningContext.CLASS) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "plannedSize: chỉ lớp CLASS mới có sĩ số");
         }
@@ -280,6 +291,8 @@ public class GroupServiceImpl implements GroupService {
         }
         int current = group.getSlotLimit() == null ? created : group.getSlotLimit();
         int growing = Math.max(0, planned - current);
+        accountRepo.lockById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId));
         SlotQuota quota = quotaService.quota(callerId, LearningContext.CLASS);
         if (growing > quota.free()) {
             throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);

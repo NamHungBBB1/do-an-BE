@@ -2,6 +2,7 @@ package com.doan.game;
 
 import com.doan.game.entity.Account;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.SlotAddonPriceRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -28,6 +29,7 @@ class AdminPlanFlowTest {
 
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
+    @Autowired SlotAddonPriceRepository addonPriceRepo;
 
     /**
      * P-09: trần giá (50 triệu) cho cả gói lẫn pack; 18/11/2026 bỏ trần / tham số số tháng.
@@ -58,6 +60,9 @@ class AdminPlanFlowTest {
 
     @Test
     void adminSetsPlanAndAddonPricesAndAnyoneCanRead() throws Exception {
+        // Các lớp test dùng chung H2: xoá giá pack còn sót để "chưa đặt giá" là trạng thái xác định,
+        // không phụ thuộc thứ tự chạy (CI từng đỏ vì PaymentFlowTest đặt PARENT = 1000 trước).
+        addonPriceRepo.deleteAll();
         Account admin = admin();
         var asAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
                 .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"));
