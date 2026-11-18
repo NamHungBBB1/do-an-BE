@@ -103,23 +103,23 @@ class SlotQuotaFlowTest {
                 .andExpect(jsonPath("$.result[0].free").value(0));
     }
 
-    /** Add-on hết hạn cùng gói: dòng đã quá hạn không cộng vào ví. */
+    /** 18/11/2026: add-on VĨNH VIỄN như gói gốc — dòng cũ (không còn cột hạn) vẫn cộng vào ví. */
     @Test
-    void expiredAddonDoesNotCount() throws Exception {
-        String jwt = parentToken("vihethan");
+    void addonCountsForever() throws Exception {
+        String jwt = parentToken("vitheovinhvien");
         UUID accountId = UUID.fromString(subject(jwt));
 
-        SlotAddon expired = new SlotAddon();
-        expired.setAccount(accountRepo.findById(accountId).orElseThrow());
-        expired.setKind(PlanKind.PARENT);
-        expired.setSlots(4);
-        expired.setExpiresOn(LocalDate.now(FIXED_CLOCK).minusDays(1));
-        expired.setCreatedAt(Instant.now(FIXED_CLOCK));
-        addonRepo.save(expired);
+        SlotAddon old = new SlotAddon();
+        old.setAccount(accountRepo.findById(accountId).orElseThrow());
+        old.setKind(PlanKind.PARENT);
+        old.setSlots(4);
+        // created_at rất cũ: add-on không có hạn nên vẫn phải cộng.
+        old.setCreatedAt(Instant.parse("2020-01-01T00:00:00Z"));
+        addonRepo.save(old);
 
         mvc.perform(get("/api/me/quota").header("Authorization", "Bearer " + jwt))
-                .andExpect(jsonPath("$.result[0].extra").value(0))
-                .andExpect(jsonPath("$.result[0].limit").value(4));
+                .andExpect(jsonPath("$.result[0].extra").value(4))
+                .andExpect(jsonPath("$.result[0].limit").value(8));
     }
 
     // ------------------------------------------------------------------ ví giáo viên: nhiều lớp
@@ -306,7 +306,6 @@ class SlotQuotaFlowTest {
         a.setAccount(accountRepo.findById(UUID.fromString(subject(jwt))).orElseThrow());
         a.setKind(kind);
         a.setSlots(slots);
-        a.setExpiresOn(LocalDate.now(FIXED_CLOCK).plusMonths(2));
         a.setCreatedAt(Instant.now(FIXED_CLOCK));
         addonRepo.save(a);
     }

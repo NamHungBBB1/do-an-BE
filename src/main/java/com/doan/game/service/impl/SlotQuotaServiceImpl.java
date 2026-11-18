@@ -48,7 +48,7 @@ public class SlotQuotaServiceImpl implements SlotQuotaService {
             // Không có gói đang chạy: ví rỗng. Nơi gọi đã chặn 3005 trước đó, đây là lưới an toàn.
             return new SlotQuota(kind, 0, 0, 0, 0, 0);
         }
-        int extra = (int) addonRepo.sumActiveSlots(accountId, kind, LocalDate.now(clock));
+        int extra = (int) addonRepo.sumSlots(accountId, kind);
         int used = (int) slotRepo.countCreatedByOwnerAndContext(accountId, context);
         int reserved = reservedOf(accountId, context);
         int wiped = (int) slotRepo.countByOwnerAndContextAndStatus(accountId, context, SlotStatus.WIPED);

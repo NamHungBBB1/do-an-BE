@@ -1,5 +1,6 @@
 package com.doan.game.service;
 
+import com.doan.game.DTO.request.BuyAddonRequest;
 import com.doan.game.DTO.request.BuyPlanRequest;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
@@ -27,6 +28,12 @@ import java.util.UUID;
 public interface PaymentService {
 
     PaymentResponse createPayment(UUID accountId, BuyPlanRequest req);
+
+    /**
+     * Mua gói slot thêm (pack) — chỉ chủ gói gốc cùng loại, {@code packs ≥ 1}, không trần số pack
+     * (trần là tổng tiền ≤ MAX_PRICE_VND). 18/11/2026.
+     */
+    PaymentResponse createAddonPayment(UUID accountId, BuyAddonRequest req);
 
     /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (FE poll tới khi PAID). */
     PaymentStatusResponse getPayment(UUID accountId, long orderCode);

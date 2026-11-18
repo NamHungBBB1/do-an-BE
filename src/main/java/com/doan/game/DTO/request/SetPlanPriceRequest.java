@@ -1,5 +1,8 @@
 package com.doan.game.DTO.request;
 
-/** Admin đặt giá (VND) và tuỳ chọn số tháng của một gói; months để trống thì giữ nguyên (mặc định 3). */
-public record SetPlanPriceRequest(long price, Integer months) {
+/**
+ * Admin đặt giá (VND) cho một gói hoặc một pack. 18/11/2026: bỏ {@code months} — gói bán ra là vĩnh
+ * viễn, không còn khái niệm số tháng trên bảng giá.
+ */
+public record SetPlanPriceRequest(long price) {
 }

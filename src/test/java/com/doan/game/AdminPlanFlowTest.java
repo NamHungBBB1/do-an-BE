@@ -29,19 +29,21 @@ class AdminPlanFlowTest {
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
 
-    /** P-09: trần số tháng (36) và trần giá (50 triệu) — gõ nhầm thêm số 0 là mọi người mua đều lỗi PayOS. */
+    /**
+     * P-09: trần giá (50 triệu) cho cả gói lẫn pack; 18/11/2026 bỏ trần / tham số số tháng.
+     */
     @Test
-    void priceAndMonthsHaveCeilings() throws Exception {
+    void priceHasCeiling() throws Exception {
         Account admin = admin();
         var asAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
                 .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"));
 
         mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 99000, \"months\": 1200}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 990000000}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(4007));
-        mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 990000000}"))
+        mvc.perform(put("/api/admin/addon-price/parent").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 50000001}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(4007));
     }
@@ -55,28 +57,41 @@ class AdminPlanFlowTest {
     }
 
     @Test
-    void adminSetsPriceAndAnyoneCanRead() throws Exception {
+    void adminSetsPlanAndAddonPricesAndAnyoneCanRead() throws Exception {
         Account admin = admin();
         var asAdmin = jwt().jwt(j -> j.subject(admin.getId().toString()))
                 .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("SCOPE_ADMIN"));
 
         mvc.perform(put("/api/admin/plans/parent").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 99000}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 399000}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.kind").value("PARENT"))
-                .andExpect(jsonPath("$.result.price").value(99000))
-                .andExpect(jsonPath("$.result.months").value(3));
+                .andExpect(jsonPath("$.result.price").value(399000))
+                .andExpect(jsonPath("$.result.addonSlots").value(2))
+                .andExpect(jsonPath("$.result.addonPrice").doesNotExist());   // chưa đặt giá pack
 
-        // sửa lại giá: vẫn một dòng, giá mới
-        mvc.perform(put("/api/admin/plans/PARENT").with(asAdmin)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 120000, \"months\": 6}"))
+        // Giá pack đặt riêng; Parent +2, Teacher +20 slot mỗi pack.
+        mvc.perform(put("/api/admin/addon-price/PARENT").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 99000}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.price").value(120000))
-                .andExpect(jsonPath("$.result.months").value(6));
+                .andExpect(jsonPath("$.result.addonPrice").value(99000));
+        mvc.perform(put("/api/admin/addon-price/teacher").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 399000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.addonSlots").value(20));
+
+        // sửa lại giá gói: vẫn một dòng, giá mới
+        mvc.perform(put("/api/admin/plans/PARENT").with(asAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": 420000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.price").value(420000))
+                .andExpect(jsonPath("$.result.addonPrice").value(99000));
 
         mvc.perform(get("/api/plans"))   // không token
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].price").value(120000));
+                .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].price").value(420000))
+                .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].addonPrice").value(99000))
+                .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].addonSlots").value(2));
     }
 
     @Test

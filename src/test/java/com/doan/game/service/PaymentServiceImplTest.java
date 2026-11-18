@@ -6,8 +6,10 @@ import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.TransactionPurpose;
 import com.doan.game.enums.TransactionStatus;
 import com.doan.game.entity.Plan;
+import com.doan.game.entity.SlotAddon;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.PlanRepository;
 import com.doan.game.repository.EntitlementRepository;
@@ -52,6 +54,8 @@ class PaymentServiceImplTest {
     @Mock EntitlementRepository entitlementRepo;
     @Mock AccountRepository accountRepo;
     @Mock PlanRepository planRepo;
+    @Mock com.doan.game.repository.SlotAddonRepository addonRepo;
+    @Mock com.doan.game.repository.SlotAddonPriceRepository addonPriceRepo;
     @Mock ObjectProvider<PayOS> payOSProvider;
     @Mock PayOS payOS;
     @Mock WebhooksService webhooks;
@@ -68,7 +72,8 @@ class PaymentServiceImplTest {
     void setUp() {
         // txTemplate = null: cron sweep không chạy trong unit test (xem SlotLifecycle/flow test cho đường thật).
         svc = new PaymentServiceImpl(transactionRepo, entitlementRepo,
-                new EntitlementFactory(entitlementRepo, accountRepo, clock), accountRepo, planRepo, payOSProvider,
+                new EntitlementFactory(entitlementRepo, accountRepo, clock), accountRepo, planRepo,
+                addonRepo, addonPriceRepo, payOSProvider,
                 new PayOsProperties("id", "key", "sum", "https://x/webhook", "https://fe/ok", "https://fe/cancel"),
                 clock, new ObjectMapper(), events, accountRoleRepo, null);
         account = new Account();
@@ -93,11 +98,10 @@ class PaymentServiceImplTest {
         when(webhooks.verify(any())).thenReturn(data);
     }
 
-    private void threeMonthPlan() {
+    private void parentPlanOnSale() {
         Plan p = new Plan();
         p.setKind(PlanKind.PARENT);
         p.setPrice(2000L);
-        p.setMonths(3);
         when(planRepo.findByKind(PlanKind.PARENT)).thenReturn(Optional.of(p));
     }
 
@@ -123,10 +127,10 @@ class PaymentServiceImplTest {
 
     @Test
     void buyingAgainReturnsTheOpenOrderWithoutCallingPayOS() {
-        threeMonthPlan();
+        parentPlanOnSale();
         when(accountRepo.lockById(account.getId())).thenReturn(Optional.of(account));
         tx.setQrCode("000201...");
-        tx.setMonths(3);   // đơn giữ số tháng lúc mua (P-05): tái dùng chỉ khi cùng giá VÀ cùng số tháng
+        tx.setPurpose(TransactionPurpose.NEW);   // 18/11/2026: tái dùng đơn mua gói, không dính đơn pack
         tx.setExpiresAt(Instant.now(clock).plusSeconds(3600));
         when(transactionRepo.findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
                 eq(account.getId()), eq(PlanKind.PARENT), eq(TransactionStatus.PENDING), any()))
@@ -229,5 +233,88 @@ class PaymentServiceImplTest {
         svc.handleWebhook("{}");   // webhook thử của PayOS: không ném, không cấp gì
 
         verify(entitlementRepo, never()).save(any());
+    }
+
+    // ------------------------------------------------------------------ add-on (18/11/2026)
+
+    /** Q15: gói gốc chỉ mua một lần — đã có gói cùng loại thì 4008, không gọi PayOS. */
+    @Test
+    void buyingPlanAlreadyOwnedIs4008() {
+        when(accountRepo.lockById(account.getId())).thenReturn(Optional.of(account));
+        Entitlement owned = new Entitlement();
+        owned.setExpiresOn(LocalDate.of(9999, 12, 31));
+        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
+                .thenReturn(Optional.of(owned));
+
+        var ex = org.junit.jupiter.api.Assertions.assertThrows(com.doan.game.exception.AppException.class,
+                () -> svc.createPayment(account.getId(), new com.doan.game.DTO.request.BuyPlanRequest("PARENT")));
+
+        assertEquals(4008, ex.getErrorCode().getCode());
+        verifyNoInteractions(payOSProvider);
+    }
+
+    /** Pack chỉ bán cho chủ gói gốc cùng loại (3005); {@code packs} phải ≥ 1 (1001). */
+    @Test
+    void addonNeedsBasePlanAndAtLeastOnePack() {
+        when(accountRepo.lockById(account.getId())).thenReturn(Optional.of(account));
+
+        var noPlan = org.junit.jupiter.api.Assertions.assertThrows(com.doan.game.exception.AppException.class,
+                () -> svc.createAddonPayment(account.getId(),
+                        new com.doan.game.DTO.request.BuyAddonRequest("PARENT", 2)));
+        assertEquals(3005, noPlan.getErrorCode().getCode());
+
+        Entitlement base = new Entitlement();
+        base.setExpiresOn(LocalDate.of(9999, 12, 31));
+        when(entitlementRepo.findTopByAccount_IdAndKindOrderByExpiresOnDesc(account.getId(), PlanKind.PARENT))
+                .thenReturn(Optional.of(base));
+        var noPack = org.junit.jupiter.api.Assertions.assertThrows(com.doan.game.exception.AppException.class,
+                () -> svc.createAddonPayment(account.getId(),
+                        new com.doan.game.DTO.request.BuyAddonRequest("PARENT", 0)));
+        assertEquals(1001, noPack.getErrorCode().getCode());
+        verifyNoInteractions(payOSProvider);
+    }
+
+    /**
+     * Webhook đơn ADDON: cấp đúng packs × 2 slot, không đụng bảng entitlement, mail ghi tổng ví sau
+     * khi cộng (base 4 + add-on 6 = 10).
+     */
+    @Test
+    void addonWebhookGrantsSlotsAndMailsTotalWallet() {
+        tx.setId(UUID.randomUUID());
+        tx.setPurpose(TransactionPurpose.ADDON);
+        tx.setPacks(3);
+        payOSReports(123L, 2000L, "00");
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+        when(addonRepo.existsByTransaction_Id(tx.getId())).thenReturn(false);
+        when(addonRepo.sumSlots(account.getId(), PlanKind.PARENT)).thenReturn(6L);
+
+        svc.handleWebhook("{}");
+
+        ArgumentCaptor<SlotAddon> captor = ArgumentCaptor.forClass(SlotAddon.class);
+        verify(addonRepo).save(captor.capture());
+        assertEquals(6, captor.getValue().getSlots());
+        assertEquals(tx, captor.getValue().getTransaction());
+        verify(entitlementRepo, never()).save(any());
+
+        ArgumentCaptor<OutgoingMail> mail = ArgumentCaptor.forClass(OutgoingMail.class);
+        verify(events).publishEvent(mail.capture());
+        assertTrue(mail.getValue().body().contains("6 slot"));
+        assertTrue(mail.getValue().body().contains("10 slot"));
+    }
+
+    /** Webhook gọi lại: {@code slot_addon.transaction_id} đã có → không cộng lần hai, không gửi mail. */
+    @Test
+    void duplicateAddonWebhookGrantsOnce() {
+        tx.setId(UUID.randomUUID());
+        tx.setPurpose(TransactionPurpose.ADDON);
+        tx.setPacks(1);
+        payOSReports(123L, 2000L, "00");
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+        when(addonRepo.existsByTransaction_Id(tx.getId())).thenReturn(true);
+
+        svc.handleWebhook("{}");
+
+        verify(addonRepo, never()).save(any());
+        verifyNoInteractions(events);
     }
 }

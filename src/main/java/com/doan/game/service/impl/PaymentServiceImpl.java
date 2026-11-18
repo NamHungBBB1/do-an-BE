@@ -1,5 +1,6 @@
 package com.doan.game.service.impl;
 
+import com.doan.game.DTO.request.BuyAddonRequest;
 import com.doan.game.DTO.request.BuyPlanRequest;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
@@ -12,6 +13,8 @@ import com.doan.game.configuration.PayOsProperties;
 import com.doan.game.entity.Account;
 import com.doan.game.entity.Entitlement;
 import com.doan.game.entity.Plan;
+import com.doan.game.entity.SlotAddon;
+import com.doan.game.entity.SlotAddonPrice;
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.EntitlementSource;
 import com.doan.game.enums.PlanKind;
@@ -22,10 +25,13 @@ import com.doan.game.exception.ErrorCode;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.EntitlementRepository;
 import com.doan.game.repository.PlanRepository;
+import com.doan.game.repository.SlotAddonPriceRepository;
+import com.doan.game.repository.SlotAddonRepository;
 import com.doan.game.repository.TransactionRepository;
 import com.doan.game.service.EntitlementFactory;
 import com.doan.game.service.OutgoingMail;
 import com.doan.game.service.PaymentService;
+import com.doan.game.service.SlotQuotaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -96,6 +102,9 @@ public class PaymentServiceImpl implements PaymentService {
     private final EntitlementFactory entitlementFactory;
     private final AccountRepository accountRepo;
     private final PlanRepository planRepo;
+    /** Ví slot: cộng base của gói + add-on để in "tổng ví sau khi cộng" trong biên nhận pack. */
+    private final SlotAddonRepository addonRepo;
+    private final SlotAddonPriceRepository addonPriceRepo;
     /** Không có khoá thì không có bean (PayOsConfig); getIfAvailable() trả null thay vì chết lúc khởi động. */
     private final ObjectProvider<PayOS> payOS;
     private final PayOsProperties payOsProps;
@@ -111,47 +120,108 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public PaymentResponse createPayment(UUID accountId, BuyPlanRequest req) {
         PlanKind kind = PlanServiceImpl.parseKind(req.kind());
-        // Khoá tài khoản (P-02): hai request Mua cùng lúc xếp hàng, request sau thấy đơn request trước vừa tạo.
-        Account account = accountRepo.lockById(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
-        // "Admin là admin, không mua gói" (Hưng chốt 08/10, P-08), mở rộng 23/10 cho mọi vai nội bộ.
-        if (accountRoleRepo.isInternal(accountId)) {
-            throw new AppException(ErrorCode.INTERNAL_ACCOUNT_NOT_CUSTOMER);
+        Account account = lockCustomer(accountId);
+        // 18/11/2026 (Q16): gói gốc chỉ mua MỘT lần; đã có thì 4008 — muốn thêm chỗ thì mua pack.
+        if (hasActivePlan(accountId, kind)) {
+            throw new AppException(ErrorCode.PLAN_ALREADY_OWNED, planLabel(kind));
         }
         Plan plan = planRepo.findByKind(kind)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, kind.name()));
         long price = plan.getPrice();
-        int months = plan.getMonths() == null ? PlanServiceImpl.DEFAULT_MONTHS : plan.getMonths();
-        // Idempotent: còn đơn chờ cùng gói, cùng giá, cùng số tháng, QR còn hạn ít nhất 1 phút thì trả lại
-        // đúng đơn đó. Bấm Mua hai lần hay tải lại trang không sinh đơn rác, không có hai QR để lỡ trả hai lần.
+        // Idempotent: còn đơn mua gói chờ, cùng giá, QR còn hạn ít nhất 1 phút thì trả lại đúng đơn đó.
+        // Bấm Mua hai lần hay tải lại trang không sinh đơn rác, không có hai QR để lỡ trả hai lần.
         Optional<Transaction> open = transactionRepo
                 .findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
                         accountId, kind, TransactionStatus.PENDING, Instant.now(clock).plus(REUSE_MARGIN))
-                .filter(t -> t.getQrCode() != null && t.getAmount() == price
-                        && t.getMonths() != null && t.getMonths() == months);
+                .filter(t -> t.getPurpose() == TransactionPurpose.NEW
+                        && t.getQrCode() != null && t.getAmount() == price);
         if (open.isPresent()) {
             return toPaymentResponse(open.get());
         }
-        PayOS client = client();
 
         Transaction tx = new Transaction();
         tx.setAccount(account);
         tx.setOrderCode(generateOrderCode());
         tx.setKind(kind);
-        tx.setPurpose(hasActivePlan(accountId, kind) ? TransactionPurpose.RENEW : TransactionPurpose.NEW);
+        // Gói vĩnh viễn: NEW mãi, không còn RENEW; months để NULL (cột chỉ đọc đơn cũ).
+        tx.setPurpose(TransactionPurpose.NEW);
         tx.setAmount(price);
-        tx.setMonths(months);   // đơn giữ cả giá lẫn số tháng lúc mua (P-05): admin đổi gói sau đó không ảnh hưởng
         tx.setStatus(TransactionStatus.PENDING);
         tx.setCreatedAt(Instant.now(clock));
         // Lưu trước khi gọi PayOS: webhook chỉ tin orderCode đã có trong bảng.
         tx = transactionRepo.saveAndFlush(tx);
 
+        // Nội dung chuyển khoản: PayOS giới hạn ngắn, không dấu.
+        return openPayOsLink(tx, "FinTeen " + (kind == PlanKind.PARENT ? "goi phu huynh" : "goi giao vien"));
+    }
+
+    /**
+     * Mua gói slot thêm (18/11/2026): chỉ chủ gói gốc cùng loại (3005), {@code packs ≥ 1} và KHÔNG có
+     * trần số pack — trần duy nhất là tổng tiền {@code packs × giá} ≤ MAX_PRICE_VND (1001). Giá pack
+     * do admin đặt, chưa đặt → 4002. Amount chép vào đơn nên đổi giá sau không ảnh hưởng đơn cũ.
+     */
+    @Override
+    @Transactional
+    public PaymentResponse createAddonPayment(UUID accountId, BuyAddonRequest req) {
+        PlanKind kind = PlanServiceImpl.parseKind(req.kind());
+        Account account = lockCustomer(accountId);
+        if (!hasActivePlan(accountId, kind)) {
+            throw new AppException(ErrorCode.PLAN_REQUIRED, planLabel(kind));
+        }
+        int packs = req.packs() == null ? 0 : req.packs();
+        if (packs < 1) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "packs: phải từ 1 trở lên");
+        }
+        long unitPrice = addonPriceRepo.findByKind(kind)
+                .map(SlotAddonPrice::getPrice)
+                .filter(p -> p != null && p > 0)
+                .orElseThrow(() -> new AppException(ErrorCode.PLAN_PRICE_NOT_SET, "addon " + kind.name()));
+        long amount = unitPrice * packs;
+        if (amount > PlanServiceImpl.MAX_PRICE_VND) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "packs: tổng tiền tối đa " + PlanServiceImpl.MAX_PRICE_VND + " đ");
+        }
+        Optional<Transaction> open = transactionRepo
+                .findFirstByAccount_IdAndKindAndStatusAndExpiresAtAfterOrderByCreatedAtDesc(
+                        accountId, kind, TransactionStatus.PENDING, Instant.now(clock).plus(REUSE_MARGIN))
+                .filter(t -> t.getPurpose() == TransactionPurpose.ADDON && t.getQrCode() != null
+                        && t.getAmount() == amount && t.getPacks() != null && t.getPacks() == packs);
+        if (open.isPresent()) {
+            return toPaymentResponse(open.get());
+        }
+
+        Transaction tx = new Transaction();
+        tx.setAccount(account);
+        tx.setOrderCode(generateOrderCode());
+        tx.setKind(kind);
+        tx.setPurpose(TransactionPurpose.ADDON);
+        tx.setPacks(packs);
+        tx.setAmount(amount);
+        tx.setStatus(TransactionStatus.PENDING);
+        tx.setCreatedAt(Instant.now(clock));
+        tx = transactionRepo.saveAndFlush(tx);
+
+        return openPayOsLink(tx, "FinTeen mua them slot");
+    }
+
+    /** Khoá tài khoản (P-02) và chặn vai nội bộ mua hàng (P-08, mở rộng 23/10 cho mọi vai nội bộ). */
+    private Account lockCustomer(UUID accountId) {
+        Account account = accountRepo.lockById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + accountId));
+        if (accountRoleRepo.isInternal(accountId)) {
+            throw new AppException(ErrorCode.INTERNAL_ACCOUNT_NOT_CUSTOMER);
+        }
+        return account;
+    }
+
+    /** Tạo QR PayOS cho một đơn đã lưu (PENDING) và ghi lại thông tin cổng trả về. */
+    private PaymentResponse openPayOsLink(Transaction tx, String description) {
+        PayOS client = client();
         Instant expiresAt = Instant.now(clock).plus(LINK_TTL).truncatedTo(ChronoUnit.SECONDS);
         CreatePaymentLinkRequest data = CreatePaymentLinkRequest.builder()
                 .orderCode(tx.getOrderCode())
-                .amount(price)
-                // Nội dung chuyển khoản: PayOS giới hạn ngắn, không dấu.
-                .description("FinTeen " + (kind == PlanKind.PARENT ? "goi phu huynh" : "goi giao vien"))
+                .amount(tx.getAmount())
+                .description(description)
                 .returnUrl(payOsProps.returnUrl())
                 .cancelUrl(payOsProps.cancelUrl())
                 // Link tự hết hạn sau 24h để giao dịch treo không sống mãi; cron thấy EXPIRED thì FAILED.
@@ -430,17 +500,53 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
         if (tx.getStatus() == TransactionStatus.FAILED) {
-            // Tiền về sau khi đơn đã huỷ / hết hạn: khách đã trả thì cấp gói (Hưng chốt 09/10 "tự cấp gói"),
+            // Tiền về sau khi đơn đã huỷ / hết hạn: khách đã trả thì cấp hàng (Hưng chốt 09/10 "tự cấp gói"),
             // ghi note để admin thấy đây là đơn trả muộn. Ngoại lệ duy nhất của luật "trạng thái không lùi".
-            log.warn("Giao dịch {} đã FAILED nhưng PayOS báo PAID — cấp gói theo luật trả muộn", tx.getOrderCode());
-            tx.setNote("Tiền về sau khi đơn đã FAILED (huỷ / hết hạn) — tự cấp gói theo luật 09/10");
+            log.warn("Giao dịch {} đã FAILED nhưng PayOS báo PAID — cấp hàng theo luật trả muộn", tx.getOrderCode());
+            tx.setNote("Tiền về sau khi đơn đã FAILED (huỷ / hết hạn) — tự cấp hàng theo luật 09/10");
         }
         tx.setStatus(TransactionStatus.PAID);
         tx.setPaidAt(paidAt);
+        if (tx.getPurpose() == TransactionPurpose.ADDON) {
+            grantAddon(tx);
+            return;
+        }
+        // Gói gốc trả muộn mà tài khoản ĐÃ có gói cùng loại từ đơn khác: không cấp trùng, chỉ đánh dấu
+        // để admin hoàn tay (18/11/2026). Bình thường createPayment đã chặn 4008 nên hiếm khi tới đây.
+        if (hasActivePlan(tx.getAccount().getId(), tx.getKind())) {
+            log.warn("Giao dịch {} PAID nhưng tài khoản đã có gói {} — không cấp trùng, cần hoàn tay",
+                    tx.getOrderCode(), tx.getKind());
+            tx.setNeedsReview(true);
+            tx.setNote("Tài khoản đã có gói " + tx.getKind()
+                    + " từ đơn khác — không cấp trùng, cần hoàn tay");
+            return;
+        }
         Entitlement e = buildEntitlementFrom(tx);
         entitlementRepo.save(e);
         sendReceiptMail(tx, e);
         log.info("Giao dịch {} PAID, cấp gói {} cho tài khoản {}", tx.getOrderCode(), tx.getKind(), tx.getAccount().getId());
+    }
+
+    /**
+     * Cấp pack slot trong CÙNG transaction của webhook. Idempotent theo {@code slot_addon.transaction_id}
+     * (UNIQUE): webhook gọi lại hay GET trạng thái chạy song song không cộng hai lần.
+     */
+    private void grantAddon(Transaction tx) {
+        if (tx.getId() != null && addonRepo.existsByTransaction_Id(tx.getId())) {
+            log.info("Giao dịch {} đã cấp add-on trước đó — bỏ qua", tx.getOrderCode());
+            return;
+        }
+        int packs = tx.getPacks() == null ? 0 : tx.getPacks();
+        SlotAddon addon = new SlotAddon();
+        addon.setAccount(tx.getAccount());
+        addon.setKind(tx.getKind());
+        addon.setSlots(packs * PlanServiceImpl.addonSlotsOf(tx.getKind()));
+        addon.setTransaction(tx);
+        addon.setCreatedAt(Instant.now(clock));
+        addonRepo.save(addon);
+        sendAddonReceiptMail(tx, addon);
+        log.info("Giao dịch {} PAID, cấp {} slot add-on {} cho tài khoản {}", tx.getOrderCode(),
+                addon.getSlots(), tx.getKind(), tx.getAccount().getId());
     }
 
     /**
@@ -513,6 +619,31 @@ public class PaymentServiceImpl implements PaymentService {
                         String.format(Locale.ROOT, "%,d", tx.getAmount()).replace(',', '.'),
                         DMY_HM.format(tx.getPaidAt().atZone(clock.getZone())),
                         termLabel(e))));
+    }
+
+    /** Biên nhận pack: hàng, số slot cộng thêm, TỔNG VÍ sau khi cộng, số tiền, mã đơn (18/11/2026 §8). */
+    private void sendAddonReceiptMail(Transaction tx, SlotAddon addon) {
+        Account a = tx.getAccount();
+        int base = tx.getKind() == PlanKind.PARENT
+                ? SlotQuotaService.PARENT_BASE_SLOTS : SlotQuotaService.TEACHER_BASE_SLOTS;
+        long total = base + addonRepo.sumSlots(a.getId(), tx.getKind());
+        int packs = tx.getPacks() == null ? 0 : tx.getPacks();
+        events.publishEvent(new OutgoingMail(a.getEmail(), "Biên nhận thanh toán FinTeen #" + tx.getOrderCode(),
+                """
+                        <p>Chào %s,</p>
+                        <p>FinTeen đã nhận thanh toán của bạn.</p>
+                        <ul>
+                        <li>Mã đơn: <b>%d</b></li>
+                        <li>Hàng: <b>%d pack slot %s</b> (+%d slot, vĩnh viễn)</li>
+                        <li>Số tiền: <b>%s đ</b></li>
+                        <li>Thanh toán lúc: %s</li>
+                        <li>Tổng ví sau khi cộng: <b>%d slot</b></li>
+                        </ul>
+                        <p>Thắc mắc về giao dịch, trả lời mail này kèm mã đơn.</p>
+                        """.formatted(AuthServiceImpl.escape(a.getDisplayName()), tx.getOrderCode(),
+                        packs, planLabel(tx.getKind()), addon.getSlots(),
+                        String.format(Locale.ROOT, "%,d", tx.getAmount()).replace(',', '.'),
+                        DMY_HM.format(tx.getPaidAt().atZone(clock.getZone())), total)));
     }
 
     /** Gói mua là vĩnh viễn — đừng in "01/01/9999" cho khách; chỉ đơn admin cấp tay mới có ngày. */

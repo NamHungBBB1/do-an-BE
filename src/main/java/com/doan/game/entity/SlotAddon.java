@@ -3,21 +3,17 @@ package com.doan.game.entity;
 import com.doan.game.enums.PlanKind;
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Slot mua thêm (add-on) của một tài khoản, chốt 17/11/2026: Parent +2 slot/pack, Teacher +20 slot/pack,
- * hết hạn CÙNG kỳ gói chính (không cộng dồn sang kỳ sau).
+ * Slot mua thêm (add-on) của một tài khoản — 18/11/2026: gói và add-on đều VĨNH VIỄN, nên bảng này
+ * chỉ ghi phần được cộng thêm, không có hạn dùng.
  *
- * Ví slot = base của gói + tổng slots của các dòng còn hạn (expiresOn >= hôm nay). Trần: Parent 10 slot,
- * Teacher 200 slot/kỳ — kiểm ở luồng mua, không kiểm ở đây.
- *
- * "Đã dùng" KHÔNG trừ đi khi trả / xoá slot: slot đã mở là tiêu hao vĩnh viễn trong kỳ (Q6). Vì vậy
- * bảng này chỉ ghi phần được cộng thêm, không có cột "đã dùng".
+ * Ví slot = base của gói + tổng {@code slots} của mọi dòng. "Đã dùng" KHÔNG trừ đi khi trả / xoá
+ * slot: slot đã mở là tiêu hao vĩnh viễn (Q6).
  */
 @Entity
 @Table(name = "slot_addon")
@@ -40,13 +36,9 @@ public class SlotAddon {
     @Column(name = "kind", nullable = false)
     private PlanKind kind;
 
-    /** Số slot cộng thêm (một pack Parent = 2, một pack Teacher = 20). */
+    /** Số slot cộng thêm của đơn (packs × 2 với Parent, packs × 20 với Teacher). */
     @Column(name = "slots", nullable = false)
     private Integer slots;
-
-    /** Hạn dùng — luôn <= hạn của gói chính đang có (chốt Q5). */
-    @Column(name = "expires_on", nullable = false)
-    private LocalDate expiresOn;
 
     /** Transaction. Một giao dịch chỉ cấp một add-on (chống webhook trùng cấp hai lần). */
     @ManyToOne(fetch = FetchType.LAZY, optional = true)

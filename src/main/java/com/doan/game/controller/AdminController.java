@@ -49,6 +49,13 @@ public class AdminController {
         return ApiResponse.ok(planService.setPrice(UUID.fromString(jwt.getSubject()), kind, req));
     }
 
+    /** Giá MỘT pack slot thêm (Parent +2, Teacher +20) — body {price}, 18/11/2026. */
+    @PutMapping("/addon-price/{kind}")
+    public ApiResponse<PlanResponse> setAddonPrice(@AuthenticationPrincipal Jwt jwt, @PathVariable String kind,
+                                                   @RequestBody SetPlanPriceRequest req) {
+        return ApiResponse.ok(planService.setAddonPrice(UUID.fromString(jwt.getSubject()), kind, req));
+    }
+
     // ---- giao dịch ----
     /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email) và khoảng ngày. Trả kèm tổng số trang. */
     @GetMapping("/transactions")
