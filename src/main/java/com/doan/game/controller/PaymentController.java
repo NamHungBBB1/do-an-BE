@@ -1,5 +1,6 @@
 package com.doan.game.controller;
 
+import com.doan.game.DTO.request.BuyAddonRequest;
 import com.doan.game.DTO.request.BuyPlanRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.PaymentResponse;
@@ -34,6 +35,13 @@ public class PaymentController {
     public ApiResponse<PaymentResponse> createPayment(@AuthenticationPrincipal Jwt jwt,
                                                     @RequestBody BuyPlanRequest req) {
         return ApiResponse.ok(paymentService.createPayment(currentAccountId(jwt), req));
+    }
+
+    /** Mua gói slot thêm (pack) — body {kind, packs}; chỉ chủ gói gốc cùng loại. */
+    @PostMapping("/addon")
+    public ApiResponse<PaymentResponse> createAddonPayment(@AuthenticationPrincipal Jwt jwt,
+                                                          @RequestBody BuyAddonRequest req) {
+        return ApiResponse.ok(paymentService.createAddonPayment(currentAccountId(jwt), req));
     }
 
     /** Lịch sử giao dịch của tôi (kể cả PENDING / FAILED), mới nhất trước. */

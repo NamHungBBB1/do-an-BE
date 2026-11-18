@@ -29,11 +29,7 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
     @Query("select count(e) from Entitlement e where e.startsOn <= :today and e.expiresOn >= :today")
     long countActive(@Param("today") LocalDate today);
 
-    /** Số gói hết hạn trong khoảng [today, until] — dashboard nhắc gia hạn 7 ngày. */
-    @Query("select count(e) from Entitlement e where e.expiresOn between :today and :until")
-    long countExpiringBetween(@Param("today") LocalDate today, @Param("until") LocalDate until);
-
-    /** Gói mới nhất của một loại: gia hạn nối tiếp từ expiresOn của nó. */
+    /** Gói mới nhất của một loại: admin cấp tay vẫn nối tiếp từ expiresOn của nó. */
     Optional<Entitlement> findTopByAccount_IdAndKindOrderByExpiresOnDesc(UUID accountId, PlanKind kind);
 
     /**
@@ -58,7 +54,4 @@ public interface EntitlementRepository extends JpaRepository<Entitlement, UUID> 
      * người dùng cần thấy đã từng mua gì, còn hạn thì /api/auth/me đã trả (plans).
      */
     List<Entitlement> findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(UUID accountId);
-
-    /** Gói hết hạn đúng ngày này — job nhắc gia hạn dùng. */
-    List<Entitlement> findByExpiresOn(LocalDate expiresOn);
 }

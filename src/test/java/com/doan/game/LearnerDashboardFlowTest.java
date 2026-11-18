@@ -150,29 +150,39 @@ class LearnerDashboardFlowTest {
     }
 
     // ------------------------------------------------------------------ slot hết vòng đời
-    /** Slot đã trả (ARCHIVED): token trẻ vẫn sống nhưng service chặn 3009 — cùng luật loginSlot. */
+    /**
+     * Nhóm đóng → slot ARCHIVED: token trẻ đang cầm chết ngay ở decoder (401/3003, 18/11/2026);
+     * đăng nhập lại bằng mã cũ vẫn 3009.
+     */
     @Test
-    void returnedSlotGets3009() throws Exception {
+    void archivedSlotKillsTokenAndLoginSays3009() throws Exception {
         String parent = parentToken("dashtra");
         String groupId = openGroup(parent, "Nha tra", "FAMILY");
         String slotBody = mvc.perform(slotRequest(parent, groupId, "Be Tra", "123456"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String child = childLogin(slotBody, "123456");
-        String slotId = subject(child);
+        String code = extractSlotCode(slotBody);
 
-        mvc.perform(post("/api/slots/" + slotId + "/return")
-                        .header("Authorization", "Bearer " + parent))
+        mvc.perform(post("/api/groups/" + groupId + "/close").header("Authorization", "Bearer " + parent))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/learner/dashboard").header("Authorization", "Bearer " + child))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3003));
+        mvc.perform(post("/api/slots/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"" + code + "\",\"pin\":\"123456\"}"))
                 .andExpect(status().isGone())
                 .andExpect(jsonPath("$.code").value(3009));
     }
 
-    /** Slot đã xoá sạch (WIPED): 3007 (404) — không phải 3009. */
+    /**
+     * Slot đã xoá (WIPED): token trẻ 401/3003 ngay ở decoder; login bằng mã cũ 3007 (mã còn trong DB
+     * nhưng không cấp lại — Q14).
+     */
     @Test
-    void wipedSlotGets3007() throws Exception {
+    void wipedSlotKillsTokenAndLoginSays3007() throws Exception {
         String parent = parentToken("dashxoasach");
         String groupId = openGroup(parent, "Nha xoa", "FAMILY");
         String slotBody = mvc.perform(slotRequest(parent, groupId, "Be Xoa", "123456"))
@@ -180,12 +190,18 @@ class LearnerDashboardFlowTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String child = childLogin(slotBody, "123456");
         String slotId = subject(child);
+        String code = extractSlotCode(slotBody);
 
         mvc.perform(delete("/api/slots/" + slotId)
                         .header("Authorization", "Bearer " + parent))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/learner/dashboard").header("Authorization", "Bearer " + child))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3003));
+        mvc.perform(post("/api/slots/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"" + code + "\",\"pin\":\"123456\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(3007));
     }
@@ -256,7 +272,7 @@ class LearnerDashboardFlowTest {
         return post("/api/groups")
                 .header("Authorization", "Bearer " + jwt)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\"}");
+                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\",\"plannedSize\":40}");
     }
 
     private static MockHttpServletRequestBuilder slotRequest(String jwt, String groupId,

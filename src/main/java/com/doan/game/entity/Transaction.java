@@ -78,8 +78,17 @@ public class Transaction {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    /** Số tháng của đơn — chỉ còn ở dòng CŨ; đơn mới (gói vĩnh viễn) để NULL. */
     @Column(name = "months")
     private Integer months;
+
+    /**
+     * Số pack của đơn {@code purpose = ADDON} (18/11/2026). NULL với đơn mua gói gốc. Số slot cộng
+     * thêm = packs × (2 hoặc 20); chép vào đơn để webhook gọi lại vẫn cấp đúng phần đã mua dù admin
+     * đổi cách chia pack sau đó.
+     */
+    @Column(name = "packs")
+    private Integer packs;
 
     @Column(name = "note", length = 255)
     private String note;

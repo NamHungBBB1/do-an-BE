@@ -63,4 +63,12 @@ public class LearnerSlot {
 
     @Column(name = "personalization", columnDefinition = "text")
     private String personalization;
+
+    /**
+     * Phiên bản token trẻ (18/11/2026). Tăng mỗi lần login thành công hoặc khi xoá slot; token mang
+     * `tv` cũ hơn thì RevocationAwareJwtDecoder trả 401. Dùng Integer + khởi tạo 0 vì bảng production
+     * đã có dòng: cột mới thêm vào là nullable, Hibernate đọc NULL phải coi như 0.
+     */
+    @Column(name = "token_version")
+    private Integer tokenVersion = 0;
 }

@@ -4,6 +4,7 @@ import com.doan.game.DTO.request.ChangePinRequest;
 import com.doan.game.DTO.request.CreateSlotRequest;
 import com.doan.game.DTO.request.CreateSlotsRequest;
 import com.doan.game.DTO.request.SlotLoginRequest;
+import com.doan.game.DTO.request.UpdateSlotRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.SlotResponse;
 import com.doan.game.DTO.response.SlotLoginResponse;
@@ -50,16 +51,16 @@ public class SlotController {
     }
 
     /**
-     * Trả slot: ACTIVE → ARCHIVED, giữ tên và mã (mã hết hiệu lực — trẻ login lại được 3009),
-     * trả lại chỗ cho hạn mức. Chỉ chủ nhóm, slot còn ACTIVE.
+     * Đổi tên slot, kèm PIN mới nếu có (Q18). Chỉ chủ nhóm; slot phải ACTIVE; tên không trùng slot
+     * ACTIVE khác trong nhóm (1001).
      */
-    @PostMapping("/{id}/return")
-    public ApiResponse<Void> returnSlot(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        slotService.returnSlot(UUID.fromString(jwt.getSubject()), id);
-        return ApiResponse.ok();
+    @PatchMapping("/{id}")
+    public ApiResponse<SlotResponse> renameSlot(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                                @RequestBody UpdateSlotRequest req) {
+        return ApiResponse.ok(slotService.renameSlot(UUID.fromString(jwt.getSubject()), id, req));
     }
 
-    /** Xoá sạch: WIPED — bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ. */
+    /** Xoá ẩn danh: WIPED — bỏ tên, PIN, cá nhân hoá, badge; giữ mã + dòng + kết quả học cho báo cáo. */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> wipeSlot(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         slotService.wipeSlot(UUID.fromString(jwt.getSubject()), id);

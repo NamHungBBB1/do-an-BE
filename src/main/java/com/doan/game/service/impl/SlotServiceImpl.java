@@ -3,6 +3,7 @@ package com.doan.game.service.impl;
 import com.doan.game.DTO.request.ChangePinRequest;
 import com.doan.game.DTO.request.CreateSlotRequest;
 import com.doan.game.DTO.request.CreateSlotsRequest;
+import com.doan.game.DTO.request.UpdateSlotRequest;
 import com.doan.game.DTO.response.SlotResponse;
 import com.doan.game.DTO.response.SlotLoginResponse;
 import com.doan.game.DTO.response.SlotProfileResponse;
@@ -15,9 +16,12 @@ import com.doan.game.enums.SlotStatus;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.SlotMapper;
+import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
+import com.doan.game.service.SlotQuota;
+import com.doan.game.service.SlotQuotaService;
 import com.doan.game.service.SlotService;
 import com.doan.game.service.TokenService;
 import lombok.RequiredArgsConstructor;
@@ -34,11 +38,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều
- * slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15
- * phút (tính từ lockedUntil, không có job mở khoá).
+ * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot
+ * một lần cho lớp; xoá ẩn danh, đổi tên / PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút
+ * (tính từ lockedUntil, không có job mở khoá).
  *
- * CÓ RUỘT tất cả hàm (loginSlot 02/10, openSlot 07/10, PR 2a đọc/trả/xoá/đổi PIN, PR 2b bulk).
+ * CÓ RUỘT tất cả hàm (loginSlot 02/10, openSlot 07/10, PR 2a đọc/xoá/đổi PIN, PR 2b bulk, PATCH tên
+ * 18/11/2026).
  */
 @Service
 @RequiredArgsConstructor
@@ -59,8 +64,10 @@ public class SlotServiceImpl implements SlotService {
 
     private final LearnerSlotRepository slotRepo;
     private final LearnerGroupRepository groupRepo;
+    private final AccountRepository accountRepo;
     private final TokenService tokenService;
     private final EntitlementService entitlementService;
+    private final SlotQuotaService quotaService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -70,7 +77,7 @@ public class SlotServiceImpl implements SlotService {
      * Thứ tự kiểm (Hưng chốt 07/10): nhóm tồn tại (1003) → nhóm là của người gọi (3004)
      * → nhóm chưa đóng (5002) → gói còn hạn đúng loại (3005, Hưng chốt thêm 07/10) →
      * nhóm CLASS đã có consent (5003, FAMILY không cần) → tên / PIN hợp lệ (1001) →
-     * còn chỗ (3006).
+     * ví còn lượt (3006) và lớp còn sĩ số (3026, 17/11/2026).
      *
      * Kiểm gói TẠI ĐÂY (PR 2b): mở nhóm đã kiểm rồi, nhưng gói có thể hết hạn sau khi mở nhóm —
      * đúng loại FAMILY→PARENT, CLASS→TEACHER như openGroup. Slot cũ vẫn chơi bình thường.
@@ -97,11 +104,14 @@ public class SlotServiceImpl implements SlotService {
             throw new AppException(ErrorCode.GROUP_CONSENT_REQUIRED);
         }
         validateSlotInput(req.displayName(), req.pin(), req.badge());
+        requireNameFree(group.getId(), req.displayName().trim(), null);
 
-        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
-        if (slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) >= slotLimit) {
-            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
-        }
+        // 17/11/2026: hạn mức nằm trên TÀI KHOẢN. Khoá dòng tài khoản trước khi đếm để hai request mở
+        // slot ở HAI lớp khác nhau không cùng đọc "còn 1 lượt" rồi cùng chèn (khoá nhóm chỉ tuần tự
+        // hoá trong cùng một lớp). Thứ tự khoá: nhóm → tài khoản, mọi đường đều vậy nên không deadlock.
+        accountRepo.lockById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + callerId));
+        requireSlotRoom(callerId, group, 1);
 
         LearnerSlot slot = new LearnerSlot();
         slot.setGroup(group);
@@ -152,14 +162,19 @@ public class SlotServiceImpl implements SlotService {
             throw new AppException(ErrorCode.GROUP_CONSENT_REQUIRED);
         }
         // Kiểm dữ liệu TRƯỚC hạn mức: lô không hợp lệ thì 1001, lô hợp lệ nhưng nhiều quá thì 3006.
+        java.util.Set<String> names = new java.util.HashSet<>();
         for (CreateSlotRequest item : items) {
             validateSlotInput(item.displayName(), item.pin(), item.badge());
+            String name = item.displayName().trim();
+            if (!names.add(name)) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "displayName: trùng tên trong cùng lô (" + name + ")");
+            }
+            requireNameFree(bulkGroupId, name, null);
         }
-        int slotLimit = group.getSlotLimit() == null ? 0 : group.getSlotLimit();
-        long willHave = slotRepo.countByGroup_IdAndStatus(groupId, SlotStatus.ACTIVE) + items.size();
-        if (willHave > slotLimit) {
-            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
-        }
+        accountRepo.lockById(callerId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có tài khoản " + callerId));
+        requireSlotRoom(callerId, group, items.size());
 
         Instant now = Instant.now(clock);
         List<SlotResponse> result = new ArrayList<>(items.size());
@@ -188,6 +203,25 @@ public class SlotServiceImpl implements SlotService {
                 ? PlanKind.PARENT : PlanKind.TEACHER;
         if (!entitlementService.activePlans(callerId).contains(required)) {
             throw new AppException(ErrorCode.PLAN_REQUIRED);
+        }
+    }
+
+    /**
+     * Còn chỗ mở thêm {@code opening} slot không. CLASS: sĩ số lớp (3026) — chỗ này đã được GIỮ trong
+     * `reserved` của ví nên KHÔNG kiểm `free` lần nữa. FAMILY: ví là trần duy nhất (3006).
+     * Gọi SAU khi đã khoá dòng tài khoản.
+     */
+    private void requireSlotRoom(UUID callerId, LearnerGroup group, int opening) {
+        if (group.getContext() == LearningContext.CLASS && group.getSlotLimit() != null) {
+            long created = slotRepo.countByGroup_Id(group.getId());
+            if (created + opening > group.getSlotLimit()) {
+                throw new AppException(ErrorCode.CLASS_FULL);
+            }
+            return;
+        }
+        SlotQuota quota = quotaService.quota(callerId, group.getContext());
+        if (quota.free() < opening) {
+            throw new AppException(ErrorCode.SLOT_LIMIT_REACHED);
         }
     }
 
@@ -236,27 +270,27 @@ public class SlotServiceImpl implements SlotService {
     }
 
     /**
-     * Trả slot: ACTIVE → ARCHIVED, ghi archivedAt. Giữ nguyên tên và mã — chỉ là trạng thái đổi,
-     * trẻ dùng lại mã thì loginSlot trả 3009 (đã có từ trước). Trả lại chỗ cho hạn mức vì
-     * đếm slot đang làm trên ACTIVE (ERD mục 5).
+     * Tên chưa bị slot ACTIVE khác trong nhóm dùng (Q9, 18/11/2026). Chỉ so slot ACTIVE: slot đã xoá
+     * mất tên nên không giữ chỗ. {@code exceptSlotId} = slot đang sửa tên (PATCH), null khi mở mới.
      */
-    @Override
-    @Transactional
-    public void returnSlot(UUID callerId, UUID slotId) {
-        LearnerSlot slot = requireOwned(callerId, slotId);
-        requireStatus(slot, SlotStatus.ACTIVE);
-        slot.setStatus(SlotStatus.ARCHIVED);
-        slot.setArchivedAt(Instant.now(clock));
-        slotRepo.save(slot);
+    private void requireNameFree(UUID groupId, String displayName, UUID exceptSlotId) {
+        boolean taken = exceptSlotId == null
+                ? slotRepo.existsByGroup_IdAndStatusAndDisplayName(groupId, SlotStatus.ACTIVE, displayName)
+                : slotRepo.existsByGroup_IdAndStatusAndDisplayNameAndIdNot(groupId, SlotStatus.ACTIVE,
+                        displayName, exceptSlotId);
+        if (taken) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "displayName: đã có slot khác trong nhóm trùng tên");
+        }
     }
 
     /**
-     * Xoá sạch: WIPED, bỏ tên, mã và PIN — nhưng GIỮ dòng cho báo cáo cũ (ERD mục 5). Mã về NULL
-     * nên trẻ không còn login được (findByCode không ra → 3007). Badge giữ lại: đó là cột phân
-     * nhóm / báo cáo, không phải dữ liệu định danh của trẻ.
+     * Xoá slot = ẨN DANH HOÁ THẬT (Q14, 18/11/2026): bỏ tên, PIN, cá nhân hoá, badge — dữ liệu trẻ em
+     * phải xoá được theo luật. GIỮ {@code code} trong DB để mã cũ không cấp lại cho bé khác (login tra
+     * ra WIPED → 3007). Giữ dòng + 8 bảng kết quả học, nên báo cáo cũ vẫn đủ số, chỉ mất danh tính.
      *
-     * Nhận cả ACTIVE lẫn ARCHIVED — phụ huynh trả slot xong vẫn xoá được tên con; WIPED thì 5004
-     * (Hưng chốt 07/10).
+     * {@code tokenVersion += 1}: token trẻ đang cầm chết ngay (401). Nhận cả ACTIVE lẫn ARCHIVED
+     * (nhóm đã đóng vẫn xoá được tên con); WIPED thì 5004.
      */
     @Override
     @Transactional
@@ -265,13 +299,49 @@ public class SlotServiceImpl implements SlotService {
         if (slot.getStatus() == SlotStatus.WIPED) {
             throw new AppException(ErrorCode.SLOT_NOT_ACTIVE);
         }
+        int version = slot.getTokenVersion() == null ? 0 : slot.getTokenVersion();
         slot.setStatus(SlotStatus.WIPED);
         slot.setWipedAt(Instant.now(clock));
-        slot.setCode(null);
-        slot.setPinHash(null);
         slot.setDisplayName(null);
+        slot.setPinHash(null);
         slot.setPersonalization(null);   // khảo sát cá nhân hoá là dữ liệu của trẻ (spec 11/11)
+        slot.setBadge(null);             // badge là nhãn của trẻ, không phải số liệu báo cáo
+        slot.setTokenVersion(version + 1);
+        // code KHÔNG xoá — giữ chỗ để không cấp lại cho bé khác; API không trả (SlotMapper).
         slotRepo.save(slot);
+    }
+
+    /**
+     * Đổi tên slot (+ PIN tuỳ chọn), Q18 18/11/2026. Chỉ slot ACTIVE; tên mới không trùng slot ACTIVE
+     * khác trong nhóm. Có PIN mới thì reset luôn bộ đếm sai / thời khoá như changePin.
+     */
+    @Override
+    @Transactional
+    public SlotResponse renameSlot(UUID callerId, UUID slotId, UpdateSlotRequest req) {
+        LearnerSlot slot = requireOwned(callerId, slotId);
+        requireStatus(slot, SlotStatus.ACTIVE);
+        String displayName = req == null ? null : req.displayName();
+        if (displayName == null || displayName.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: bắt buộc");
+        }
+        displayName = displayName.trim();
+        if (displayName.length() > 40) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "displayName: tối đa 40 ký tự");
+        }
+        requireNameFree(slot.getGroup().getId(), displayName, slot.getId());
+
+        String pin = req.pin();
+        if (pin != null && !pin.isBlank()) {
+            if (!pin.matches("\\d{6}")) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED, "pin: PIN gồm 6 chữ số");
+            }
+            slot.setPinHash(passwordEncoder.encode(pin));
+            slot.setFailedAttempts(0);
+            slot.setLockedUntil(null);
+        }
+        slot.setDisplayName(displayName);
+        slotRepo.save(slot);
+        return SlotMapper.toResponse(slot, false);
     }
 
     /**
@@ -294,9 +364,9 @@ public class SlotServiceImpl implements SlotService {
     }
 
     /**
-     * Cửa chung cho trả / xoá / đổi PIN: slot phải có (3007) → là của người gọi (3004, kiểm qua
+     * Cửa chung cho xoá / đổi PIN / đổi tên: slot phải có (3007) → là của người gọi (3004, kiểm qua
      * chủ nhóm). Thứ tự này cố ý: người khác không được biết slot của người khác có tồn tại hay
-     * đang ở trạng thái gì. Trạng thái ACTIVE kiểm riêng từng việc (5004).
+     * đang ở trạng thái gì. Trạng thái kiểm riêng từng việc (5004).
      */
     private LearnerSlot requireOwned(UUID callerId, UUID slotId) {
         LearnerSlot slot = slotRepo.findById(slotId)
@@ -348,7 +418,11 @@ public class SlotServiceImpl implements SlotService {
         }
 
         slotRepo.resetFailedPin(s.getId());
-        TokenResponse t = tokenService.issueForSlot(s.getId());
+        // 18/11/2026: login mới làm token cũ chết (chống nhiều em dùng chung một slot). Đọc lại số
+        // MỚI sau câu UPDATE nguyên tử rồi mới phát token.
+        slotRepo.bumpTokenVersion(s.getId());
+        Integer version = slotRepo.findTokenVersionById(s.getId());
+        TokenResponse t = tokenService.issueForSlot(s.getId(), version == null ? 0 : version);
         LearnerGroup g = s.getGroup();
         return new SlotLoginResponse(t.accessToken(), t.refreshToken(), t.expiresIn(), new SlotProfileResponse(
                 s.getId(), s.getDisplayName(), s.getBadge(),

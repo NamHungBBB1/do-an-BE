@@ -1,5 +1,6 @@
 package com.doan.game.service;
 
+import com.doan.game.DTO.request.BuyAddonRequest;
 import com.doan.game.DTO.request.BuyPlanRequest;
 import com.doan.game.DTO.response.PageResponse;
 import com.doan.game.DTO.response.PaymentResponse;
@@ -28,6 +29,12 @@ public interface PaymentService {
 
     PaymentResponse createPayment(UUID accountId, BuyPlanRequest req);
 
+    /**
+     * Mua gói slot thêm (pack) — chỉ chủ gói gốc cùng loại, {@code packs ≥ 1}, không trần số pack
+     * (trần là tổng tiền ≤ MAX_PRICE_VND). 18/11/2026.
+     */
+    PaymentResponse createAddonPayment(UUID accountId, BuyAddonRequest req);
+
     /** Chủ giao dịch xem trạng thái; PENDING thì hỏi lại PayOS ngay (FE poll tới khi PAID). */
     PaymentStatusResponse getPayment(UUID accountId, long orderCode);
 
@@ -44,9 +51,10 @@ public interface PaymentService {
 
     void sweepPendingTransactions();
 
-    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá và khoảng ngày, trả kèm tổng số trang. */
+    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá, khoảng ngày và cờ cần soát. */
     PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
-                                                            LocalDate from, LocalDate to, int page, int size);
+                                                            LocalDate from, LocalDate to, Boolean needsReview,
+                                                            int page, int size);
 
     /** Admin: chi tiết một giao dịch theo orderCode; không có → 4005. */
     TransactionDetailResponse getTransaction(long orderCode);

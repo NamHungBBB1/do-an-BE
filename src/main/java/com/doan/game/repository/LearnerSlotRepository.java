@@ -48,6 +48,32 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Chỗ trống = slotLimit − slot ACTIVE; ARCHIVED / WIPED không ăn chỗ. */
     long countByGroup_IdAndStatus(UUID groupId, SlotStatus status);
 
+    /** Mọi slot đã tạo trong một nhóm, KHÔNG lọc status — slot đã xoá vẫn ăn chỗ của lớp (18/11). */
+    long countByGroup_Id(UUID groupId);
+
+    /** Số slot đã tạo của tài khoản trong một loại nhóm, KHÔNG lọc status và KHÔNG mốc ngày. */
+    @Query("select count(s) from LearnerSlot s "
+            + "where s.group.owner.id = :ownerId and s.group.context = :context")
+    long countCreatedByOwnerAndContext(@Param("ownerId") UUID ownerId,
+                                       @Param("context") com.doan.game.enums.LearningContext context);
+
+    /** Số slot đã xoá (WIPED) của tài khoản trong một loại nhóm — chỉ để hiển thị ở ví. */
+    @Query("select count(s) from LearnerSlot s "
+            + "where s.group.owner.id = :ownerId and s.group.context = :context and s.status = :status")
+    long countByOwnerAndContextAndStatus(@Param("ownerId") UUID ownerId,
+                                         @Param("context") com.doan.game.enums.LearningContext context,
+                                         @Param("status") SlotStatus status);
+
+    /**
+     * Tên đã có slot ACTIVE khác trong cùng nhóm chưa (Q9, 18/11/2026). Chỉ so slot ACTIVE: slot
+     * WIPED đã bị xoá tên nên không giữ chỗ tên.
+     */
+    boolean existsByGroup_IdAndStatusAndDisplayName(UUID groupId, SlotStatus status, String displayName);
+
+    /** Như trên nhưng trừ chính slot đang sửa tên (PATCH /api/slots/{id}). */
+    boolean existsByGroup_IdAndStatusAndDisplayNameAndIdNot(UUID groupId, SlotStatus status,
+                                                           String displayName, UUID id);
+
     /** Đếm slot toàn hệ thống theo trạng thái (dashboard). */
     long countByStatus(SlotStatus status);
 
@@ -80,6 +106,20 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     @Modifying(clearAutomatically = true)
     @Query("update LearnerSlot s set s.failedAttempts = 0, s.lockedUntil = null where s.id = :id")
     int resetFailedPin(@Param("id") UUID id);
+
+    /**
+     * Login thành công: tăng phiên bản token bằng MỘT câu UPDATE nguyên tử (18/11/2026) — trẻ thứ hai
+     * đăng nhập là token của trẻ trước chết ngay, chặn cảnh nhiều em dùng chung một slot. Mốc NULL của
+     * dữ liệu cũ coi như 0.
+     */
+    @Transactional
+    @Modifying(clearAutomatically = true)
+    @Query("update LearnerSlot s set s.tokenVersion = coalesce(s.tokenVersion, 0) + 1 where s.id = :id")
+    int bumpTokenVersion(@Param("id") UUID id);
+
+    /** Đọc phiên bản token hiện tại — phát token ngay sau bump nên phải lấy số MỚI trong DB. */
+    @Query("select s.tokenVersion from LearnerSlot s where s.id = :id")
+    Integer findTokenVersionById(@Param("id") UUID id);
 
     /**
      * Đóng nhóm: mọi slot ACTIVE → ARCHIVED bằng một câu, không nạp 40 entity rồi save từng dòng (save cả

@@ -1,8 +1,11 @@
 package com.doan.game.security;
 
 import com.doan.game.entity.Account;
+import com.doan.game.entity.LearnerSlot;
+import com.doan.game.enums.SlotStatus;
 import com.doan.game.repository.AccountRepository;
 import com.doan.game.repository.AccountRoleRepository;
+import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.service.EntitlementService;
 import com.doan.game.service.TokenService;
 import org.springframework.security.oauth2.jwt.BadJwtException;
@@ -27,7 +30,9 @@ import java.util.UUID;
  * mua gói xong có quyền ngay, gói hết hạn hay bị thu ADMIN thì mất quyền ngay, mà không ai bị
  * đá ra phải đăng nhập lại.
  *
- * Token trẻ (typ=SLOT) bỏ qua cả ba: trẻ không có Account để mà so.
+ * Token trẻ (typ=SLOT) kiểm hai điều kiện RIÊNG (18/11/2026): slot còn ACTIVE và `tv` trùng
+ * `LearnerSlot.tokenVersion`. Xoá slot (WIPED) hay đóng lớp (ARCHIVED) là token chết ngay; login lần
+ * hai cũng tăng `tv` nên token của lượt trước 401 — chặn nhiều em dùng chung một slot.
  *
  * Đắt hơn decoder thường (2 câu truy vấn mỗi request), nhưng đó là cái giá của việc thu hồi.
  * Không kiểm thì đổi mật khẩu chẳng đuổi được ai.
@@ -38,16 +43,18 @@ public class RevocationAwareJwtDecoder implements JwtDecoder {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository accountRoleRepo;
     private final EntitlementService entitlementService;
+    private final LearnerSlotRepository slotRepo;
     /** Bật: token không có claim ctx=INTERNAL (phát ở cửa khách hàng) mất vai nội bộ — xem AuthServiceImpl. */
     private final boolean internalLoginRequired;
 
     public RevocationAwareJwtDecoder(JwtDecoder delegate, AccountRepository accountRepo,
                               AccountRoleRepository accountRoleRepo, EntitlementService entitlementService,
-                              boolean internalLoginRequired) {
+                              LearnerSlotRepository slotRepo, boolean internalLoginRequired) {
         this.delegate = delegate;
         this.accountRepo = accountRepo;
         this.accountRoleRepo = accountRoleRepo;
         this.entitlementService = entitlementService;
+        this.slotRepo = slotRepo;
         this.internalLoginRequired = internalLoginRequired;
     }
 
@@ -55,6 +62,11 @@ public class RevocationAwareJwtDecoder implements JwtDecoder {
     public Jwt decode(String token) {
         // Sai chữ ký, sai khoá, hết hạn: ném ngay tại đây, không đụng tới database.
         Jwt jwt = delegate.decode(token);
+
+        if ("SLOT".equals(jwt.getClaimAsString("typ"))) {
+            verifySlotToken(jwt);
+            return jwt;
+        }
 
         if (!"ACCOUNT".equals(jwt.getClaimAsString("typ"))) {
             return jwt;
@@ -93,6 +105,29 @@ public class RevocationAwareJwtDecoder implements JwtDecoder {
                     c.put("scope", String.join(" ", current));
                 })
                 .build();
+    }
+
+    /**
+     * Token trẻ: slot phải tồn tại, còn ACTIVE, và `tv` khớp. Token phát trước 18/11/2026 không có
+     * `tv` nên cũng bị từ chối — trẻ đăng nhập lại là xong, còn hơn để token sống quá hạn thu hồi.
+     */
+    private void verifySlotToken(Jwt jwt) {
+        UUID id;
+        try {
+            id = UUID.fromString(jwt.getSubject());
+        } catch (RuntimeException e) {
+            throw new BadJwtException("subject không phải UUID", e);
+        }
+        LearnerSlot slot = slotRepo.findById(id)
+                .orElseThrow(() -> new BadJwtException("slot không còn tồn tại"));
+        if (slot.getStatus() != SlotStatus.ACTIVE) {
+            throw new BadJwtException("slot không còn hoạt động");
+        }
+        Integer tv = tokenVersionClaim(jwt);
+        int current = slot.getTokenVersion() == null ? 0 : slot.getTokenVersion();
+        if (tv == null || tv != current) {
+            throw new BadJwtException("token trẻ đã bị thu hồi");
+        }
     }
 
     /**

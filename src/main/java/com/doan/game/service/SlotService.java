@@ -6,7 +6,7 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; trả, xoá sạch, đổi PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
+ * Slot của trẻ: AVAILABLE không có dòng, mở slot (tên + PIN) mới tạo dòng và sinh mã; mở nhiều slot một lần cho lớp; xoá ẩn danh, đổi tên / PIN; trẻ đăng nhập bằng mã + PIN, sai 5 lần khoá 15 phút (tính từ lockedUntil, không có job mở khoá).
  *
  * Bảng phụ trách: LearnerSlot
  */
@@ -29,14 +29,14 @@ public interface SlotService {
     java.util.List<SlotResponse> openSlots(UUID callerId, CreateSlotsRequest req);
 
     /**
-     * Trả slot (ACTIVE → ARCHIVED, giữ tên và mã nhưng mã hết hiệu lực — 3009 khi trẻ dùng lại),
-     * xoá sạch (WIPED: bỏ tên, mã, PIN, giữ dòng cho báo cáo cũ — nhận cả ACTIVE lẫn ARCHIVED,
-     * WIPED thì 5004 — Hưng chốt 07/10), đổi PIN (vẫn ACTIVE, reset bộ đếm sai và thời khoá).
-     * Cả ba chỉ chủ nhóm của slot (3004). 07/10 (Kidz chốt phạm vi PR 2).
+     * Xoá ẩn danh (WIPED: bỏ tên, PIN, cá nhân hoá, badge; giữ mã + dòng + kết quả học — nhận cả
+     * ACTIVE lẫn ARCHIVED, WIPED thì 5004), đổi tên + PIN (PATCH, chỉ slot ACTIVE, tên không trùng
+     * slot ACTIVE khác trong nhóm), đổi PIN (vẫn ACTIVE, reset bộ đếm sai và thời khoá). Cả ba chỉ
+     * chủ nhóm của slot (3004). 18/11/2026 (Q14/Q18).
      */
-    void returnSlot(UUID callerId, UUID slotId);
-
     void wipeSlot(UUID callerId, UUID slotId);
+
+    SlotResponse renameSlot(UUID callerId, UUID slotId, UpdateSlotRequest req);
 
     void changePin(UUID callerId, UUID slotId, ChangePinRequest req);
 

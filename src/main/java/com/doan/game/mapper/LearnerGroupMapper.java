@@ -21,11 +21,20 @@ public final class LearnerGroupMapper {
 
     /** slotUsed phải do service đếm (slot ACTIVE) — mapper không tự tra repo. */
     public static LearnerGroupResponse toResponse(LearnerGroup source, int slotUsed) {
+        return toResponse(source, slotUsed, source.getSlotLimit() == null ? 0 : source.getSlotLimit());
+    }
+
+    /**
+     * slotLimit hiệu lực do service tính (17/11/2026): FAMILY = ví của tài khoản (base + add-on) nên
+     * mua thêm slot là con số này tự lớn; CLASS = sĩ số giáo viên đặt, bỏ trống thì lấy ví còn lại.
+     * Không đọc thẳng learner_group.slot_limit vì cột đó chỉ là sĩ số khai báo của lớp.
+     */
+    public static LearnerGroupResponse toResponse(LearnerGroup source, int slotUsed, int slotLimit) {
         return new LearnerGroupResponse(
                 source.getId(),
                 source.getName(),
                 source.getContext() == null ? null : source.getContext().name(),
-                source.getSlotLimit() == null ? 0 : source.getSlotLimit(),
+                slotLimit,
                 slotUsed,
                 source.getConsentConfirmedAt() != null,
                 source.getClosedAt(),

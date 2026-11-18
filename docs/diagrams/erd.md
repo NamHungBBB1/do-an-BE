@@ -11,7 +11,7 @@ Six clusters; each line is the relationship between the lead entities (bold).
 
 ```mermaid
 flowchart LR
-    pay["<b>Subscription & payment</b><br/>Transaction<br/>Plan<br/>Entitlement"]
+    pay["<b>Subscription & payment</b><br/>Transaction<br/>Plan<br/>Entitlement<br/>SlotAddon<br/>SlotAddonPrice"]
     acc["<b>Account & access</b><br/>Account<br/>Credential<br/>VerificationToken<br/>AccountRole<br/>RoleGrantLog"]
     con["<b>Content studio</b><br/>ChapterDraft<br/>Chapter<br/>GameRelease<br/>ReleaseChapter<br/>Asset<br/>AiKey"]
     rep["<b>Reporting</b><br/>GroupReport<br/>GroupReportRow<br/>DailySummary<br/>ConceptMastery"]
@@ -27,7 +27,7 @@ flowchart LR
 
 ## 2. Conceptual — all entities
 
-28 entities, names and relationships only.
+30 entities, names and relationships only.
 
 ```mermaid
 erDiagram
@@ -40,6 +40,9 @@ erDiagram
     Account ||--o{ Entitlement : "owns"
     Account |o--o{ Entitlement : "grants"
     Transaction |o--o| Entitlement : "activates"
+    Transaction |o--o| SlotAddon : "pays for"
+    Account ||--o{ SlotAddon : "owns"
+    Account |o--o{ SlotAddonPrice : "updates"
     Plan ||--o{ Transaction : "prices"
     Account ||--o{ ChapterDraft : "edits"
     Account |o--o{ ChapterDraft : "reviews"
@@ -121,6 +124,7 @@ erDiagram
         text kind FK
         text purpose
         integer amount
+        integer packs
         text status
         datetime createdAt
         datetime paidAt
@@ -130,9 +134,24 @@ erDiagram
         text bankAccountName
         text transferNote
         datetime expiresAt
-        integer months
+        integer months "legacy — đơn cũ"
         text note
         boolean needsReview
+    }
+    SlotAddonPrice {
+        id id PK
+        text kind UK
+        integer price
+        datetime updatedAt
+        id updatedById FK
+    }
+    SlotAddon {
+        id id PK
+        id accountId FK
+        text kind
+        integer slots
+        id transactionId FK, UK
+        datetime createdAt
     }
     Entitlement {
         id id PK
@@ -183,13 +202,19 @@ erDiagram
     Account ||..o{ Entitlement : "owns"
     Account |o..o{ Entitlement : "grants"
     Transaction |o..o| Entitlement : "activates"
+    Transaction |o..o| SlotAddon : "pays for"
+    Account ||..o{ SlotAddon : "owns"
+    Account |o..o{ SlotAddonPrice : "updates"
     Plan ||..o{ Transaction : "prices"
 ```
 
 Constraints:
 
 - `Transaction`: FK kind references Plan.kind (UQ)
+- `Transaction`: CHECK (purpose IN ('NEW', 'RENEW', 'ADDON')) — `RENEW` chỉ còn ở dòng cũ
 - `Entitlement`: CHECK (exactly one of transactionId, grantedById is not NULL)
+- `SlotAddonPrice`: UNIQUE (kind) — chưa có dòng thì chưa bán được pack
+- `SlotAddon`: UNIQUE (transactionId) — một đơn chỉ cấp một lần (webhook trùng)
 - `Credential`: UNIQUE (provider, subject)
 - `AccountRole`: UNIQUE (accountId, role)
 - `AccountRole`: CHECK (role IN ('ADMIN', 'GAME_EDITOR', 'GAME_REVIEWER', 'GAME_MANAGER'))
@@ -601,20 +626,39 @@ erDiagram
         timestamptz expires_at
         varchar(512) qr_code
         varchar(64) transfer_note
-        integer months
+        integer months "legacy — đơn cũ"
+        integer packs "đơn ADDON: số pack"
         boolean needs_review "DEFAULT false NOT NULL"
         varchar(255) note
+    }
+    slot_addon_price {
+        uuid id PK "NOT NULL"
+        varchar(255) kind UK
+        bigint price
+        timestamptz updated_at
+        uuid updated_by_id FK
+    }
+    slot_addon {
+        uuid id PK "NOT NULL"
+        timestamptz created_at
+        varchar(255) kind
+        integer slots
+        uuid account_id FK "NOT NULL"
+        uuid transaction_id FK, UK
     }
     account |o..o{ plan : ""
     account ||..o{ entitlement : ""
     account |o..o{ entitlement : ""
     account ||..o{ transaction : ""
+    account ||..o{ slot_addon : ""
+    account |o..o{ slot_addon_price : ""
     account ||..|{ credential : ""
     account ||..o{ verification_token : ""
     account ||..o{ account_role : ""
     account ||..o{ role_grant_log : ""
     account ||..o{ role_grant_log : ""
     transaction |o..o| entitlement : ""
+    transaction |o..o| slot_addon : ""
 ```
 
 Constraints:
@@ -628,8 +672,11 @@ Constraints:
 - `entitlement`: CHECK (kind IN ('PARENT', 'TEACHER'))
 - `entitlement`: CHECK (source IN ('ADMIN', 'PAYMENT'))
 - `transaction`: CHECK (kind IN ('PARENT', 'TEACHER'))
-- `transaction`: CHECK (purpose IN ('NEW', 'RENEW'))
+- `transaction`: CHECK (purpose IN ('NEW', 'RENEW', 'ADDON'))
 - `transaction`: CHECK (status IN ('FAILED', 'PAID', 'PENDING'))
+- `slot_addon_price`: UNIQUE (kind)
+- `slot_addon`: UNIQUE (transaction_id) — webhook gọi lại không cấp hai lần
+- `learner_slot`: `token_version` mặc định 0 (NULL của dữ liệu cũ coi như 0)
 
 ### Physical 2 — Learner groups and play
 
@@ -661,6 +708,7 @@ erDiagram
         timestamptz locked_until
         varchar(72) pin_hash
         varchar(255) status
+        integer token_version "DEFAULT 0 — tăng khi login / xoá slot"
         timestamptz wiped_at
         uuid group_id FK "NOT NULL"
     }

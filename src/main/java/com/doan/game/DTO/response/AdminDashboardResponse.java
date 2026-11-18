@@ -17,14 +17,17 @@ public record AdminDashboardResponse(Accounts accounts, Learners learners, Reven
     public record Learners(long active, long archived, long wiped) {
     }
 
-    /** paidTotal = mọi đơn PAID; paidLast30Days = đơn PAID có paidAt trong 30 ngày gần nhất. */
-    public record Revenue(long paidTotal, long paidLast30Days) {
+    /**
+     * paidTotal = mọi đơn PAID; paidBase = phần gói gốc (NEW, kèm RENEW của dòng cũ);
+     * paidAddon = phần pack slot thêm (ADDON); paidLast30Days = đơn PAID có paidAt trong 30 ngày gần nhất.
+     */
+    public record Revenue(long paidTotal, long paidBase, long paidAddon, long paidLast30Days) {
     }
 
     public record Transactions(long pending, long failed, long needsReview) {
     }
 
-    /** active = dòng gói đang chạy; expiringIn7Days = hết hạn trong 7 ngày tới. */
-    public record Plans(long active, long expiringIn7Days) {
+    /** active = dòng gói đang chạy. Gói vĩnh viễn nên không còn "sắp hết hạn 7 ngày" (18/11/2026). */
+    public record Plans(long active) {
     }
 }

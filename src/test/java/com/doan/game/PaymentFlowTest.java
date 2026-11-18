@@ -82,10 +82,12 @@ class PaymentFlowTest {
     private static final Pattern OTP_IN_MAIL = Pattern.compile(">(\\d{6})</p>");
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long PRICE = 2000;
-
+    /** Giá MỘT pack Parent (2 slot) — đặt ở setUp, webhook phải khớp tổng tiền packs × giá này. */
+    private static final long ADDON_PRICE = 1000;
     @Autowired MockMvc mvc;
     @Autowired AccountRepository accountRepo;
     @Autowired EntitlementRepository entitlementRepo;
+    @Autowired com.doan.game.repository.SlotAddonRepository addonRepo;
     @Autowired TransactionRepository transactionRepo;
     @Autowired AuthFlowTest.MailCatcher mailCatcher;
     @MockitoBean PaymentRequestsService payosRequests;
@@ -95,7 +97,11 @@ class PaymentFlowTest {
         mailCatcher.sent.clear();
         // Other classes share this H2 and may have changed the PARENT price: set it every time.
         mvc.perform(put("/api/admin/plans/parent").with(admin())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": " + PRICE + ", \"months\": 3}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": " + PRICE + "}"))
+                .andExpect(status().isOk());
+        // Pack Parent: 1.000 đ / 2 slot — mỗi lần chạy đặt lại vì các lớp test dùng chung H2.
+        mvc.perform(put("/api/admin/addon-price/parent").with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"price\": " + ADDON_PRICE + "}"))
                 .andExpect(status().isOk());
         when(payosRequests.create(any(CreatePaymentLinkRequest.class))).thenAnswer(inv -> {
             CreatePaymentLinkRequest r = inv.getArgument(0);
@@ -142,7 +148,8 @@ class PaymentFlowTest {
             assertThat(e.getSource()).isEqualTo(EntitlementSource.PAYMENT);
             LocalDate today = LocalDate.now(ClockConfig.VN);
             assertThat(e.getStartsOn()).isEqualTo(today);
-            assertThat(e.getExpiresOn()).isEqualTo(today.plusMonths(3).minusDays(1));
+            // Gói vĩnh viễn (18/11/2026): sentinel 9999-12-31, không còn cộng số tháng của đơn.
+            assertThat(e.getExpiresOn()).isEqualTo(LocalDate.of(9999, 12, 31));
         });
 
         // Receipt mail went to the buyer after commit.
@@ -291,6 +298,13 @@ class PaymentFlowTest {
                         org.hamcrest.Matchers.containsString("1000"))));
         // Filter by another status: the order is not there.
         mvc.perform(get("/api/admin/transactions").param("status", "PAID").param("size", "100").with(admin()))
+                .andExpect(jsonPath(row).isEmpty());
+        // 18/11/2026: hàng đợi soát tay — needsReview=true chỉ trả đơn cần đối soát.
+        mvc.perform(get("/api/admin/transactions").param("needsReview", "true").param("size", "100").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".needsReview").value(true));
+        mvc.perform(get("/api/admin/transactions").param("needsReview", "false")
+                        .param("q", String.valueOf(orderCode)).with(admin()))
                 .andExpect(jsonPath(row).isEmpty());
         // A regular account cannot read the admin list.
         mvc.perform(get("/api/admin/transactions").header("Authorization", "Bearer " + buyer.token()))
@@ -449,6 +463,48 @@ class PaymentFlowTest {
         verify(payosRequests, never()).cancel(anyLong(), anyString());
     }
 
+    // ------------------------------------------------------------------ add-on (18/11/2026)
+    /**
+     * Q16: mua pack 3 lần × 2 slot. Đã có gói gốc → tạo đơn ADDON; webhook (ký thật) cấp đúng 6 slot
+     * add-on, ví lên 10; webhook gọi lại không cộng lần hai; mua gói gốc lần nữa bị 4008.
+     */
+    @Test
+    void buyAddonThenWebhookGrantsSlotsOnceAndPlanCannotBeBoughtTwice() throws Exception {
+        Buyer buyer = buyer("addon");
+        long planOrder = buy(buyer.token());
+        mvc.perform(webhook(signedWebhook(planOrder, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+
+        long addonOrder = buyAddon(buyer.token(), 3);
+        mvc.perform(webhook(signedWebhook(addonOrder, 3 * ADDON_PRICE, "00", CHECKSUM_KEY)))
+                .andExpect(status().isOk());
+        // PayOS gửi lại y hệt: slot_addon.transaction_id UNIQUE nên không cộng thêm.
+        mvc.perform(webhook(signedWebhook(addonOrder, 3 * ADDON_PRICE, "00", CHECKSUM_KEY)))
+                .andExpect(status().isOk());
+
+        List<com.doan.game.entity.SlotAddon> addons = addonRepo.findByAccount_IdOrderByCreatedAtDesc(buyer.id());
+        assertThat(addons).singleElement().satisfies(a -> {
+            assertThat(a.getKind()).isEqualTo(PlanKind.PARENT);
+            assertThat(a.getSlots()).isEqualTo(6);
+        });
+        mvc.perform(get("/api/me/quota").header("Authorization", "Bearer " + buyer.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result[0].extra").value(6))
+                .andExpect(jsonPath("$.result[0].limit").value(10));
+
+        // Dashboard tách doanh thu: pack nằm ở paidAddon, gói gốc ở paidBase (18/11/2026).
+        mvc.perform(get("/api/admin/dashboard").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.revenue.paidAddon")
+                        .value(greaterThanOrEqualTo(Math.toIntExact(3 * ADDON_PRICE))))
+                .andExpect(jsonPath("$.result.revenue.paidBase").value(greaterThanOrEqualTo(Math.toIntExact(PRICE))));
+
+        // Gói gốc chỉ mua một lần: đã có (vĩnh viễn) → 4008, phải mua pack.
+        mvc.perform(post("/api/payments").header("Authorization", "Bearer " + buyer.token())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"PARENT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(4008));
+    }
+
     // ------------------------------------------------------------------ helpers
     private record Buyer(UUID id, String email, String token) {}
 
@@ -464,6 +520,18 @@ class PaymentFlowTest {
         long orderCode = MAPPER.readTree(body).path("result").path("orderCode").asLong();
         assertThat(transactionRepo.findByOrderCode(orderCode).orElseThrow().getStatus().name()).isEqualTo("PENDING");
         return orderCode;
+    }
+
+    /** POST /api/payments/addon: đơn ADDON với tổng tiền = packs × giá pack; trả orderCode. */
+    private long buyAddon(String token, int packs) throws Exception {
+        String body = mvc.perform(post("/api/payments/addon").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"PARENT\",\"packs\":" + packs + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.amount").value(packs * ADDON_PRICE))
+                .andExpect(jsonPath("$.result.qrCode").value("000201010212-fake-qr"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return MAPPER.readTree(body).path("result").path("orderCode").asLong();
     }
 
     /** A webhook body as PayOS sends it, signed with {@code key} (HMAC-SHA256 over the sorted data fields). */

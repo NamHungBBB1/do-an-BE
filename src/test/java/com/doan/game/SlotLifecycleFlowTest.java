@@ -31,19 +31,20 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Ruột PR 2a — (a) đọc: GET /api/groups, GET /api/groups/{id}/slots, GET /api/groups/{id}/capacity;
- * (b) vòng đời slot: POST /api/slots/{id}/return, DELETE /api/slots/{id}, POST /api/slots/{id}/pin.
+ * (b) vòng đời slot: PATCH /api/slots/{id}, DELETE /api/slots/{id}, POST /api/slots/{id}/pin.
  * Đi qua HTTP thật (MockMvc + H2), token THẬT theo khuôn AuthFlowTest / GroupSlotFlowTest.
  *
  * Kiểm những gì Kidz chốt 07/10 cho PR 2: slotUsed = số ACTIVE, chỉ chủ nhóm xem và thao tác
- * được (3004), slot không ACTIVE thì từ chối (5004 — đề xuất 409 của Kidz), trả slot giữ tên
- * nhưng mã hết hiệu lực (3009), xoá sạch bỏ tên / mã / PIN nhưng giữ dòng (3007),
- * đổi PIN reset bộ đếm sai và thời khoá. Đồng hồ đóng băng 10:00 02/10/2026 giờ VN.
+ * được (3004), slot không ACTIVE thì từ chối (5004 — đề xuất 409 của Kidz), xoá ẩn danh giữ dòng
+ * cho báo cáo (3007), đổi tên / PIN reset bộ đếm sai và thời khoá. Đồng hồ đóng băng 10:00
+ * 02/10/2026 giờ VN.
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true")
 @AutoConfigureMockMvc
@@ -118,54 +119,100 @@ class SlotLifecycleFlowTest {
                 .andExpect(jsonPath("$.code").value(1003));
     }
 
-    // ------------------------------------------------------------------ trả slot
-    /** Trả slot: giữ tên, mã hết hiệu lực (3009 khi trẻ login lại), trả lại chỗ cho hạn mức. */
+    // ------------------------------------------------------------------ đổi tên (PATCH)
+    /** PATCH đổi tên + PIN: tên mới hiện trong danh sách, PIN mới vào được, PIN cũ chết. */
     @Test
-    void returnSlotArchivesKeepsCodeDeadAndFreesCapacity() throws Exception {
-        String jwt = parentToken("tralot");
+    void patchRenamesSlotAndChangesPin() throws Exception {
+        String jwt = parentToken("doiten");
         String groupId = openFamilyGroup(jwt);
-        for (int i = 1; i <= 4; i++) {
-            openSlot(jwt, groupId, "Be " + i, "123456");
-        }
-        // Hết chỗ: slot thứ 5 bị 3006.
-        mvc.perform(slotRequest(jwt, groupId, "Be 5", "123456"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(3006));
+        openSlot(jwt, groupId, "Be An", "123456").andExpect(status().isOk());
+        String slotId = firstSlotOf(jwt, groupId);
+        String code = codeOfSlot(jwt, groupId, slotId);
 
-        String first = firstSlotOf(jwt, groupId);
-        String oldCode = codeOfSlot(jwt, groupId, first);
-
-        mvc.perform(post("/api/slots/" + first + "/return").header("Authorization", "Bearer " + jwt))
+        mvc.perform(patch("/api/slots/" + slotId)
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Be An (moi)\",\"pin\":\"654321\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.result.displayName").value("Be An (moi)"));
 
-        // Trẻ dùng lại mã cũ: 3009 (đã có sẵn từ trước, loginSlot không đổi).
         mvc.perform(post("/api/slots/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"" + oldCode + "\",\"pin\":\"123456\"}"))
-                .andExpect(status().isGone())
-                .andExpect(jsonPath("$.code").value(3009));
+                        .content("{\"code\":\"" + code + "\",\"pin\":\"654321\"}"))
+                .andExpect(status().isOk());
+        loginExpectUnauthorized(code, "123456");
+    }
 
-        // Trả lại chỗ: mở slot thứ 5 giờ qua được; capacity còn 0.
-        openSlot(jwt, groupId, "Be 5", "123456").andExpect(status().isOk());
-        mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
-                .andExpect(jsonPath("$.result").value(0));
+    /** Trùng tên chỉ so slot ACTIVE cùng nhóm (Q9): slot đã xoá mất tên nên tên đó dùng lại được. */
+    @Test
+    void duplicateNameIsRejectedOnlyAgainstActiveSlots() throws Exception {
+        String jwt = parentToken("trungten");
+        String groupId = openFamilyGroup(jwt);
+        openSlot(jwt, groupId, "Be An", "123456").andExpect(status().isOk());
+        openSlot(jwt, groupId, "Be Binh", "123456").andExpect(status().isOk());
+        String first = firstSlotOf(jwt, groupId);
 
-        // Trả lần hai: slot không còn ACTIVE → 5004.
-        mvc.perform(post("/api/slots/" + first + "/return").header("Authorization", "Bearer " + jwt))
+        mvc.perform(slotRequest(jwt, groupId, "Be An", "123456"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(patch("/api/slots/" + first)
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Be Binh\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        // Xoá slot "Be An" rồi mở lại đúng tên đó: được, vì slot cũ không còn ACTIVE.
+        mvc.perform(delete("/api/slots/" + first).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(slotRequest(jwt, groupId, "Be An", "123456"))
+                .andExpect(status().isOk());
+    }
+
+    /** PATCH slot WIPED / tên quá dài / PIN sai định dạng → 5004 hoặc 1001. */
+    @Test
+    void patchRejectsWipedSlotAndBadInput() throws Exception {
+        String jwt = parentToken("doitenloi");
+        String groupId = openFamilyGroup(jwt);
+        openSlot(jwt, groupId, "Be An", "123456").andExpect(status().isOk());
+        String slotId = firstSlotOf(jwt, groupId);
+
+        mvc.perform(patch("/api/slots/" + slotId)
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"" + "x".repeat(41) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+        mvc.perform(patch("/api/slots/" + slotId)
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Be An\",\"pin\":\"12345\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/slots/" + slotId)
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Be Khac\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(5004));
     }
 
     @Test
-    void strangerCannotReturnOrWipeOrChangePinMySlot() throws Exception {
+    void strangerCannotWipePatchOrChangePinMySlot() throws Exception {
         String owner = parentToken("chuslot");
         String groupId = openFamilyGroup(owner);
         openSlot(owner, groupId, "Be 1", "123456");
         String slotId = firstSlotOf(owner, groupId);
         String stranger = parentToken("nguoila3");
 
-        mvc.perform(post("/api/slots/" + slotId + "/return").header("Authorization", "Bearer " + stranger))
+        mvc.perform(patch("/api/slots/" + slotId)
+                        .header("Authorization", "Bearer " + stranger)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Chiem slot\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(3004));
         mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + stranger))
@@ -179,8 +226,11 @@ class SlotLifecycleFlowTest {
                 .andExpect(jsonPath("$.code").value(3004));
     }
 
-    // ------------------------------------------------------------------ xoá sạch
-    /** WIPED: bỏ tên, mã, PIN — trẻ login 3007, dòng vẫn còn trong danh sách. */
+    // ------------------------------------------------------------------ xoá ẩn danh
+    /**
+     * WIPED: bỏ tên, badge, PIN — GIỮ `code` trong DB (không cấp lại) nhưng API không trả; trẻ login
+     * mã cũ 3007, dòng vẫn còn trong danh sách và vẫn ăn một lượt của ví.
+     */
     @Test
     void wipeSlotRemovesIdentityButKeepsRow() throws Exception {
         String jwt = parentToken("xoasach");
@@ -200,20 +250,42 @@ class SlotLifecycleFlowTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(3007));
 
-        // Dòng vẫn giữ cho báo cáo cũ, nhưng tên và mã đã về null, hết ACTIVE nên không ăn chỗ.
+        // Dòng vẫn giữ cho báo cáo cũ; tên, badge, mã đã về null nhưng slot vẫn tiêu một lượt của ví.
         mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.length()").value(1))
                 .andExpect(jsonPath("$.result[0].status").value("WIPED"))
                 .andExpect(jsonPath("$.result[0].displayName").doesNotExist())
+                .andExpect(jsonPath("$.result[0].badge").doesNotExist())
                 .andExpect(jsonPath("$.result[0].code").doesNotExist());
         mvc.perform(get("/api/groups/" + groupId + "/capacity").header("Authorization", "Bearer " + jwt))
-                .andExpect(jsonPath("$.result").value(4));
+                .andExpect(jsonPath("$.result").value(3));
 
-        // Xoá lần hai: hết ACTIVE → 5004.
+        // Xoá lần hai: 5004.
         mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(5004));
+    }
+
+    /** Slot ARCHIVED (nhóm đã đóng) vẫn xoá được — chỉ ẩn danh hoá, số báo cáo đóng băng không đổi. */
+    @Test
+    void archivedSlotCanBeWiped() throws Exception {
+        String jwt = parentToken("xoadong");
+        String groupId = openFamilyGroup(jwt);
+        openSlot(jwt, groupId, "Be An", "123456");
+        String slotId = firstSlotOf(jwt, groupId);
+
+        mvc.perform(post("/api/groups/" + groupId + "/close")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result[0].status").value("ARCHIVED"));
+
+        mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/groups/" + groupId + "/slots").header("Authorization", "Bearer " + jwt))
+                .andExpect(jsonPath("$.result[0].status").value("WIPED"))
+                .andExpect(jsonPath("$.result[0].displayName").doesNotExist());
     }
 
     // ------------------------------------------------------------------ đổi PIN
@@ -258,7 +330,7 @@ class SlotLifecycleFlowTest {
                         .content("{\"pin\":\"12345\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
-        mvc.perform(post("/api/slots/" + slotId + "/return").header("Authorization", "Bearer " + jwt))
+        mvc.perform(delete("/api/slots/" + slotId).header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk());
         mvc.perform(post("/api/slots/" + slotId + "/pin")
                         .header("Authorization", "Bearer " + jwt)
@@ -324,7 +396,7 @@ class SlotLifecycleFlowTest {
         return post("/api/groups")
                 .header("Authorization", "Bearer " + jwt)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\"}");
+                .content("{\"name\":\"" + name + "\",\"context\":\"" + context + "\",\"plannedSize\":40}");
     }
 
     private static MockHttpServletRequestBuilder slotRequest(String jwt, String groupId,

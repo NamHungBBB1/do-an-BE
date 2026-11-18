@@ -3,6 +3,7 @@ package com.doan.game.configuration;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.repository.AccountRepository;
+import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.security.RevocationAwareJwtDecoder;
 import com.doan.game.repository.AccountRoleRepository;
 import com.doan.game.service.EntitlementService;
@@ -199,7 +200,7 @@ public class SecurityConfig {
      */
     @Bean
     JwtDecoder jwtDecoder(AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
-                          EntitlementService entitlementService, Clock clock,
+                          EntitlementService entitlementService, LearnerSlotRepository slotRepo, Clock clock,
                           @Value("${app.auth.internal-login-required:false}") boolean internalLoginRequired) {
         NimbusJwtDecoder nimbus = NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256).build();
@@ -207,6 +208,6 @@ public class SecurityConfig {
         timestampValidator.setClock(clock);
         nimbus.setJwtValidator(timestampValidator);
         return new RevocationAwareJwtDecoder(nimbus, accountRepo, accountRoleRepo, entitlementService,
-                internalLoginRequired);
+                slotRepo, internalLoginRequired);
     }
 }

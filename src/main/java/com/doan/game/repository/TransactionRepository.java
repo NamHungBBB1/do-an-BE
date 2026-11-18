@@ -2,6 +2,7 @@ package com.doan.game.repository;
 
 import com.doan.game.entity.Transaction;
 import com.doan.game.enums.PlanKind;
+import com.doan.game.enums.TransactionPurpose;
 import com.doan.game.enums.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -50,6 +51,14 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
     /** Dashboard: tổng tiền đã thu (chưa trừ hoàn — việc 6 sẽ thêm refunded). */
     @Query("select coalesce(sum(t.amount), 0) from Transaction t where t.status = :status")
     long sumAmountByStatus(@Param("status") TransactionStatus status);
+
+    /**
+     * Dashboard: tiền đã thu của MỘT loại đơn (18/11/2026 — tách doanh thu gói gốc và pack slot thêm).
+     * Gói gốc = mọi đơn PAID không phải ADDON, tính bằng {@code sumAmountByStatus} trừ đi phần ADDON.
+     */
+    @Query("select coalesce(sum(t.amount), 0) from Transaction t where t.status = :status and t.purpose = :purpose")
+    long sumAmountByStatusAndPurpose(@Param("status") TransactionStatus status,
+                                     @Param("purpose") TransactionPurpose purpose);
 
     /** Dashboard: tiền đã thu trong khoảng, tính theo ngày TRẢ. */
     @Query("select coalesce(sum(t.amount), 0) from Transaction t "

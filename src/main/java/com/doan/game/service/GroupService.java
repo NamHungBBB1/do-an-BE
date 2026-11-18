@@ -6,7 +6,11 @@ import com.doan.game.DTO.response.*;
 import java.util.UUID;
 
 /**
- * Vòng đời nhóm: mở nhóm gia đình (gói PARENT, 4 slot) hoặc lớp (gói TEACHER, 40 slot), mỗi tài khoản tối đa một nhóm đang mở cho mỗi loại; kết thúc nhóm; đếm chỗ trống; giáo viên xác nhận đã có đồng ý của phụ huynh.
+ * Vòng đời nhóm: mở nhóm gia đình (gói PARENT) hoặc lớp (gói TEACHER), kết thúc nhóm, đếm chỗ trống;
+ * giáo viên xác nhận đã có đồng ý của phụ huynh.
+ *
+ * 17/11/2026: hạn mức slot nằm trên TÀI KHOẢN (SlotQuotaService) chứ không chép 4/40 vào nhóm nữa;
+ * một tài khoản tối đa một nhóm FAMILY đang mở, còn CLASS mở được nhiều lớp.
  *
  * Bảng phụ trách: LearnerGroup
  */
@@ -30,14 +34,23 @@ public interface GroupService {
     void confirmConsent(UUID callerId, UUID groupId);
 
     /**
-     * Kết thúc nhóm (giáo viên gọi là kết thúc lớp): closedAt = now, openContext = NULL để trả
-     * chỗ UNIQUE cho nhóm mới, mọi slot ACTIVE → ARCHIVED. KHÔNG xoá gì, KHÔNG có API khôi phục
-     * (muốn dạy tiếp thì mở lớp mới) — Hưng chốt 07/10. Chỉ chủ nhóm (3004).
+     * Kết thúc nhóm (giáo viên gọi là kết thúc lớp): closedAt = now, openContext = NULL, mọi slot ACTIVE
+     * → ARCHIVED. KHÔNG xoá gì, KHÔNG có API khôi phục (Hưng chốt 07/10). 17/11/2026: KHÔNG trả lượt
+     * slot về ví — slot đã mở là tiêu hao của kỳ. Chỉ chủ nhóm (3004).
      */
     void closeGroup(UUID callerId, UUID groupId);
 
-    /** Chỗ trống = slotLimit − số slot ACTIVE, chỉ chủ nhóm (3004). */
+    /**
+     * Chỗ còn mở được của nhóm = min(ví slot còn lại, sĩ số còn trống); nhóm đã đóng → 0. Chỉ chủ nhóm
+     * (3004). 17/11/2026.
+     */
     int countFreeSlots(UUID callerId, UUID groupId);
+
+    /**
+     * Sửa sĩ số lớp (17/11/2026, chỉ CLASS đang mở): >= số slot ACTIVE và <= ACTIVE + ví còn lại.
+     * Trả về nhóm kèm slotUsed mới.
+     */
+    LearnerGroupResponse updatePlannedSize(UUID callerId, UUID groupId, UpdateGroupRequest req);
 
     /**
      * 16/10 (quiz.md v2, Hưng chốt): giáo viên bật / tắt hậu trắc cho LỚP — postTestEnabledAt = now hoặc NULL.
