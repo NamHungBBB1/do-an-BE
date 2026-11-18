@@ -293,6 +293,7 @@ transitions be included, so they are listed in 4.7 and should be counted in the 
 | Quiz | submit when not visible (hidden post-test, other class) → 8001 | — | missing |
 | Quiz | create for a FAMILY group → 8008 | `QuizFlowTest#permissionGates` | covered |
 | RunState | chapter out of order → 7003 | `PlayFlowTest#wrongBatchGetsRightErrors` | covered |
+| RunState | next chapter before the post-test of the previous one is submitted → 7004 (BR-53); empty pool → no gate; replay not gated again | `QuizFlowTest#postTestGatesNextChapterInClass`, `#postTestGatesNextChapterInFamily`, `#chapterWithoutPostTestPoolDoesNotGate` | covered |
 | RunState | unknown release 7001 / unknown option 7002 | `PlayFlowTest#wrongBatchGetsRightErrors` | covered |
 | RunState | more than 100 rows → 2003; two rows for one choice group → 1001 | — | missing |
 | RunState | resend of a saved chapter → no change | `PlayFlowTest#resendSameBatchIsNoop` | covered |
