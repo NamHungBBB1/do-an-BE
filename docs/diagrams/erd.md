@@ -11,7 +11,7 @@ Six clusters; each line is the relationship between the lead entities (bold).
 
 ```mermaid
 flowchart LR
-    pay["<b>Subscription & payment</b><br/>Transaction<br/>Plan<br/>Entitlement"]
+    pay["<b>Subscription & payment</b><br/>Transaction<br/>Plan<br/>Entitlement<br/>SlotAddon<br/>SlotAddonPrice"]
     acc["<b>Account & access</b><br/>Account<br/>Credential<br/>VerificationToken<br/>AccountRole<br/>RoleGrantLog"]
     con["<b>Content studio</b><br/>ChapterDraft<br/>Chapter<br/>GameRelease<br/>ReleaseChapter<br/>Asset<br/>AiKey"]
     rep["<b>Reporting</b><br/>GroupReport<br/>GroupReportRow<br/>DailySummary<br/>ConceptMastery"]
@@ -27,7 +27,7 @@ flowchart LR
 
 ## 2. Conceptual — all entities
 
-28 entities, names and relationships only.
+30 entities, names and relationships only.
 
 ```mermaid
 erDiagram
@@ -40,6 +40,9 @@ erDiagram
     Account ||--o{ Entitlement : "owns"
     Account |o--o{ Entitlement : "grants"
     Transaction |o--o| Entitlement : "activates"
+    Transaction |o--o| SlotAddon : "pays for"
+    Account ||--o{ SlotAddon : "owns"
+    Account |o--o{ SlotAddonPrice : "updates"
     Plan ||--o{ Transaction : "prices"
     Account ||--o{ ChapterDraft : "edits"
     Account |o--o{ ChapterDraft : "reviews"
