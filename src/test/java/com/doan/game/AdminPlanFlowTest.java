@@ -89,6 +89,7 @@ class AdminPlanFlowTest {
 
         mvc.perform(get("/api/plans"))   // không token
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.length()").value(2))   // luôn đủ hai loại gói
                 .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].price").value(420000))
                 .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].addonPrice").value(99000))
                 .andExpect(jsonPath("$.result[?(@.kind=='PARENT')].addonSlots").value(2));

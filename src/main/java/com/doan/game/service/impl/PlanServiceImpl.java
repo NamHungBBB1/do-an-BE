@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,9 +44,15 @@ public class PlanServiceImpl implements PlanService {
     @Override
     @Transactional(readOnly = true)
     public List<PlanResponse> listPrices() {
-        return planRepo.findAll().stream()
-                .sorted(Comparator.comparing(Plan::getKind))
-                .map(this::toResponse)
+        // Luôn trả ĐỦ hai loại gói: chưa đặt giá thì price = 0 (chưa mở bán), FE khỏi phải đoán
+        // thiếu dòng nghĩa là gì; giá pack vẫn có thể đã đặt trước giá gói.
+        return java.util.Arrays.stream(PlanKind.values())
+                .sorted()
+                .map(k -> planRepo.findByKind(k)
+                        .map(this::toResponse)
+                        .orElseGet(() -> new PlanResponse(k.name(), 0L, addonSlotsOf(k),
+                                addonPriceRepo.findByKind(k).map(SlotAddonPrice::getPrice).orElse(null),
+                                null)))
                 .toList();
     }
 
@@ -83,7 +88,7 @@ public class PlanServiceImpl implements PlanService {
         addonPriceRepo.save(row);
         // Trả cả bảng giá của gói để FE cập nhật một lần (giá gói có thể chưa đặt — khi đó price = 0).
         return planRepo.findByKind(k).map(this::toResponse)
-                .orElse(new PlanResponse(k.name(), 0L, addonSlotsOf(k), price, Instant.now(clock)));
+                .orElse(new PlanResponse(k.name(), 0L, addonSlotsOf(k), price, null));
     }
 
     static PlanKind parseKind(String kind) {
