@@ -45,6 +45,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -327,8 +328,8 @@ class ReportFlowTest {
     // ------------------------------------------------------------------ 7. chương + khái niệm (19/11)
     /**
      * Bé chơi CH01 qua lô thật → chapters[0]: nhãn lựa chọn tra từ JSON bản đã chơi, deliberate theo evidenceScores
-     * (true / false / null), mini-game x/y + câu sai kèm mã tra lúc đọc; hậu trắc PENDING → PARTIAL (quizId null rồi có
-     * id khi đề được tạo); nộp → SUBMITTED + COMPLETE, concepts cộng câu hậu trắc có mã. Mốc 3 câu: T01.02 có đúng 3 câu
+     * (true / false / null), mini-game x/y + câu sai kèm mã tra lúc đọc; hậu trắc PENDING → PARTIAL (có quizId khi đề được
+     * tạo); nộp → SUBMITTED + COMPLETE, concepts cộng câu hậu trắc có mã. Mốc 3 câu: T01.02 có đúng 3 câu
      * → có mức (PRACTICE), T01.01 2 câu → NO_DATA, sau hậu trắc 3/4 → GOOD.
      */
     @Test
@@ -383,19 +384,16 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[2].concept").value("T01.01"))
                 .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[2].chosen").value("NEEDS"))
                 .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("PENDING"))
-                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(nullValue()))
+                // quizId: null trên main (đề tạo khi bé mở danh sách bài); có id khi BR-53 (#69) tạo đề lúc nhận lô — không khẳng định.
                 .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
                 .andExpect(jsonPath("$.result.chapters[0].summary").value(nullValue()))
-                .andExpect(jsonPath("$.result.concepts.length()").value(2))
-                .andExpect(jsonPath("$.result.concepts[0].concept").value("T01.01"))
-                .andExpect(jsonPath("$.result.concepts[0].game.correct").value(1))
-                .andExpect(jsonPath("$.result.concepts[0].game.total").value(2))
-                .andExpect(jsonPath("$.result.concepts[0].postTest.total").value(0))
-                .andExpect(jsonPath("$.result.concepts[0].band").value("NO_DATA"))
-                .andExpect(jsonPath("$.result.concepts[1].concept").value("T01.02"))
-                .andExpect(jsonPath("$.result.concepts[1].correct").value(1))
-                .andExpect(jsonPath("$.result.concepts[1].total").value(3))
-                .andExpect(jsonPath("$.result.concepts[1].band").value("PRACTICE"))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.correct").value(contains(1)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.total").value(contains(2)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].postTest.total").value(contains(0)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].band").value(contains("NO_DATA")))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.02')].correct").value(contains(1)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.02')].total").value(contains(3)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.02')].band").value(contains("PRACTICE")))
                 .andExpect(jsonPath("$.result.finalReport.status").value("NONE"))
                 .andExpect(jsonPath("$.result.dailySummary").value(nullValue()));
 
@@ -428,14 +426,13 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.chapters[0].postTest.correct").value(2))
                 .andExpect(jsonPath("$.result.chapters[0].postTest.total").value(chapterOneCount))
                 .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("COMPLETE"))
-                .andExpect(jsonPath("$.result.concepts[0].concept").value("T01.01"))
-                .andExpect(jsonPath("$.result.concepts[0].game.correct").value(1))
-                .andExpect(jsonPath("$.result.concepts[0].game.total").value(2))
-                .andExpect(jsonPath("$.result.concepts[0].postTest.correct").value(2))
-                .andExpect(jsonPath("$.result.concepts[0].postTest.total").value(2))
-                .andExpect(jsonPath("$.result.concepts[0].correct").value(3))
-                .andExpect(jsonPath("$.result.concepts[0].total").value(4))
-                .andExpect(jsonPath("$.result.concepts[0].band").value("GOOD"))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.correct").value(contains(1)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.total").value(contains(2)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].postTest.correct").value(contains(2)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].postTest.total").value(contains(2)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].correct").value(contains(3)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].total").value(contains(4)))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].band").value(contains("GOOD")))
                 .andExpect(jsonPath("$.result.finalReport.status").value("NONE"));
     }
 
@@ -469,6 +466,9 @@ class ReportFlowTest {
         mvc.perform(slotReport(parent, slotB))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.chapters.length()").value(8))
+                .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("PENDING"))
+                // RunState ghi tay, bé chưa nộp lô / mở danh sách bài → chương có câu nhưng đề chưa tạo: quizId null.
+                .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(nullValue()))
                 .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
                 .andExpect(jsonPath("$.result.finalReport.status").value("PARTIAL"));
     }
@@ -497,7 +497,8 @@ class ReportFlowTest {
 
     /**
      * CH01 của class: 3 cảnh lựa chọn (evidenceScores có bước cân nhắc / toàn 0 / không có) + mini-game kiểu cũ (một mã
-     * cảnh T01.01) + mini-game grade (mã T01.02 ở câu). Mã T01.* chỉ có ở test này nên concepts không lẫn ca khác.
+     * cảnh T01.01) + mini-game grade (mã T01.02 ở câu). Mã T01.* chỉ có ở test này; test tra concepts THEO MÃ, vì đề hậu trắc chương 1
+     * chụp cả câu của ca khác cùng DB (có mã D…), thứ tự lớp test khác nhau giữa Linux và Windows.
      */
     private static String minimalChapter() {
         return """
