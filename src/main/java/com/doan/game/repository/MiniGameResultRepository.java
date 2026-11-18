@@ -32,4 +32,6 @@ public interface MiniGameResultRepository extends JpaRepository<MiniGameResult, 
 
     /** Test: đọc lại từng dòng để so correct / concept / buildVersion của một lần chơi. */
     List<MiniGameResult> findBySlot_IdAndChapterAndAttemptIndex(UUID slotId, Integer chapter, int attemptIndex);
+    /** Báo cáo người lớn (19/11): mọi dòng của một lần chơi — một câu cho cả 8 chương, không N+1. */
+    List<MiniGameResult> findBySlot_IdAndAttemptIndex(UUID slotId, int attemptIndex);
 }

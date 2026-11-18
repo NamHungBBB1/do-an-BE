@@ -33,4 +33,6 @@ public interface ChoiceEventRepository extends JpaRepository<ChoiceEvent, UUID> 
 
     /** Test: đọc lại từng dòng của một (slot, chương, lần chơi) để so effects JSON / buildVersion. */
     List<ChoiceEvent> findBySlot_IdAndChapterAndAttemptIndex(UUID slotId, Integer chapter, int attemptIndex);
+    /** Báo cáo người lớn (19/11): mọi dòng của một lần chơi — một câu cho cả 8 chương, không N+1. */
+    List<ChoiceEvent> findBySlot_IdAndAttemptIndex(UUID slotId, int attemptIndex);
 }
