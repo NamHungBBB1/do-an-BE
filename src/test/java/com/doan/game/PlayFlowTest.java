@@ -570,6 +570,38 @@ class PlayFlowTest {
         assertThat(slotRepo.findById(UUID.fromString(slotId)).orElseThrow().getPersonalization()).isNull();
     }
 
+    /** 17/11: bé đổi một câu thì các câu khác giữ nguyên (gộp, không ghi đè); gửi null cho một chiều thì bỏ đúng câu đó. */
+    @Test
+    void childChangingOneAnswerKeepsTheOthers() throws Exception {
+        String parent = parentToken("perso-gop");
+        String groupId = openGroup(parent, "Nha perso gop", "FAMILY");
+        String slotBody = mvc.perform(slotRequest(parent, groupId, "Be gop", "123456"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String child = childLogin(slotBody, "123456");
+
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"gender\":\"FEMALE\",\"age\":\"11_14\",\"interest\":\"SPORT\"}}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("COMPLETED"));
+        // Chỉ đổi sở thích: giới tính và tuổi còn nguyên.
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"interest\":\"MUSIC\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.labels.interest").value("MUSIC"))
+                .andExpect(jsonPath("$.result.labels.gender").value("FEMALE"))
+                .andExpect(jsonPath("$.result.labels.age").value("11_14"))
+                .andExpect(jsonPath("$.result.status").value("COMPLETED"));
+        // Bỏ hẳn câu tuổi bằng null: chỉ tuổi mất.
+        mvc.perform(put("/api/play/personalization").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"source\":\"CHILD\",\"answers\":{\"age\":null}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.labels.age").doesNotExist())
+                .andExpect(jsonPath("$.result.labels.gender").value("FEMALE"))
+                .andExpect(jsonPath("$.result.labels.interest").value("MUSIC"));
+    }
+
     /** Giáo viên (nhóm CLASS) chỉ thấy trạng thái khảo sát, không thấy nhãn / câu trả lời của học sinh, và không trả lời thay. */
     @Test
     void teacherSeesOnlyPersonalizationStatus() throws Exception {
