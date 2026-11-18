@@ -299,6 +299,13 @@ class PaymentFlowTest {
         // Filter by another status: the order is not there.
         mvc.perform(get("/api/admin/transactions").param("status", "PAID").param("size", "100").with(admin()))
                 .andExpect(jsonPath(row).isEmpty());
+        // 18/11/2026: hàng đợi soát tay — needsReview=true chỉ trả đơn cần đối soát.
+        mvc.perform(get("/api/admin/transactions").param("needsReview", "true").param("size", "100").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".needsReview").value(true));
+        mvc.perform(get("/api/admin/transactions").param("needsReview", "false")
+                        .param("q", String.valueOf(orderCode)).with(admin()))
+                .andExpect(jsonPath(row).isEmpty());
         // A regular account cannot read the admin list.
         mvc.perform(get("/api/admin/transactions").header("Authorization", "Bearer " + buyer.token()))
                 .andExpect(status().isForbidden())
@@ -483,6 +490,13 @@ class PaymentFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result[0].extra").value(6))
                 .andExpect(jsonPath("$.result[0].limit").value(10));
+
+        // Dashboard tách doanh thu: pack nằm ở paidAddon, gói gốc ở paidBase (18/11/2026).
+        mvc.perform(get("/api/admin/dashboard").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.revenue.paidAddon")
+                        .value(greaterThanOrEqualTo(Math.toIntExact(3 * ADDON_PRICE))))
+                .andExpect(jsonPath("$.result.revenue.paidBase").value(greaterThanOrEqualTo(Math.toIntExact(PRICE))));
 
         // Gói gốc chỉ mua một lần: đã có (vĩnh viễn) → 4008, phải mua pack.
         mvc.perform(post("/api/payments").header("Authorization", "Bearer " + buyer.token())

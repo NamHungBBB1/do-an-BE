@@ -57,16 +57,17 @@ public class AdminController {
     }
 
     // ---- giao dịch ----
-    /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email) và khoảng ngày. Trả kèm tổng số trang. */
+    /** Mới nhất trước; lọc theo trạng thái, từ khoá (orderCode hoặc email), khoảng ngày và cờ needs_review. */
     @GetMapping("/transactions")
     public ApiResponse<PageResponse<TransactionAdminResponse>> listTransactions(
             @RequestParam(required = false) TransactionStatus status,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Boolean needsReview,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, page, size));
+        return ApiResponse.ok(paymentService.listTransactions(status, q, from, to, needsReview, page, size));
     }
 
     /** Thống kê theo trạng thái và doanh thu từng ngày trong khoảng ngày (giờ Việt Nam). */

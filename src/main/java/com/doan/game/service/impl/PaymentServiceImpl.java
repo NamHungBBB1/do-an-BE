@@ -366,10 +366,11 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
-                                                                   LocalDate from, LocalDate to, int page, int size) {
+                                                                   LocalDate from, LocalDate to, Boolean needsReview,
+                                                                   int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "orderCode")));
-        return PageResponse.of(transactionRepo.findAll(filter(status, q, from, to), pageable),
+        return PageResponse.of(transactionRepo.findAll(filter(status, q, from, to, needsReview), pageable),
                 PaymentServiceImpl::toAdmin);
     }
 
@@ -390,7 +391,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
         // Chốt với bot 12/11: đơn chưa trả tính theo ngày TẠO, đơn đã trả tính theo ngày TRẢ.
         // Đơn tạo tháng trước mà trả tháng này thì thuộc tháng này — đúng kỳ doanh thu.
-        for (Transaction tx : transactionRepo.findAll(filter(null, null, from, to),
+        for (Transaction tx : transactionRepo.findAll(filter(null, null, from, to, null),
                 Sort.by(Sort.Direction.DESC, "createdAt"))) {
             if (tx.getStatus() != TransactionStatus.PAID) {
                 count.merge(tx.getStatus().name(), 1L, Long::sum);
@@ -419,11 +420,16 @@ public class PaymentServiceImpl implements PaymentService {
      * Dựng Specification thay vì @Query kiểu (:x is null or ...) — Postgres không suy được kiểu tham số null,
      * còn H2 vẫn xanh nên lỗi chỉ lộ trên production.
      */
-    private static Specification<Transaction> filter(TransactionStatus status, String q, LocalDate from, LocalDate to) {
+    private static Specification<Transaction> filter(TransactionStatus status, String q, LocalDate from, LocalDate to,
+                                                     Boolean needsReview) {
         return (root, query, cb) -> {
             List<Predicate> where = new ArrayList<>();
             if (status != null) {
                 where.add(cb.equal(root.get("status"), status));
+            }
+            // 18/11/2026: hàng đợi soát tay — needsReview=true lọc đúng đơn cần đối soát / hoàn tiền.
+            if (needsReview != null) {
+                where.add(cb.equal(root.get("needsReview"), needsReview));
             }
             if (q != null && !q.isBlank()) {
                 String term = q.trim();

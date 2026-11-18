@@ -51,9 +51,10 @@ public interface PaymentService {
 
     void sweepPendingTransactions();
 
-    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá và khoảng ngày, trả kèm tổng số trang. */
+    /** Admin: bảng giao dịch, mới nhất trước; lọc theo trạng thái, từ khoá, khoảng ngày và cờ cần soát. */
     PageResponse<TransactionAdminResponse> listTransactions(TransactionStatus status, String q,
-                                                            LocalDate from, LocalDate to, int page, int size);
+                                                            LocalDate from, LocalDate to, Boolean needsReview,
+                                                            int page, int size);
 
     /** Admin: chi tiết một giao dịch theo orderCode; không có → 4005. */
     TransactionDetailResponse getTransaction(long orderCode);

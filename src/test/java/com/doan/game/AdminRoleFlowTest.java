@@ -465,6 +465,8 @@ class AdminRoleFlowTest {
                 .andExpect(jsonPath("$.result.learners.archived").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.learners.wiped").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.revenue.paidTotal").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.revenue.paidBase").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.result.revenue.paidAddon").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.revenue.paidLast30Days").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.transactions.pending").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.result.transactions.failed").value(greaterThanOrEqualTo(0)))

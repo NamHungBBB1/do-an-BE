@@ -254,6 +254,11 @@ public class AdminServiceImpl implements AdminService {
     public AdminDashboardResponse dashboard() {
         LocalDate today = LocalDate.now(clock);
         Instant since = Instant.now(clock).minus(30, java.time.temporal.ChronoUnit.DAYS);
+        // 18/11/2026: tách doanh thu gói gốc / pack slot thêm. Gói gốc = phần còn lại (NEW + RENEW cũ).
+        long paid = transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID);
+        long paidAddon = transactionRepo.sumAmountByStatusAndPurpose(
+                com.doan.game.enums.TransactionStatus.PAID,
+                com.doan.game.enums.TransactionPurpose.ADDON);
         return new AdminDashboardResponse(
                 new AdminDashboardResponse.Accounts(accountRepo.count(),
                         entitlementRepo.countActiveAccountsByKind(PlanKind.PARENT, today),
@@ -264,7 +269,7 @@ public class AdminServiceImpl implements AdminService {
                         slotRepo.countByStatus(com.doan.game.enums.SlotStatus.ARCHIVED),
                         slotRepo.countByStatus(com.doan.game.enums.SlotStatus.WIPED)),
                 new AdminDashboardResponse.Revenue(
-                        transactionRepo.sumAmountByStatus(com.doan.game.enums.TransactionStatus.PAID),
+                        paid, paid - paidAddon, paidAddon,
                         transactionRepo.sumAmountByStatusAndPaidAtAfter(
                                 com.doan.game.enums.TransactionStatus.PAID, since)),
                 new AdminDashboardResponse.Transactions(
