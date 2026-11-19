@@ -1,0 +1,522 @@
+[
+ {
+  "id": "D01.01",
+  "domain": "D01",
+  "name": "Money & value",
+  "objective": "Tiền là phương tiện trao đổi và nguồn lực hữu hạn; hiểu giá trị của tiền.",
+  "level": "Nhận biết",
+  "nameVi": "Tiền và giá trị của tiền"
+ },
+ {
+  "id": "D01.02",
+  "domain": "D01",
+  "name": "Needs vs Wants",
+  "objective": "Phân biệt nhu cầu thiết yếu và mong muốn; ưu tiên theo hoàn cảnh.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Phân biệt cần và muốn"
+ },
+ {
+  "id": "D01.03",
+  "domain": "D01",
+  "name": "Opportunity Cost",
+  "objective": "Giá trị của phương án tốt nhất bị bỏ qua khi lựa chọn dùng tiền, thời gian hoặc nguồn lực.",
+  "level": "Hiểu",
+  "nameVi": "Chi phí cơ hội"
+ },
+ {
+  "id": "D01.04",
+  "domain": "D01",
+  "name": "Financial Goals",
+  "objective": "Mục tiêu SMART; ngắn hạn, trung hạn, dài hạn; ưu tiên mục tiêu.",
+  "level": "Áp dụng",
+  "nameVi": "Mục tiêu tài chính"
+ },
+ {
+  "id": "D01.05",
+  "domain": "D01",
+  "name": "Delayed Gratification",
+  "objective": "Hoãn phần thưởng hiện tại để đạt lợi ích lớn hơn trong tương lai.",
+  "level": "Áp dụng",
+  "nameVi": "Hoãn hưởng thụ để được hơn"
+ },
+ {
+  "id": "D01.06",
+  "domain": "D01",
+  "name": "Tiền tệ và tỷ giá (Bổ sung)",
+  "objective": "Quy đổi giá ngoại tệ; tính thêm phí để xác định số tiền thực trả.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Tiền tệ và tỷ giá"
+ },
+ {
+  "id": "D02.01",
+  "domain": "D02",
+  "name": "Sources of Income",
+  "objective": "Lương, tiền công, hoa hồng, kinh doanh, lãi, cổ tức, cho thuê và nguồn thu hợp pháp khác.",
+  "level": "Nhận biết",
+  "nameVi": "Các nguồn thu nhập"
+ },
+ {
+  "id": "D02.02",
+  "domain": "D02",
+  "name": "Gross vs Net Income",
+  "objective": "Phân biệt thu nhập trước và sau các khoản khấu trừ/thuế.",
+  "level": "Hiểu",
+  "nameVi": "Thu nhập trước, sau khấu trừ"
+ },
+ {
+  "id": "D02.03",
+  "domain": "D02",
+  "name": "Human Capital",
+  "objective": "Kỹ năng, học vấn, kinh nghiệm ảnh hưởng đến cơ hội và thu nhập.",
+  "level": "Hiểu/Phân tích",
+  "nameVi": "Vốn con người"
+ },
+ {
+  "id": "D02.04",
+  "domain": "D02",
+  "name": "Career Choice",
+  "objective": "So sánh nghề theo kỹ năng, đào tạo, thu nhập, chi phí và cơ hội.",
+  "level": "Phân tích",
+  "nameVi": "Chọn nghề nghiệp"
+ },
+ {
+  "id": "D02.05",
+  "domain": "D02",
+  "name": "Entrepreneurship",
+  "objective": "Doanh thu, chi phí, lợi nhuận, rủi ro và giá trị khách hàng.",
+  "level": "Áp dụng",
+  "nameVi": "Kinh doanh và khởi nghiệp"
+ },
+ {
+  "id": "D02.06",
+  "domain": "D02",
+  "name": "Taxes & Deductions",
+  "objective": "Hiểu thu nhập khả dụng và vai trò của thuế; dùng ví dụ Việt Nam khi triển khai.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Thuế và các khoản khấu trừ"
+ },
+ {
+  "id": "D02.07",
+  "domain": "D02",
+  "name": "Thu nhập biến động (Bổ sung)",
+  "objective": "Nhận biết thu nhập không đều; điều chỉnh ngân sách khi thu nhập thay đổi.",
+  "level": "Áp dụng",
+  "nameVi": "Thu nhập biến động"
+ },
+ {
+  "id": "D02.08",
+  "domain": "D02",
+  "name": "Thuế chi tiêu công và đóng góp cộng đồng (Bổ sung)",
+  "objective": "Giải thích vai trò thuế đối với dịch vụ công và cộng đồng; phân biệt nguyên lý với quy định cụ thể.",
+  "level": "Hiểu",
+  "nameVi": "Thuế chi tiêu công và đóng góp cộng đồng"
+ },
+ {
+  "id": "D03.01",
+  "domain": "D03",
+  "name": "Budget",
+  "objective": "Kế hoạch phân bổ thu nhập khả dụng cho chi tiêu, tiết kiệm và mục tiêu.",
+  "level": "Áp dụng",
+  "nameVi": "Lập ngân sách"
+ },
+ {
+  "id": "D03.02",
+  "domain": "D03",
+  "name": "Fixed vs Variable Expense",
+  "objective": "Phân biệt chi phí tương đối ổn định và chi phí biến động.",
+  "level": "Hiểu",
+  "nameVi": "Chi phí cố định, biến đổi"
+ },
+ {
+  "id": "D03.03",
+  "domain": "D03",
+  "name": "Cash Flow",
+  "objective": "Theo dõi tiền vào/ra theo kỳ và phát hiện thiếu hụt.",
+  "level": "Áp dụng",
+  "nameVi": "Theo dõi tiền vào, tiền ra"
+ },
+ {
+  "id": "D03.04",
+  "domain": "D03",
+  "name": "Smart Shopping",
+  "objective": "So sánh giá, chất lượng, thông tin sản phẩm, phương thức thanh toán.",
+  "level": "Phân tích",
+  "nameVi": "Mua sắm thông minh"
+ },
+ {
+  "id": "D03.05",
+  "domain": "D03",
+  "name": "Advertising & Peer Pressure",
+  "objective": "Nhận diện tác động của quảng cáo, bạn bè, cảm xúc và social cues.",
+  "level": "Phân tích",
+  "nameVi": "Quảng cáo, áp lực bạn bè"
+ },
+ {
+  "id": "D03.06",
+  "domain": "D03",
+  "name": "Payment Methods",
+  "objective": "Cash, debit, transfer, digital payment; chi phí, tiện lợi và rủi ro.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Phương thức thanh toán"
+ },
+ {
+  "id": "D03.07",
+  "domain": "D03",
+  "name": "Chứng từ và hợp đồng (Bổ sung)",
+  "objective": "Đọc hóa đơn, sao kê và điều khoản hợp đồng; lưu chứng từ, kiểm tra phí và nghĩa vụ.",
+  "level": "Áp dụng",
+  "nameVi": "Chứng từ và hợp đồng"
+ },
+ {
+  "id": "D03.08",
+  "domain": "D03",
+  "name": "Đăng ký định kỳ và chi phí số (Bổ sung)",
+  "objective": "Tính tổng chi phí gói đăng ký, thời gian dùng thử, gia hạn và điều kiện hủy.",
+  "level": "Phân tích",
+  "nameVi": "Đăng ký định kỳ và chi phí số"
+ },
+ {
+  "id": "D03.09",
+  "domain": "D03",
+  "name": "Tiêu dùng có trách nhiệm (Bổ sung)",
+  "objective": "Cân nhắc tuổi thọ, sửa chữa, tái sử dụng và tác động môi trường khi mua; kiểm tra thông tin.",
+  "level": "Phân tích",
+  "nameVi": "Tiêu dùng có trách nhiệm"
+ },
+ {
+  "id": "D04.01",
+  "domain": "D04",
+  "name": "Why Save",
+  "objective": "Tiết kiệm cho mục tiêu tương lai và biến cố bất ngờ.",
+  "level": "Nhận biết",
+  "nameVi": "Vì sao cần tiết kiệm"
+ },
+ {
+  "id": "D04.02",
+  "domain": "D04",
+  "name": "Savings Goal & Plan",
+  "objective": "Xác định số tiền, thời hạn, mức tiết kiệm định kỳ.",
+  "level": "Áp dụng",
+  "nameVi": "Mục tiêu, kế hoạch tiết kiệm"
+ },
+ {
+  "id": "D04.03",
+  "domain": "D04",
+  "name": "Emergency Fund",
+  "objective": "Khoản dự phòng cho chi phí bất ngờ; quy mô tùy hoàn cảnh.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Quỹ dự phòng"
+ },
+ {
+  "id": "D04.04",
+  "domain": "D04",
+  "name": "Banking Basics",
+  "objective": "Tài khoản, giao dịch, phí, tính thanh khoản và an toàn.",
+  "level": "Hiểu",
+  "nameVi": "Kiến thức ngân hàng cơ bản"
+ },
+ {
+  "id": "D04.05",
+  "domain": "D04",
+  "name": "Interest & Compound Interest",
+  "objective": "Lãi suất và hiệu ứng lãi kép theo thời gian.",
+  "level": "Áp dụng",
+  "nameVi": "Lãi suất và lãi kép"
+ },
+ {
+  "id": "D04.06",
+  "domain": "D04",
+  "name": "Inflation & Purchasing Power",
+  "objective": "Giá tăng làm giảm sức mua của cùng một lượng tiền.",
+  "level": "Phân tích",
+  "nameVi": "Lạm phát và sức mua"
+ },
+ {
+  "id": "D04.07",
+  "domain": "D04",
+  "name": "Chuẩn bị tài chính dài hạn và hưu trí (Bổ sung)",
+  "objective": "Nhận biết nhu cầu tài chính dài hạn và hưu trí; hiểu lợi ích chuẩn bị sớm.",
+  "level": "Hiểu",
+  "nameVi": "Chuẩn bị tài chính dài hạn và hưu trí"
+ },
+ {
+  "id": "D05.01",
+  "domain": "D05",
+  "name": "Saving vs Investing",
+  "objective": "Tiết kiệm thường ưu tiên an toàn/thanh khoản; đầu tư hướng đến tăng trưởng dài hạn và chấp nhận rủi ro.",
+  "level": "Hiểu",
+  "nameVi": "Tiết kiệm khác đầu tư"
+ },
+ {
+  "id": "D05.02",
+  "domain": "D05",
+  "name": "Assets",
+  "objective": "Cổ phiếu, trái phiếu, quỹ, bất động sản và tài sản tài chính khác.",
+  "level": "Nhận biết",
+  "nameVi": "Các loại tài sản"
+ },
+ {
+  "id": "D05.03",
+  "domain": "D05",
+  "name": "Return",
+  "objective": "Thu nhập và/hoặc tăng giá trị tài sản tạo ra lợi nhuận.",
+  "level": "Hiểu",
+  "nameVi": "Lợi nhuận từ tài sản"
+ },
+ {
+  "id": "D05.04",
+  "domain": "D05",
+  "name": "Risk & Return",
+  "objective": "Lợi nhuận kỳ vọng, khả năng thua lỗ và sự đánh đổi giữa rủi ro/lợi nhuận.",
+  "level": "Phân tích",
+  "nameVi": "Rủi ro và lợi nhuận"
+ },
+ {
+  "id": "D05.05",
+  "domain": "D05",
+  "name": "Diversification",
+  "objective": "Phân bổ giữa nhiều khoản đầu tư để giảm rủi ro tập trung.",
+  "level": "Áp dụng",
+  "nameVi": "Đa dạng hoá khoản đầu tư"
+ },
+ {
+  "id": "D05.06",
+  "domain": "D05",
+  "name": "Time Horizon & Goals",
+  "objective": "Mục tiêu và thời gian ảnh hưởng lựa chọn tài sản.",
+  "level": "Phân tích",
+  "nameVi": "Thời hạn, mục tiêu đầu tư"
+ },
+ {
+  "id": "D05.07",
+  "domain": "D05",
+  "name": "Behavioral Biases",
+  "objective": "FOMO, herd behavior, overconfidence, loss aversion và ảnh hưởng tới quyết định. Đây là thuật ngữ minh họa FinTeen; không xem danh sách này là phân loại chính thức của CFPB.",
+  "level": "Phân tích",
+  "nameVi": "Thiên kiến khi ra quyết định"
+ },
+ {
+  "id": "D05.08",
+  "domain": "D05",
+  "name": "Tài sản mã hóa và yếu tố trò chơi trên ứng dụng (Bổ sung)",
+  "objective": "Nhận diện biến động tài sản mã hóa, FOMO và yếu tố trò chơi thúc đẩy giao dịch; biết kiểm tra rủi ro.",
+  "level": "Phân tích",
+  "nameVi": "Tài sản mã hóa và yếu tố trò chơi trên ứng dụng"
+ },
+ {
+  "id": "D05.09",
+  "domain": "D05",
+  "name": "ESG và kiểm tra tuyên bố bền vững (Bổ sung)",
+  "objective": "Nhận biết ESG; kiểm tra chứng cứ của tuyên bố bền vững và dấu hiệu greenwashing.",
+  "level": "Phân tích",
+  "nameVi": "ESG và kiểm tra tuyên bố bền vững"
+ },
+ {
+  "id": "D06.01",
+  "domain": "D06",
+  "name": "Credit & Borrowing",
+  "objective": "Dùng tiền trước và hoàn trả sau, thường kèm lãi/phí.",
+  "level": "Nhận biết",
+  "nameVi": "Tín dụng và đi vay"
+ },
+ {
+  "id": "D06.02",
+  "domain": "D06",
+  "name": "Principal, Interest, Fees",
+  "objective": "Tách số tiền gốc, lãi và phí để hiểu tổng chi phí.",
+  "level": "Áp dụng",
+  "nameVi": "Tiền gốc, lãi và phí"
+ },
+ {
+  "id": "D06.03",
+  "domain": "D06",
+  "name": "APR / Cost of Credit",
+  "objective": "So sánh chi phí vay thay vì chỉ nhìn khoản trả hàng kỳ.",
+  "level": "Phân tích",
+  "nameVi": "Tổng chi phí khoản vay"
+ },
+ {
+  "id": "D06.04",
+  "domain": "D06",
+  "name": "Creditworthiness",
+  "objective": "Lịch sử tín dụng, khả năng trả nợ và đặc điểm khoản vay ảnh hưởng quyết định của bên cho vay.",
+  "level": "Hiểu",
+  "nameVi": "Uy tín tín dụng"
+ },
+ {
+  "id": "D06.05",
+  "domain": "D06",
+  "name": "Credit Card",
+  "objective": "Thanh toán, statement, minimum payment, interest, late fee.",
+  "level": "Áp dụng",
+  "nameVi": "Thẻ tín dụng"
+ },
+ {
+  "id": "D06.06",
+  "domain": "D06",
+  "name": "Debt Management",
+  "objective": "Đánh giá khả năng trả nợ, ưu tiên nghĩa vụ và tránh vòng xoáy nợ.",
+  "level": "Phân tích",
+  "nameVi": "Quản lý nợ"
+ },
+ {
+  "id": "D06.07",
+  "domain": "D06",
+  "name": "Predatory Lending",
+  "objective": "Nhận diện khoản vay/phí có điều kiện bất lợi và rủi ro cao.",
+  "level": "Phân tích",
+  "nameVi": "Nhận diện khoản vay bất lợi"
+ },
+ {
+  "id": "D06.08",
+  "domain": "D06",
+  "name": "Mua trước trả sau (Bổ sung)",
+  "objective": "Mua trước trả sau là nghĩa vụ nợ; tính lịch trả, phí và tác động nhiều khoản cùng lúc.",
+  "level": "Phân tích",
+  "nameVi": "Mua trước trả sau"
+ },
+ {
+  "id": "D07.01",
+  "domain": "D07",
+  "name": "Financial Risk",
+  "objective": "Sự kiện bất ngờ có thể gây mất tiền, tài sản, thu nhập, sức khỏe hoặc dữ liệu.",
+  "level": "Nhận biết",
+  "nameVi": "Rủi ro tài chính"
+ },
+ {
+  "id": "D07.02",
+  "domain": "D07",
+  "name": "Avoid / Reduce / Retain / Transfer",
+  "objective": "Bốn cách ứng xử với rủi ro: tránh, giảm, tự gánh, chuyển giao.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Bốn cách ứng phó rủi ro"
+ },
+ {
+  "id": "D07.03",
+  "domain": "D07",
+  "name": "Insurance",
+  "objective": "Chuyển một phần rủi ro tài chính sang doanh nghiệp bảo hiểm đổi lấy phí.",
+  "level": "Hiểu",
+  "nameVi": "Bảo hiểm"
+ },
+ {
+  "id": "D07.04",
+  "domain": "D07",
+  "name": "Insurance Terms",
+  "objective": "Premium, deductible, coverage, claim và các giới hạn hợp đồng.",
+  "level": "Áp dụng",
+  "nameVi": "Các thuật ngữ bảo hiểm"
+ },
+ {
+  "id": "D07.05",
+  "domain": "D07",
+  "name": "Identity Theft & Fraud",
+  "objective": "Bảo vệ thông tin cá nhân, nhận diện lừa đảo và giao dịch bất thường.",
+  "level": "Áp dụng",
+  "nameVi": "Mạo danh và lừa đảo"
+ },
+ {
+  "id": "D07.06",
+  "domain": "D07",
+  "name": "Digital Financial Safety",
+  "objective": "Mật khẩu, OTP, phishing, app giả, quyền riêng tư và thiết bị.",
+  "level": "Áp dụng",
+  "nameVi": "An toàn tài chính số"
+ },
+ {
+  "id": "D07.07",
+  "domain": "D07",
+  "name": "Nhà cung cấp và phạm vi bảo vệ (Bổ sung)",
+  "objective": "Kiểm tra danh tính nhà cung cấp, cơ quan giám sát và phạm vi bảo vệ của từng sản phẩm.",
+  "level": "Hiểu",
+  "nameVi": "Nhà cung cấp và phạm vi bảo vệ"
+ },
+ {
+  "id": "D07.08",
+  "domain": "D07",
+  "name": "Quyền và trách nhiệm người tiêu dùng (Bổ sung)",
+  "objective": "Đọc điều kiện, nhận biết quyền và nghĩa vụ; bảo vệ thông tin và chứng từ giao dịch.",
+  "level": "Hiểu/Áp dụng",
+  "nameVi": "Quyền và trách nhiệm người tiêu dùng"
+ },
+ {
+  "id": "D07.09",
+  "domain": "D07",
+  "name": "Khiếu nại và tìm hỗ trợ (Bổ sung)",
+  "objective": "Lưu bằng chứng; xác định kênh khiếu nại và tìm hỗ trợ từ nguồn phù hợp.",
+  "level": "Áp dụng",
+  "nameVi": "Khiếu nại và tìm hỗ trợ"
+ },
+ {
+  "id": "D07.10",
+  "domain": "D07",
+  "name": "Ứng phó khi nghi bị lừa đảo (Bổ sung)",
+  "objective": "Dừng giao dịch đáng ngờ; dùng kênh chính thức để báo cáo, bảo vệ tài khoản và lưu bằng chứng.",
+  "level": "Áp dụng",
+  "nameVi": "Ứng phó khi nghi bị lừa đảo"
+ },
+ {
+  "id": "D08.01",
+  "domain": "D08",
+  "name": "Research",
+  "objective": "Thu thập thông tin trước quyết định.",
+  "level": "Áp dụng",
+  "nameVi": "Tìm hiểu thông tin trước"
+ },
+ {
+  "id": "D08.02",
+  "domain": "D08",
+  "name": "Comparison",
+  "objective": "So sánh tổng chi phí, lợi ích, rủi ro và điều kiện.",
+  "level": "Phân tích",
+  "nameVi": "So sánh các lựa chọn"
+ },
+ {
+  "id": "D08.03",
+  "domain": "D08",
+  "name": "Trade-offs",
+  "objective": "Đánh đổi hiện tại–tương lai, lợi ích–rủi ro, tiện lợi–chi phí.",
+  "level": "Phân tích",
+  "nameVi": "Cân nhắc đánh đổi"
+ },
+ {
+  "id": "D08.04",
+  "domain": "D08",
+  "name": "Self-control",
+  "objective": "Kiểm soát impulse và duy trì kế hoạch.",
+  "level": "Áp dụng",
+  "nameVi": "Tự kiểm soát, giữ kế hoạch"
+ },
+ {
+  "id": "D08.05",
+  "domain": "D08",
+  "name": "Habits",
+  "objective": "Thiết lập routine: ghi chép, tiết kiệm định kỳ, kiểm tra giao dịch.",
+  "level": "Áp dụng",
+  "nameVi": "Thói quen tài chính tốt"
+ },
+ {
+  "id": "D08.06",
+  "domain": "D08",
+  "name": "Consequences",
+  "objective": "Đánh giá hậu quả ngắn hạn và dài hạn của lựa chọn.",
+  "level": "Phân tích",
+  "nameVi": "Lường trước hậu quả"
+ },
+ {
+  "id": "D08.07",
+  "domain": "D08",
+  "name": "Thông tin độc lập và xung đột lợi ích (Bổ sung)",
+  "objective": "Kiểm tra độ tin cậy, hoa hồng/tài trợ và xung đột lợi ích; đối chiếu nguồn độc lập.",
+  "level": "Phân tích",
+  "nameVi": "Thông tin độc lập và xung đột lợi ích"
+ },
+ {
+  "id": "D08.08",
+  "domain": "D08",
+  "name": "Bối cảnh kinh tế và quyết định cá nhân (Bổ sung)",
+  "objective": "Giải thích tác động của giá, lãi suất, tỷ giá và việc làm; điều chỉnh kế hoạch theo kịch bản.",
+  "level": "Phân tích",
+  "nameVi": "Bối cảnh kinh tế và quyết định cá nhân"
+ }
+]

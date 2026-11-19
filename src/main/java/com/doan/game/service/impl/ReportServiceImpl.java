@@ -367,7 +367,9 @@ public class ReportServiceImpl implements ReportService {
             List<SlotReportResponse.WrongItem> wrong = new ArrayList<>();
             for (MiniGameResult m : minis) {
                 finishedAt = later(finishedAt, m.getReceivedAt());
-                String concept = resolveConcept(played.get(playedKey(m.getBuildVersion(), ch)), m);
+                JsonNode json = played.get(playedKey(m.getBuildVersion(), ch));
+                JsonNode scene = json == null ? null : PlayServiceImpl.findGameScene(json.path("scenes"), m.getGameId());
+                String concept = resolveConcept(scene, m);
                 if (concept != null && !concept.isBlank()) {
                     for (int[] c : List.of(concepts.computeIfAbsent(concept, k -> new int[4]),
                             mine.computeIfAbsent(concept, k -> new int[4]))) {
@@ -378,7 +380,10 @@ public class ReportServiceImpl implements ReportService {
                 if (m.isCorrect()) {
                     correct++;
                 } else {
-                    wrong.add(new SlotReportResponse.WrongItem(m.getGameId(), m.getItemId(), concept, m.getChosen()));
+                    // Nhãn tra từ JSON của đúng bản bé đã chơi (m.buildVersion), không phải bản hiện hành.
+                    MiniGameLabels.Labels l = MiniGameLabels.of(scene, m.getItemId(), m.getChosen());
+                    wrong.add(new SlotReportResponse.WrongItem(m.getGameId(), m.getItemId(), concept, m.getChosen(),
+                            l.label(), l.chosenLabel(), l.expected(), l.expectedLabel(), l.explanation()));
                 }
             }
             wrong.sort(Comparator.comparing(SlotReportResponse.WrongItem::gameId)
@@ -415,6 +420,8 @@ public class ReportServiceImpl implements ReportService {
         }
         List<SlotReportResponse.ConceptRow> conceptRows = new ArrayList<>(concepts.size());
         concepts.forEach((concept, c) -> conceptRows.add(new SlotReportResponse.ConceptRow(concept,
+                KnowledgeUnits.nameOf(concept),
+                KnowledgeUnits.get(concept) == null ? null : KnowledgeUnits.get(concept).objective(),
                 new SlotReportResponse.Count(c[0], c[1]), new SlotReportResponse.Count(c[2], c[3]),
                 c[0] + c[2], c[1] + c[3], band(c[0] + c[2], c[1] + c[3]))));
 
@@ -461,9 +468,7 @@ public class ReportServiceImpl implements ReportService {
      * Mã của một câu mini-game, tra lúc đọc từ JSON bản đã chơi bằng đúng hàm của bộ chấm: câu grade → grade.concept hoặc
      * mã duy nhất của cảnh; mini-game kiểu cũ → mã duy nhất của cảnh. Không tra được (không còn JSON) → cột đã lưu.
      */
-    private static String resolveConcept(JsonNode chapterJson, MiniGameResult m) {
-        JsonNode scene = chapterJson == null ? null
-                : PlayServiceImpl.findGameScene(chapterJson.path("scenes"), m.getGameId());
+    private static String resolveConcept(JsonNode scene, MiniGameResult m) {
         if (scene == null) {
             return m.getConcept();
         }

@@ -141,7 +141,12 @@ class ReportSummaryFlowTest {
                 .contains("Quyết định: bé chọn phương án có bước cân nhắc ở 1/1 lựa chọn có nhãn.")
                 .contains("Mini-game: bé làm đúng 1/2 câu.")
                 .contains("Bài sau chương: bé làm đúng 0/")
-                .contains("Câu chưa đúng: NEEDS_WANTS_SUM / ITEM_UPGRADE.");
+                // D.1 (19/11): tên khái niệm + nhãn câu, không bao giờ mã thô.
+                // Mức của D01.02 tuỳ câu hậu trắc chương 1 của lớp test khác cùng H2 — chỉ khẳng định gọi bằng tên.
+                .contains("Phân biệt cần và muốn (").contains("Chưa đủ bài để nhận xét: ")
+                .contains("Câu chưa đúng: “Nang cap tai nghe” — bé chọn Can, đúng là Muon.");
+        assertThat(Pattern.compile("CH\\d{2}_|D\\d{2}\\.\\d{2}|ITEM_|_CH\\d{2}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+")
+                .matcher(row.getSummary()).find()).as(row.getSummary()).isFalse();
         AiJob job = jobOf(row);
         assertThat(job.getStatus()).isEqualTo("QUEUED");
         assertThat(job.getKind()).isEqualTo("REPORT_SUMMARY");
@@ -161,6 +166,9 @@ class ReportSummaryFlowTest {
                 .isEqualTo("Tiet kiem");
         assertThat(p.path("result").path("decisions").get(0).path("deltaStats").path("SAVING").asInt()).isEqualTo(10);
         assertThat(p.path("result").path("noData").toString()).contains("D01.04");
+        assertThat(p.path("frame").path("concepts").get(0).path("name").asText()).isEqualTo("Phân biệt cần và muốn");
+        assertThat(p.path("result").path("wrongItems").get(0).path("label").asText()).isEqualTo("Nang cap tai nghe");
+        assertThat(p.path("result").path("wrongItems").get(0).path("expected").asText()).isEqualTo("Muon");
         assertThat(pkg).contains("\"D01.02\"");
 
         JsonNode generating = chapterRow(report(kid), 1).path("summary");
@@ -519,7 +527,8 @@ class ReportSummaryFlowTest {
                      {"id":"opt-spend","text":"Tieu tien","deltaStats":{"SAVING":-5,"HAPPINESS":10},
                       "evidenceScores":{"I":0,"C":0,"P":0},"nextSceneId":"game-1"}]},
                    {"id":"game-1","type":"minigame","knowledgeUnits":["D01.02"],"nextSceneId":"end",
-                    "game":{"id":"NEEDS_WANTS_SUM","mechanic":"DRAG_AND_DROP","items":[
+                    "game":{"id":"NEEDS_WANTS_SUM","mechanic":"DRAG_AND_DROP",
+                     "zones":[{"id":"NEEDS","title":"Can"},{"id":"WANTS","title":"Muon"}],"items":[
                       {"id":"ITEM_MEAL","category":"NEEDS","text":"Bua an"},
                       {"id":"ITEM_UPGRADE","category":"WANTS","text":"Nang cap tai nghe"}]}},
                    {"id":"end","type":"ending"}

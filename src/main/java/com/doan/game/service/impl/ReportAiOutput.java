@@ -18,15 +18,25 @@ import java.util.regex.Pattern;
  * (BR-51) và ghép bài hiện cho người lớn. Hàm thuần — test gọi thẳng.
  *
  * Đầu ra AI: {overview, decisions[{scene,text}], doingWell[{concept,text}], needsPractice[{concept,text}],
- * tips[{concept,keyPoint,text}]}. Bị loại khi: sai hình; mã doingWell không ở mức GOOD; mã needsPractice không ở mức thấp
- * (PRACTICE / FAMILIAR / NO_DATA / noData); cảnh không có trong gói; tips không dựa vào adultKeyPoints; con số (kể cả số viết
- * bằng chữ) không có trong gói; quá số chữ; có từ cấm.
+ * tips[{concept,keyPoint,text}]}. Bị loại khi: sai hình; câu văn có mã thô (RAW_CODE — D01.02, CH01_SC02_CHOICE, ITEM_…);
+ * mã doingWell không ở mức GOOD; mã needsPractice không ở mức PRACTICE / FAMILIAR; cảnh không có ở đâu trong gói; tips không
+ * dựa vào adultKeyPoints; con số (kể cả số viết bằng chữ) không có trong gói; quá số chữ; có từ cấm.
+ *
+ * 19/11 (đợt D.1, sau lần chạy thật trên production): khái niệm chưa đủ dữ liệu (NO_DATA / noData) KHÔNG còn nằm trong mục
+ * nào của AI — BE tự nối dòng "Chưa đủ bài để nhận xét: <tên>" khi ghép bài ({@link #compose}). Prompt nhắm ~150 chữ (giới
+ * hạn kiểm vẫn 180) và cấm viết mã; cảnh được chấp nhận nếu xuất hiện bất kỳ đâu trong gói (khung quyết định, lựa chọn).
  */
 final class ReportAiOutput {
 
-    static final String PROMPT_VERSION = "report-v1";
+    static final String PROMPT_VERSION = "report-v2";
     static final int MAX_WORDS_CHAPTER = 180;
     static final int MAX_WORDS_SUMMARY = 250;
+    /** Độ dài nhắm trong prompt — thấp hơn giới hạn kiểm để AI có chỗ hụt (19/11: 2/4 bài bị loại vì 188–214 chữ). */
+    static final int TARGET_WORDS_CHAPTER = 150;
+    static final int TARGET_WORDS_SUMMARY = 200;
+    /** Mã thô không được lọt vào câu văn cho phụ huynh (RAW_CODE). */
+    static final Pattern RAW_CODE = Pattern.compile("(?<![\\p{L}\\p{N}])(?:CH\\d{2}_|D\\d{2}\\.\\d{2}|ITEM_)|_CH\\d{2}"
+            + "|(?<![\\p{L}\\p{N}])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![\\p{L}\\p{N}])");
 
     /**
      * Từ cấm (khung mục 4 ý 3, khung v3 mục 7–8): dán nhãn tính cách / hoàn cảnh của bé hay gia đình, khuyên sản phẩm tài
@@ -50,7 +60,7 @@ final class ReportAiOutput {
                     + "khái niệm|mini-game|trò chơi)(?!\\p{L})", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern NUMBER = Pattern.compile("\\d+(?:[.,]\\d+)*");
     private static final Pattern THOUSANDS = Pattern.compile("\\d{1,3}(?:[.,]\\d{3})+");
-    private static final Set<String> LOW_BANDS = Set.of("PRACTICE", "FAMILIAR", "NO_DATA");
+    private static final Set<String> LOW_BANDS = Set.of("PRACTICE", "FAMILIAR");
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private ReportAiOutput() {
@@ -62,33 +72,56 @@ final class ReportAiOutput {
         return ReportPackage.CHAPTER.equals(pkg.path("kind").asText()) ? MAX_WORDS_CHAPTER : MAX_WORDS_SUMMARY;
     }
 
+    static int targetWords(JsonNode pkg) {
+        return ReportPackage.CHAPTER.equals(pkg.path("kind").asText()) ? TARGET_WORDS_CHAPTER : TARGET_WORDS_SUMMARY;
+    }
+
+    /** Số chữ viết bằng lời trong prompt (chỉ các mốc độ dài đang dùng). */
+    private static String inWords(int n) {
+        return switch (n) {
+            case 150 -> "một trăm năm mươi";
+            case 180 -> "một trăm tám mươi";
+            case 200 -> "hai trăm";
+            case 250 -> "hai trăm năm mươi";
+            default -> String.valueOf(n);
+        };
+    }
+
     /** Lớp 3 (systemInstruction). Người đọc PARENT; gói đi riêng ở tin người dùng. */
     static String systemPrompt(JsonNode pkg) {
+        int target = targetWords(pkg);
+        int max = maxWords(pkg);
         return """
                 Bạn viết bản tóm tắt kết quả học tài chính của MỘT bé cho phụ huynh (người đọc: PARENT), bằng tiếng Việt, \
                 giọng ấm áp, cụ thể, tôn trọng bé. Dữ liệu duy nhất được dùng là gói JSON ở tin nhắn người dùng; không suy \
                 đoán điều gì ngoài gói.
                 Trả về JSON đúng schema, 5 mục:
                 - overview: 2–3 câu tổng quan.
-                - decisions: mỗi phần tử {scene, text} cho một quyết định có trong frame.decisions (scene giữ nguyên mã \
-                cảnh). Chỉ nói bé "có" hoặc "chưa có" bước cân nhắc (trường deliberate); không có nhãn thì không nhận xét. \
-                Lựa chọn trong truyện không có đúng sai.
-                - doingWell: {concept, text}, CHỈ mã có band = GOOD trong result.concepts.
-                - needsPractice: {concept, text}, CHỈ mã có band PRACTICE, FAMILIAR hoặc NO_DATA, hoặc nằm trong \
-                result.noData (khi đó nói là chưa đủ dữ liệu để nhận xét).
+                - decisions: mỗi phần tử {scene, text} cho một quyết định trong frame.decisions; trường scene chép nguyên \
+                giá trị scene của gói (chỉ là khoá). Trong text, nhắc quyết định bằng chữ phương án bé chọn (trường label), \
+                không nhắc mã. Chỉ nói bé "có" hoặc "chưa có" bước cân nhắc (trường deliberate); không có nhãn thì không \
+                nhận xét. Lựa chọn trong truyện không có đúng sai.
+                - doingWell: {concept, text}, CHỈ mã có band = GOOD trong result.concepts. Trong text gọi khái niệm bằng tên \
+                (frame.concepts[].name).
+                - needsPractice: {concept, text}, CHỈ mã có band = PRACTICE hoặc FAMILIAR. Có thể nhắc cụ thể câu bé chưa \
+                làm đúng trong result.wrongItems (label = nội dung câu, chosen = bé chọn, expected = đáp án).
                 - tips: {concept, keyPoint, text}, CHỈ dựa vào frame.concepts[].adultKeyPoints (keyPoint là chỉ số ý, đếm \
                 từ 0). Gói không có adultKeyPoints thì tips là mảng rỗng.
+                Khái niệm có band NO_DATA hoặc nằm trong result.noData: KHÔNG đưa vào mục nào, KHÔNG nhắc tới — hệ thống \
+                tự thêm một dòng "chưa đủ bài để nhận xét".
                 Luật bắt buộc:
                 1. Mọi con số phải có nguyên văn trong gói, viết bằng chữ số đúng như trong gói (ví dụ 5/6, 300.000đ). \
                 Không tự tính phần trăm hay con số mới. Không viết số bằng chữ.
-                2. Tổng độ dài mọi mục không quá %d chữ (đếm theo khoảng trắng).
+                2. Độ dài: nhắm khoảng %d chữ (%s chữ), TUYỆT ĐỐI không quá %d chữ (%s chữ), tính tổng mọi mục, đếm \
+                theo khoảng trắng. Mỗi phần tử chỉ 1–2 câu ngắn; bỏ bớt chi tiết thay vì viết dài.
                 3. Không dán nhãn tính cách hay hoàn cảnh của bé hoặc gia đình (ví dụ lười, kém, tiêu hoang, nghèo).
                 4. Không gọi lựa chọn trong truyện là sai hay đúng.
                 5. Không khuyên dùng sản phẩm tài chính thật (cổ phiếu, tiền ảo, thẻ tín dụng, quỹ đầu tư, vay).
                 6. %s
-                7. Mã khái niệm (ví dụ D01.02) và mã cảnh giữ nguyên trong trường concept / scene; trong câu văn có thể \
-                nhắc mã.
-                """.formatted(maxWords(pkg), ReportPackage.STATS_NOTE);
+                7. Trong câu văn TUYỆT ĐỐI không viết mã: mã khái niệm (dạng D01.02), mã cảnh, mã phương án, mã câu hay bất \
+                kỳ chữ IN_HOA nối bằng gạch dưới nào. Mã chỉ được nằm trong trường concept / scene. Gọi khái niệm bằng tên, \
+                gọi quyết định bằng tình huống hoặc chữ phương án.
+                """.formatted(target, inWords(target), max, inWords(max), ReportPackage.STATS_NOTE);
     }
 
     /** Schema đầu ra cho Gemini (OpenAPI subset). */
@@ -130,10 +163,14 @@ final class ReportAiOutput {
         if (pkg == null) {
             return "SHAPE: gói hỏng";
         }
+        String all = nfc(String.join("\n", texts(out, List.of("overview", "decisions", "doingWell", "needsPractice",
+                "tips"))));
+        Matcher rawCode = RAW_CODE.matcher(all);
+        if (rawCode.find()) {
+            return "RAW_CODE: " + rawCode.group();
+        }
         Map<String, String> bands = new java.util.HashMap<>();
         pkg.path("result").path("concepts").forEach(c -> bands.put(c.path("id").asText(), c.path("band").asText()));
-        Set<String> noData = new HashSet<>();
-        pkg.path("result").path("noData").forEach(n -> noData.add(n.asText()));
         for (JsonNode it : out.path("doingWell")) {
             String code = it.path("concept").asText();
             if (!"GOOD".equals(bands.get(code))) {
@@ -142,12 +179,20 @@ final class ReportAiOutput {
         }
         for (JsonNode it : out.path("needsPractice")) {
             String code = it.path("concept").asText();
-            if (!noData.contains(code) && !LOW_BANDS.contains(bands.get(code))) {
+            if (!LOW_BANDS.contains(bands.getOrDefault(code, ""))) {
                 return "NEEDS_PRACTICE_BAND: " + code;
             }
         }
+        // Cảnh hợp lệ = mọi giá trị scene / chosen / id có trong gói (khung quyết định + lựa chọn của bé). 19/11: AI dẫn một
+        // cảnh có trong lựa chọn của bé mà khung không liệt kê → UNKNOWN_SCENE oan.
         Set<String> scenes = new HashSet<>();
-        pkg.path("frame").path("decisions").forEach(d -> scenes.add(d.path("scene").asText()));
+        for (String key : List.of("scene", "chosen", "id")) {
+            pkg.findValues(key).forEach(v -> {
+                if (v.isTextual()) {
+                    scenes.add(v.asText());
+                }
+            });
+        }
         for (JsonNode it : out.path("decisions")) {
             if (!scenes.contains(it.path("scene").asText())) {
                 return "UNKNOWN_SCENE: " + it.path("scene").asText();
@@ -163,8 +208,6 @@ final class ReportAiOutput {
             }
         }
 
-        String all = nfc(String.join("\n", texts(out, List.of("overview", "decisions", "doingWell", "needsPractice",
-                "tips"))));
         Set<String> allowed = numbers(nfc(pkgText));
         Matcher m = NUMBER.matcher(all);
         while (m.find()) {
@@ -187,7 +230,13 @@ final class ReportAiOutput {
         if (words > maxWords(pkg)) {
             return "TOO_LONG: " + words + " > " + maxWords(pkg);
         }
-        hit = firstWord(all, FORBIDDEN);
+        // Từ cấm có ngay trong tên / mục tiêu khái niệm của gói (ví dụ "thẻ tín dụng" ở chương tín dụng) là nói về bài học,
+        // không phải khuyên dùng → cho phép.
+        StringBuilder topic = new StringBuilder();
+        pkg.path("frame").path("concepts").forEach(c -> topic.append(c.path("name").asText("")).append('\n')
+                .append(c.path("objective").asText("")).append('\n'));
+        String topicText = nfc(topic.toString());
+        hit = firstWord(all, FORBIDDEN.stream().filter(fw -> firstWord(topicText, List.of(fw)) == null).toList());
         if (hit != null) {
             return "FORBIDDEN_WORD: " + hit;
         }
@@ -198,8 +247,11 @@ final class ReportAiOutput {
         return null;
     }
 
-    /** Bài hiện cho người lớn: tổng quan + các mục có tiêu đề; mục rỗng thì bỏ. Đầu ra không phải JSON → trả nguyên văn. */
-    static String compose(String raw) {
+    /**
+     * Bài hiện cho người lớn: tổng quan + các mục có tiêu đề (mục rỗng thì bỏ) + dòng "Chưa đủ bài để nhận xét: <tên>" do BE
+     * viết từ gói (AI không nói về các mã này). Đầu ra không phải JSON → trả nguyên văn.
+     */
+    static String compose(String pkgText, String raw) {
         JsonNode out = read(raw);
         if (out == null || !out.isObject() || !out.path("overview").isTextual()) {
             return raw;
@@ -210,6 +262,12 @@ final class ReportAiOutput {
         section(parts, out, "doingWell", "Bé làm tốt");
         section(parts, out, "needsPractice", "Cần luyện thêm");
         section(parts, out, "tips", "Gợi ý cho gia đình");
+        ReportPackage.Pkg pkg = ReportPackage.read(pkgText);
+        String few = pkg == null || pkg.result() == null || pkg.result().concepts() == null
+                || pkg.result().noData() == null ? null : ReportPackage.noDataLine(pkg.result());
+        if (few != null) {
+            parts.add(few);
+        }
         return String.join("\n\n", parts);
     }
 

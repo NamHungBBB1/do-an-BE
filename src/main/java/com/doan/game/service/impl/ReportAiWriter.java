@@ -121,7 +121,7 @@ public class ReportAiWriter implements AiJobWriter {
                     if (rule == null) {
                         record(job, attempt, key, model, reply, r, outcome, null,
                                 AiCallClassifier.humanText(outcome, key.getAlias(), model, r, null));
-                        return new Output(ReportAiOutput.compose(r.text()), tier(key), key.getProvider().name(),
+                        return new Output(ReportAiOutput.compose(job.getInput(), r.text()), tier(key), key.getProvider().name(),
                                 key.getAlias(), model, ReportAiOutput.PROMPT_VERSION, r.text());
                     }
                     outcome = AiCallClassifier.REJECTED_OUTPUT;

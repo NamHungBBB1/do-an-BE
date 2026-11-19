@@ -130,8 +130,10 @@ class ReportAiWriterFlowTest {
         assertThat(after.getTier()).isEqualTo(1);
         assertThat(after.getProvider()).isEqualTo("GEMINI");
         assertThat(after.getModel()).isEqualTo("gemini-test");
-        assertThat(after.getPromptVersion()).isEqualTo("report-v1");
-        assertThat(after.getSummary()).startsWith("Bé đã hoàn thành").contains("Bé làm tốt\n- ");
+        assertThat(after.getPromptVersion()).isEqualTo("report-v2");
+        // D.1: mã chưa đủ dữ liệu không nằm trong mục nào của AI — BE nối dòng bằng tên khái niệm.
+        assertThat(after.getSummary()).startsWith("Bé đã hoàn thành").contains("Bé làm tốt\n- ")
+                .endsWith("Chưa đủ bài để nhận xét: Chi phí cơ hội.").doesNotContain("D01.");
         assertThat(calls).singleElement().satisfies(c -> {
             assertThat(c.model()).isEqualTo("gemini-test");
             assertThat(c.secret()).isEqualTo(secret(k));
@@ -477,8 +479,7 @@ class ReportAiWriterFlowTest {
         return "{\"overview\":\"Bé đã hoàn thành chương đầu và làm đúng 5/6 câu về nhu cầu và mong muốn.\","
                 + "\"decisions\":[{\"scene\":\"CH01_SC02_CHOICE\",\"text\":\"Bé chọn chờ một tuần, có bước cân nhắc "
                 + "trước khi mua.\"}],\"doingWell\":[{\"concept\":\"D01.02\",\"text\":\"Bé phân biệt tốt cần và muốn.\"}],"
-                + "\"needsPractice\":[{\"concept\":\"D01.03\",\"text\":\"D01.03 chưa đủ dữ liệu để nhận xét.\"}],"
-                + "\"tips\":[]}";
+                + "\"needsPractice\":[],\"tips\":[]}";
     }
 
     private static AiTextClient.RawReply ok(String text, int in, int out) {
