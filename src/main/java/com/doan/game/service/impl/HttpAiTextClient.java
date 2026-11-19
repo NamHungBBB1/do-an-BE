@@ -78,4 +78,41 @@ public class HttpAiTextClient implements AiTextClient {
             throw new AiCallException(e.getClass().getSimpleName(), false);
         }
     }
+
+    @Override
+    public RawReply send(AiProviderKind provider, String key, String model, String system, String user,
+                         JsonNode responseSchema) {
+        long start = System.nanoTime();
+        try {
+            HttpRequest.Builder b = HttpRequest.newBuilder().timeout(Duration.ofSeconds(60))
+                    .header("Content-Type", "application/json");
+            ObjectNode body = json.createObjectNode();
+            if (provider == AiProviderKind.GEMINI) {
+                body.putObject("systemInstruction").putArray("parts").addObject().put("text", system);
+                body.putArray("contents").addObject().put("role", "user").putArray("parts").addObject().put("text", user);
+                ObjectNode gen = body.putObject("generationConfig").put("responseMimeType", "application/json")
+                        .put("temperature", 0.2);
+                if (responseSchema != null) {
+                    gen.set("responseSchema", responseSchema);
+                }
+                b.uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"))
+                        .header("x-goog-api-key", key);
+            } else {
+                body.put("model", model).put("temperature", 0.2);
+                body.putArray("messages").addObject().put("role", "system").put("content", system);
+                body.withArray("messages").addObject().put("role", "user").put("content", user);
+                body.putObject("response_format").put("type", "json_object");
+                b.uri(URI.create("https://openrouter.ai/api/v1/chat/completions")).header("Authorization", "Bearer " + key);
+            }
+            HttpResponse<String> r = http.send(b.POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            return new RawReply(r.statusCode(), r.body(), (System.nanoTime() - start) / 1_000_000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new RawReply(0, "Interrupted", (System.nanoTime() - start) / 1_000_000);
+        } catch (Exception e) {
+            // Không bao giờ chép e.getMessage(): có thể mang URL / header.
+            return new RawReply(0, e.getClass().getSimpleName(), (System.nanoTime() - start) / 1_000_000);
+        }
+    }
 }

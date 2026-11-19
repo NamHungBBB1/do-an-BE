@@ -107,6 +107,8 @@ public class AiKeyServiceImpl implements AiKeyService {
         k.setLast4(key.substring(key.length() - 4));
         k.setEnabled(true);
         k.setPriority(req.priority());
+        k.setPurpose(ReportAiWriter.GENERAL);
+        applyMeta(k, req);
         k.setCreatedBy(accountRepo.findById(callerId).orElse(null));
         k.setCreatedAt(Instant.now(clock));
         k = keyRepo.save(k);
@@ -122,6 +124,59 @@ public class AiKeyServiceImpl implements AiKeyService {
         runProbe(k, decrypt(k.getSecretEnc()));
         log.info("Thử khoá AI {} → {} bởi {}", k.getAlias(), k.isLastTestOk() ? "OK" : k.getLastError(), callerId);
         return toResponse(k);
+    }
+
+    @Override
+    @Transactional
+    public AiKeyResponse update(UUID callerId, UUID id, AiKeyRequest req) {
+        if (req == null) {
+            throw new AppException(ErrorCode.AI_KEY_INVALID, "thiếu body");
+        }
+        AiKey k = require(id);
+        if (req.priority() != null) {
+            k.setPriority(req.priority());
+        }
+        applyMeta(k, req);
+        log.info("Sửa khoá AI {} bởi {}", k.getAlias(), callerId);
+        return toResponse(k);
+    }
+
+    /** Trường quản lý (đợt D, khung 13.4): null = giữ nguyên, chuỗi rỗng = xoá, số ≤ 0 = bỏ giới hạn. */
+    private static void applyMeta(AiKey k, AiKeyRequest req) {
+        if (req.purpose() != null) {
+            String p = req.purpose().trim().toUpperCase(Locale.ROOT);
+            if (!p.equals(ReportAiWriter.GENERAL) && !p.equals(ReportAiWriter.DEMO_RESERVE)) {
+                throw new AppException(ErrorCode.AI_KEY_INVALID, "purpose: GENERAL hoặc DEMO_RESERVE");
+            }
+            k.setPurpose(p);
+        }
+        if (req.tierLabel() != null) {
+            String t = req.tierLabel().trim().toUpperCase(Locale.ROOT);
+            if (!t.isEmpty() && !t.equals("FREE") && !t.equals("PAID")) {
+                throw new AppException(ErrorCode.AI_KEY_INVALID, "tierLabel: FREE hoặc PAID");
+            }
+            k.setTierLabel(t.isEmpty() ? null : t);
+        }
+        if (req.project() != null) {
+            k.setProject(text(req.project(), 80, "project"));
+        }
+        if (req.ownerNote() != null) {
+            k.setOwnerNote(text(req.ownerNote(), 255, "ownerNote"));
+        }
+        if (req.rpmLimit() != null) {
+            k.setRpmLimit(req.rpmLimit() <= 0 ? null : req.rpmLimit());
+        }
+        if (req.rpdLimit() != null) {
+            k.setRpdLimit(req.rpdLimit() <= 0 ? null : req.rpdLimit());
+        }
+    }
+
+    private static String text(String s, int max, String field) {
+        String t = s.trim();
+        if (t.length() > max) {
+            throw new AppException(ErrorCode.AI_KEY_INVALID, field + ": tối đa " + max + " ký tự");
+        }
+        return t.isEmpty() ? null : t;
     }
 
     @Override
@@ -158,7 +213,9 @@ public class AiKeyServiceImpl implements AiKeyService {
     private AiKeyResponse toResponse(AiKey k) {
         return new AiKeyResponse(k.getId(), k.getProvider(), k.getAlias(), "••••" + k.getLast4(), k.isEnabled(),
                 k.getPriority(), k.getLastTestAt(), k.isLastTestOk(), k.getLastError(), k.getCoolDownUntil(),
-                k.getCreatedBy() == null ? null : k.getCreatedBy().getDisplayName(), k.getCreatedAt());
+                k.getCreatedBy() == null ? null : k.getCreatedBy().getDisplayName(), k.getCreatedAt(),
+                k.getPurpose() == null ? ReportAiWriter.GENERAL : k.getPurpose(), k.getProject(), k.getOwnerNote(),
+                k.getTierLabel(), k.getRpmLimit(), k.getRpdLimit());
     }
 
     // ------------------------------------------------------------------ mã hoá

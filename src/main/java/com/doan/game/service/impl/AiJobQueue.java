@@ -43,7 +43,8 @@ import java.util.UUID;
  * - xong: DONE + chép bài sang mọi DailySummary trỏ tới việc (source LLM).
  * - {@code app.report.ai-enabled=false} (mặc định PR này) hoặc chưa có writer: FAILED ngay, mã AI_DISABLED — bài giữ bản theo
  *   luật, báo cáo hiện FALLBACK sau tối đa một chu kỳ.
- * Lỗi gần nhất ghi lastErrorCode / lastErrorText trên việc; sổ từng lượt gọi (AiCallLog) để đợt D.
+ * - lỗi "fatal" (SAFETY, đầu ra bị loại lần hai, không còn khoá nào bật): FAILED ngay với mã của lỗi (đợt D).
+ * Lỗi gần nhất ghi lastErrorCode / lastErrorText trên việc; sổ từng lần gọi HTTP ở AiCallLog (ReportAiWriter, đợt D).
  */
 @Slf4j
 @Component
@@ -122,14 +123,19 @@ public class AiJobQueue {
                 tx.executeWithoutResult(s -> done(id, out));
                 quotaStreak = 0;
             } catch (AiTextClient.AiCallException e) {
+                if (e.fatal()) {
+                    tx.executeWithoutResult(s -> fail(id, e.code() == null ? "AI_ERROR" : e.code(), e.getMessage()));
+                    quotaStreak = 0;
+                    continue;
+                }
                 if (e.quota()) {
                     List<UUID> rest = List.copyOf(ids.subList(i, ids.size()));
                     tx.executeWithoutResult(s -> quota(rest, e.getMessage()));
                     break;
                 }
-                tx.executeWithoutResult(s -> retryOrFail(id, e.getMessage()));
+                tx.executeWithoutResult(s -> retryOrFail(id, e.code() == null ? "AI_ERROR" : e.code(), e.getMessage()));
             } catch (RuntimeException e) {
-                tx.executeWithoutResult(s -> retryOrFail(id, e.toString()));
+                tx.executeWithoutResult(s -> retryOrFail(id, "AI_ERROR", e.toString()));
             }
         }
         return ids.size();
@@ -151,7 +157,7 @@ public class AiJobQueue {
     private void done(UUID id, AiJobWriter.Output out) {
         AiJob job = jobRepo.findById(id).orElseThrow();
         job.setStatus(DONE);
-        job.setOutput(out.text());
+        job.setOutput(out.raw());   // đầu ra thô (JSON theo mục); bài hiện cho người lớn nằm ở DailySummary.summary
         job.setTier(out.tier());
         job.setProvider(out.provider());
         job.setKeyAlias(out.keyAlias());
@@ -187,11 +193,11 @@ public class AiJobQueue {
         }
     }
 
-    private void retryOrFail(UUID id, String message) {
+    private void retryOrFail(UUID id, String code, String message) {
         AiJob job = jobRepo.findById(id).orElseThrow();
         int attempts = (job.getAttempts() == null ? 0 : job.getAttempts()) + 1;
         job.setAttempts(attempts);
-        job.setLastErrorCode("AI_ERROR");
+        job.setLastErrorCode(code);
         job.setLastErrorText(clip(message));
         job.setLockedAt(null);
         if (attempts > BACKOFF.size()) {

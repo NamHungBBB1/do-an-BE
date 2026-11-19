@@ -20,6 +20,9 @@ public interface AiKeyService {
     /** Thử lại: OK xoá cờ nghỉ; hết lượt → nghỉ 15 phút; khoá sai → ghi lỗi (không tự dừng — admin quyết). */
     AiKeyResponse test(UUID callerId, UUID id);
 
+    /** Sửa thông tin quản lý (priority, purpose, project, ownerNote, tierLabel, rpm / rpd) — không đổi khoá / alias. */
+    AiKeyResponse update(UUID callerId, UUID id, AiKeyRequest req);
+
     /** Dừng / bật lại: khoá dừng không bị hàng đợi dùng, vẫn giữ để bật lại. */
     AiKeyResponse setEnabled(UUID callerId, UUID id, boolean enabled);
 
