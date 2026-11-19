@@ -438,6 +438,73 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.finalReport.status").value("NONE"));
     }
 
+    // ------------------------------------------------------------------ 7b. chữ cho câu sai (đợt D.1, 19/11)
+    /**
+     * Câu sai mang nhãn câu, ô bé chọn / đáp án thành chữ (vùng Cần / Muốn; luật số → "≥ 200.000đ") và lời giải thích, tra từ
+     * JSON của ĐÚNG bản bé đã chơi: phát hành bản mới đổi nhãn câu thì báo cáo vẫn hiện nhãn cũ. concepts[] có tên tiếng Việt
+     * và mục tiêu của khung v3.
+     */
+    @Test
+    void wrongItemsReadLabelsFromPlayedVersion() throws Exception {
+        String v = releaseVersion();
+        String parent = adult("repnhan", PlanKind.PARENT);
+        String groupId = openGroup(parent, "Nha repnhan", "FAMILY");
+        String slotBody = mvc.perform(slotRequest(parent, groupId, "Be Nhan", "123456"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String slotId = extractId(slotBody);
+        String child = childLogin(slotBody, "123456");
+        mvc.perform(post("/api/play/chapter").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + v + "\",\"choices\":[],"
+                                + "\"miniGames\":["
+                                + "{\"gameId\":\"READABLE_V3\",\"itemId\":\"ITEM_HEADPHONES\",\"chosen\":\"NEEDS\"},"
+                                + "{\"gameId\":\"READABLE_V3\",\"itemId\":\"ITEM_MEAL\",\"chosen\":\"NEEDS\"},"
+                                + "{\"gameId\":\"READABLE_V3\",\"itemId\":\"reserve\",\"chosen\":150000}]}"))
+                .andExpect(status().isOk());
+
+        // Bản mới đổi nhãn câu (thành bản hiện hành) — báo cáo của lần chơi cũ phải giữ nhãn của bản đã chơi.
+        String y = publishCh01(minimalChapter().replace("Tai nghe mới khi tai nghe cũ còn dùng được", "Tai nghe đời mới"));
+        assertThat(y).isNotEqualTo(v);
+
+        mvc.perform(slotReport(parent, slotId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.correct").value(1))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong.length()").value(2))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].itemId").value("ITEM_HEADPHONES"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].label")
+                        .value("Tai nghe mới khi tai nghe cũ còn dùng được"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].chosen").value("NEEDS"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].chosenLabel").value("Giỏ Cần"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].expected").value("WANTS"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].expectedLabel").value("Giỏ Muốn"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[0].explanation")
+                        .value("Đồ cũ vẫn dùng tốt nên đây là mong muốn."))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].itemId").value("reserve"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].label").value("Số tiền giữ lại cho lớp vẽ"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].chosen").value("150000"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].chosenLabel").value("150.000đ"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].expectedLabel").value("≥ 200.000đ"))
+                .andExpect(jsonPath("$.result.chapters[0].miniGames.wrong[1].explanation").value("Phí lớp vẽ là 200.000đ."))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='D01.02')].name").value(contains("Phân biệt cần và muốn")))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='D01.02')].objective")
+                        .value(contains("Phân biệt nhu cầu thiết yếu và mong muốn; ưu tiên theo hoàn cảnh.")))
+                .andExpect(jsonPath("$.result.concepts[?(@.concept=='D03.01')].name").value(contains("Lập ngân sách")));
+    }
+
+    /** Lưu nháp CH01 + duyệt + phát hành KHÔNG xoá bản cũ (khác publishFresh) — bản cũ vẫn còn để báo cáo tra. */
+    private String publishCh01(String json) throws Exception {
+        var res = mvc.perform(put("/api/studio/chapters/CH01/draft").with(admin())
+                .contentType(MediaType.APPLICATION_JSON).content(json)).andReturn().getResponse();
+        assertThat(res.getStatus()).as(res.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(200);
+        ContentTestSupport.approve(new ContentTestSupport.Repos(releaseChapterRepo, releaseRepo, draftRepo, chapterRepo),
+                "CH01", com.doan.game.enums.ChangeClass.MAJOR, true);
+        String body = mvc.perform(post("/api/studio/releases").with(admin()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"doi nhan\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return MAPPER.readTree(body).path("result").path("version").asText();
+    }
+
     // ------------------------------------------------------------------ 8. hậu trắc NONE + bản tổng kết
     /** Chương không có câu hậu trắc → NONE, COMPLETE; chưa xong CH08 → finalReport NONE; xong CH08 mà còn chờ hậu trắc → PARTIAL. */
     @Test
@@ -526,11 +593,20 @@ class ReportFlowTest {
                     "game":{"id":"NEEDS_OR_WANTS_CH01","mechanic":"DRAG_AND_DROP","items":[
                       {"id":"ITEM_MEAL","category":"NEEDS","text":"Bua an"},
                       {"id":"ITEM_UPGRADE","category":"WANTS","text":"Nang cap tai nghe"}]}},
-                   {"id":"game-2","type":"minigame","nextSceneId":"end",
+                   {"id":"game-2","type":"minigame","nextSceneId":"game-3",
                     "game":{"id":"CALC_V3","questions":[
                       {"id":"Q_A","grade":{"concept":"T01.02","rule":{"eq":5}}},
                       {"id":"Q_B","grade":{"concept":"T01.02","rule":{"eq":7}}},
                       {"id":"Q_C","grade":{"concept":"T01.02","rule":{"eq":9}}}]}},
+                   {"id":"game-3","type":"minigame","nextSceneId":"end",
+                    "game":{"id":"READABLE_V3","zones":[{"id":"NEEDS","title":"Giỏ Cần"},{"id":"WANTS","title":"Giỏ Muốn"}],
+                     "items":[
+                      {"id":"ITEM_HEADPHONES","label":"Tai nghe mới khi tai nghe cũ còn dùng được","category":"WANTS",
+                       "explanation":"Đồ cũ vẫn dùng tốt nên đây là mong muốn.","grade":{"concept":"D01.02","rule":{"eq":"WANTS"}}},
+                      {"id":"ITEM_MEAL","label":"Bữa ăn hằng ngày","category":"NEEDS",
+                       "grade":{"concept":"D01.02","rule":{"eq":"NEEDS"}}}],
+                     "questions":[{"id":"reserve","label":"Số tiền giữ lại cho lớp vẽ","hint":"Phí lớp vẽ là 200.000đ.",
+                       "grade":{"concept":"D03.01","rule":{"min":200000}}}]}},
                    {"id":"end","type":"ending"}
                  ],
                  "endingRules":{"priorityOrder":["x"],"endings":[]}}

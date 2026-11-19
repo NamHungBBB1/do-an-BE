@@ -35,9 +35,11 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
     /**
      * Kiến thức theo mã (19/11, khung báo cáo AI mục 3.1 + 13.1 — THAY hình cũ {concept, pMastery, answers}, BKT để sau).
      * game = câu mini-game lần nộp đầu, postTest = câu hậu trắc đã nộp; correct / total = tổng hai nguồn; band theo BR-44.
-     * Chỉ số nguyên, không lưu tỉ lệ (BR-38).
+     * Chỉ số nguyên, không lưu tỉ lệ (BR-38). 19/11 (đợt D.1): name = tên tiếng Việt ngắn cho phụ huynh, objective = "Nội
+     * dung cần đạt" của khung kiến thức v3 (mã ngoài khung → name = mã, objective null).
      */
-    public record ConceptRow(String concept, Count game, Count postTest, int correct, int total, String band) {}
+    public record ConceptRow(String concept, String name, String objective, Count game, Count postTest, int correct,
+                             int total, String band) {}
 
     public record Count(int correct, int total) {}
 
@@ -67,7 +69,13 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
     /** Mini-game của chương, lần nộp đầu: x/y câu đúng + từng câu sai (bé chọn gì). */
     public record MiniGames(int correct, int total, List<WrongItem> wrong) {}
 
-    public record WrongItem(String gameId, String itemId, String concept, String chosen) {}
+    /**
+     * Một câu sai. 19/11 (đợt D.1, đề xuất FE): label = nhãn câu bé thấy; chosenLabel / expectedLabel = ô bé chọn và đáp án
+     * viết thành chữ (mã → nhãn trong game; luật số / tập → mô tả ngắn, ví dụ "≥ 200.000đ"); expected = đáp án thô (giá trị
+     * eq, hoặc luật JSON); explanation = lời giải thích của câu. Tra từ JSON bản bé đã chơi; không tra được → null.
+     */
+    public record WrongItem(String gameId, String itemId, String concept, String chosen, String label,
+                            String chosenLabel, String expected, String expectedLabel, String explanation) {}
 
     /**
      * Hậu trắc của chương cho nhóm của bé. status: NONE (chương không có câu hậu trắc), PENDING (chưa nộp; quizId null khi

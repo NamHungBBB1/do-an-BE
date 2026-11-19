@@ -20,18 +20,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 /**
  * Gói số liệu cho bài viết người lớn + bản viết theo luật (khung báo cáo AI mục 3, 4, 13.3 — Hưng chốt 19/11).
  *
  * Gói dựng theo WHITELIST: chỉ các record bên dưới, không bao giờ chép nguyên object của DB. Gói có khung (chương, mã lõi,
  * quyết định với chữ phương án của bản GỐC — không cá nhân hoá) và kết quả (đúng / tổng theo mã, câu sai, phương án đã chọn,
- * hậu trắc). KHÔNG có: tên, id / mã slot, nhóm, tài khoản, email, tuổi, giới tính, sở thích, giờ chơi, chữ bé tự gõ — kể cả
- * ô bé chọn ở mini-game (có thể là chữ bé gõ), nên câu sai chỉ mang mã câu. Gói rời BE (AI tầng nào cũng vậy) chính là
- * chuỗi {@link #canonicalJson}; sha-256 của chuỗi đó là packageHash — cùng số liệu thì cùng hash, dùng lại bài cũ.
+ * hậu trắc). KHÔNG có: tên, id / mã slot, nhóm, tài khoản, email, tuổi, giới tính, sở thích, giờ chơi, chữ bé tự gõ. Câu sai
+ * mang nhãn câu + đáp án viết thành chữ (đều là chữ của nội dung); ô bé chọn chỉ đi kèm khi nó tra ra nhãn trong nội dung
+ * (không gửi số bé tự nhập). Gói rời BE (AI tầng nào cũng vậy) chính là chuỗi {@link #canonicalJson}; sha-256 của chuỗi đó
+ * là packageHash — cùng số liệu thì cùng hash, dùng lại bài cũ.
  *
- * TODO (nội dung chưa có, khung mục 9.1): tên / mục tiêu / mức của mã lõi + adultKeyPoints (chưa có từ điển mã trong BE →
- * gói chỉ mang mã), situation / keyDecision / revision của quyết định (nay kể mọi lựa chọn), nhãn câu mini-game, belowTargetAge.
+ * 19/11 (đợt D.1): khái niệm mang tên tiếng Việt / mục tiêu / mức của khung v3 (KnowledgeUnits); mã khái niệm, mã cảnh, mã
+ * phương án chỉ còn làm khoá để BE kiểm đầu ra — AI được dặn không viết mã vào câu văn, BE loại nếu lọt (RAW_CODE).
+ * TODO (nội dung chưa có, khung mục 9.1): adultKeyPoints, situation / keyDecision / revision của quyết định, belowTargetAge.
  */
 final class ReportPackage {
 
@@ -44,6 +47,8 @@ final class ReportPackage {
     private static final List<String> STAT_KEYS = List.of("WEALTH", "SAVING", "HAPPINESS", "RISK", "GOAL");
     static final String STATS_NOTE = "SAVING, HAPPINESS, RISK, GOAL, WEALTH là chỉ số gameplay của FinTeen, không phải thang "
             + "đo năng lực tài chính; RISK cao = phơi nhiễm lớn";
+    /** Ô bé tự nhập số — không gửi AI (số / chữ bé tự gõ nằm ngoài whitelist). */
+    private static final Pattern TYPED_NUMBER = Pattern.compile("-?\\d+(?:[.,]\\d+)*");
     static final Map<String, String> BANDS = new TreeMap<>(Map.of("NO_DATA", "dưới 3 câu", "PRACTICE", "< 50%",
             "FAMILIAR", "50–69%", "GOOD", "≥ 70%"));
 
@@ -57,10 +62,10 @@ final class ReportPackage {
     record Frame(List<ChapterFrame> chapters, List<ConceptFrame> concepts, List<DecisionFrame> decisions,
                  String statsNote, Map<String, String> bands) {}
 
-    record ChapterFrame(int number, String code, String title, String goal) {}
+    record ChapterFrame(int number, String title, String goal) {}
 
-    /** TODO: name, objective, level, adultKeyPoints khi BE có từ điển mã khung v3. */
-    record ConceptFrame(String id) {}
+    /** name = tên tiếng Việt cho phụ huynh; TODO adultKeyPoints khi nội dung có. */
+    record ConceptFrame(String id, String name, String objective, String level) {}
 
     record DecisionFrame(String scene, List<OptionFrame> options) {}
 
@@ -71,7 +76,8 @@ final class ReportPackage {
 
     record ConceptResult(String id, Count game, Count postTest, int correct, int total, String band) {}
 
-    record WrongItem(String game, String item, String concept) {}
+    /** label = nhãn câu; chosen = ô bé chọn (chỉ khi là nhãn có trong nội dung); expected = đáp án viết thành chữ. */
+    record WrongItem(String label, String chosen, String expected, String concept) {}
 
     record DecisionResult(String scene, String chosen, String label, Boolean deliberate,
                           Map<String, Integer> deltaStats) {}
@@ -110,7 +116,10 @@ final class ReportPackage {
 
         List<WrongItem> wrong = new ArrayList<>();
         for (SlotReportResponse.WrongItem w : row.miniGames().wrong()) {
-            wrong.add(new WrongItem(w.gameId(), w.itemId(), w.concept()));
+            if (w.label() != null) {
+                boolean typed = w.chosen() == null || TYPED_NUMBER.matcher(w.chosen().trim()).matches();
+                wrong.add(new WrongItem(w.label(), typed ? null : w.chosenLabel(), w.expectedLabel(), w.concept()));
+            }
         }
         Map<String, int[]> counts = blocks.chapterConcepts().getOrDefault(ch, Map.of());
         SlotReportResponse.PostTest pt = row.postTest();
@@ -159,11 +168,10 @@ final class ReportPackage {
 
     private static ChapterFrame chapterFrame(int ch, JsonNode json) {
         if (json == null) {
-            return new ChapterFrame(ch, null, null, null);
+            return new ChapterFrame(ch, null, null);
         }
-        JsonNode meta = json.path("metadata");
-        return new ChapterFrame(ch, meta.path("chapterId").asText(json.path("id").asText(null)),
-                json.path("title").asText(null), meta.path("goalDescription").asText(null));
+        return new ChapterFrame(ch, json.path("title").asText(null),
+                json.path("metadata").path("goalDescription").asText(null));
     }
 
     /** Mã lõi của chương (metadata.coreKnowledgeUnits) — báo cáo chỉ nói về mã lõi; chương không khai thì mọi mã. */
@@ -177,7 +185,11 @@ final class ReportPackage {
     }
 
     private static List<ConceptFrame> conceptFrames(Set<String> core) {
-        return core.stream().sorted().map(ConceptFrame::new).toList();
+        return core.stream().sorted().map(id -> {
+            KnowledgeUnits.Unit u = KnowledgeUnits.get(id);
+            return u == null ? new ConceptFrame(id, null, null, null)
+                    : new ConceptFrame(id, u.nameVi(), u.objective(), u.level());
+        }).toList();
     }
 
     private static List<ConceptResult> conceptResults(Map<String, int[]> counts, Set<String> core) {
@@ -238,6 +250,16 @@ final class ReportPackage {
         }
     }
 
+    /** Đọc lại gói đã lưu (AiJob.input); hỏng → null. */
+    static Pkg read(String json) {
+        try {
+            return json == null ? null : MAPPER.readerFor(Pkg.class)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(json);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
     static String sha256(String text) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -271,8 +293,9 @@ final class ReportPackage {
 
     /**
      * Bản theo luật (khung mục 4 ý 4, BR-49): mẫu câu cố định, mọi con số lấy từ gói. Thứ tự: dòng quyết định, kết quả
-     * mini-game / hậu trắc, mã theo mức (làm tốt → đang làm quen → cần luyện thêm → chưa đủ dữ liệu), câu chưa đúng. Không
-     * nói đúng sai về lựa chọn truyện (BR-45). Không có dòng gợi ý: chưa mã nào có adultKeyPoints (khung 2.2).
+     * mini-game / hậu trắc, khái niệm theo mức (làm tốt → đang làm quen → cần luyện thêm → chưa đủ dữ liệu), câu chưa đúng.
+     * Khái niệm gọi bằng tên tiếng Việt, câu sai bằng nhãn — không bao giờ mã thô (19/11, đợt D.1). Không nói đúng sai về lựa
+     * chọn truyện (BR-45). Không có dòng gợi ý: chưa mã nào có adultKeyPoints (khung 2.2).
      */
     static String ruleText(Pkg pkg) {
         Result r = pkg.result();
@@ -299,31 +322,44 @@ final class ReportPackage {
         addBand(lines, r, "GOOD", "Làm tốt");
         addBand(lines, r, "FAMILIAR", "Đang làm quen");
         addBand(lines, r, "PRACTICE", "Cần luyện thêm");
-        List<String> few = new ArrayList<>();
-        for (ConceptResult c : r.concepts()) {
-            if ("NO_DATA".equals(c.band())) {
-                few.add(c.id() + " (" + c.correct() + "/" + c.total() + " câu)");
-            }
-        }
-        few.addAll(r.noData());
-        if (!few.isEmpty()) {
-            lines.add("Chưa đủ bài để nhận xét: " + String.join(", ", few) + ".");
+        String few = noDataLine(r);
+        if (few != null) {
+            lines.add(few);
         }
         if (r.wrongItems() != null && !r.wrongItems().isEmpty()) {
             List<String> items = new ArrayList<>();
             for (WrongItem w : r.wrongItems()) {
-                items.add(w.game() + " / " + w.item());
+                items.add("“" + w.label() + "”" + (w.chosen() != null ? " — bé chọn " + w.chosen()
+                        + (w.expected() != null ? ", đúng là " + w.expected() : "")
+                        : w.expected() != null ? " — đúng là " + w.expected() : ""));
             }
-            lines.add("Câu chưa đúng: " + String.join("; ", items) + ".");
+            int others = r.miniGames().total() - r.miniGames().correct() - items.size();
+            lines.add("Câu chưa đúng: " + String.join("; ", items) + (others > 0 ? "; và " + others + " câu khác" : "")
+                    + ".");
         }
         return String.join("\n", lines);
+    }
+
+    /**
+     * "Chưa đủ bài để nhận xét: <tên>." — khái niệm NO_DATA (kèm x/y nếu có câu) và mã lõi chưa có câu nào; không có → null.
+     * Bài AI cũng nối dòng này (BE viết, AI không được nói về các mã này — ReportAiOutput.compose).
+     */
+    static String noDataLine(Result r) {
+        List<String> few = new ArrayList<>();
+        for (ConceptResult c : r.concepts()) {
+            if ("NO_DATA".equals(c.band())) {
+                few.add(KnowledgeUnits.nameOf(c.id()) + " (" + c.correct() + "/" + c.total() + " câu)");
+            }
+        }
+        r.noData().forEach(id -> few.add(KnowledgeUnits.nameOf(id)));
+        return few.isEmpty() ? null : "Chưa đủ bài để nhận xét: " + String.join(", ", few) + ".";
     }
 
     private static void addBand(List<String> lines, Result r, String band, String title) {
         List<String> parts = new ArrayList<>();
         for (ConceptResult c : r.concepts()) {
             if (band.equals(c.band())) {
-                parts.add(c.id() + " (đúng " + c.correct() + "/" + c.total() + " câu)");
+                parts.add(KnowledgeUnits.nameOf(c.id()) + " (đúng " + c.correct() + "/" + c.total() + " câu)");
             }
         }
         if (!parts.isEmpty()) {

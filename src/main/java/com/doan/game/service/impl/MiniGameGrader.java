@@ -30,8 +30,8 @@ public final class MiniGameGrader {
     private MiniGameGrader() {
     }
 
-    /** Một câu được chấm: mã câu, ô nhập mặc định, khái niệm, luật. */
-    public record Question(String id, String input, String concept, JsonNode rule) {
+    /** Một câu được chấm: mã câu, ô nhập mặc định, khái niệm, luật, object chứa {@code grade} (nhãn / giải thích cho báo cáo). */
+    public record Question(String id, String input, String concept, JsonNode rule, JsonNode node) {
     }
 
     /** Kết quả một câu: {@code chosen} = giá trị các ô câu đó đọc (chuỗi gọn, null khi trẻ không gửi). */
@@ -51,7 +51,7 @@ public final class MiniGameGrader {
             }
             String id = text(grade.get("id"), text(node.get("id"), null));
             String concept = text(grade.get("concept"), sceneConcept);
-            out.add(new Question(id, text(grade.get("input"), id), concept, grade.path("rule")));
+            out.add(new Question(id, text(grade.get("input"), id), concept, grade.path("rule"), node));
         });
         return out;
     }

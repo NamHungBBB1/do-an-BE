@@ -10,14 +10,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReportAiOutputTest {
 
     static final String PKG = "{\"frame\":{\"chapters\":[{\"code\":\"CH01\",\"goal\":\"Giữ tối thiểu 1.800.000đ\","
-            + "\"number\":1,\"title\":\"Tiền đầu tiên\"}],\"concepts\":[{\"id\":\"D01.02\"},{\"id\":\"D01.03\"},"
-            + "{\"id\":\"D01.04\"}],\"decisions\":[{\"options\":[],\"scene\":\"CH01_SC02_CHOICE\"}]},\"kind\":\"CHAPTER\","
+            + "\"number\":1,\"title\":\"Tiền đầu tiên\"}],\"concepts\":[{\"id\":\"D01.02\",\"name\":\"Phân biệt cần và "
+            + "muốn\"},{\"id\":\"D01.03\",\"name\":\"Chi phí cơ hội\"},{\"id\":\"D01.04\",\"name\":\"Mục tiêu tài chính\"},"
+            + "{\"id\":\"D06.05\",\"name\":\"Thẻ tín dụng\"}],"
+            + "\"decisions\":[{\"options\":[],\"scene\":\"CH01_SC02_CHOICE\"}]},\"kind\":\"CHAPTER\","
             + "\"result\":{\"concepts\":[{\"band\":\"GOOD\",\"correct\":5,\"id\":\"D01.02\",\"total\":6},"
-            + "{\"band\":\"PRACTICE\",\"correct\":1,\"id\":\"D01.04\",\"total\":4}],\"noData\":[\"D01.03\"]}}";
+            + "{\"band\":\"PRACTICE\",\"correct\":1,\"id\":\"D01.04\",\"total\":4}],"
+            + "\"decisions\":[{\"chosen\":\"B\",\"scene\":\"CH04_RECAP_KEEP\"}],\"noData\":[\"D01.03\"]}}";
 
     private static String out(String overview, String doingWell, String needsPractice, String decisionText, String tips) {
         return "{\"overview\":\"" + overview + "\",\"decisions\":[{\"scene\":\"CH01_SC02_CHOICE\",\"text\":\"" + decisionText
-                + "\"}],\"doingWell\":[{\"concept\":\"" + doingWell + "\",\"text\":\"Bé làm tốt " + doingWell + ".\"}],"
+                + "\"}],\"doingWell\":[{\"concept\":\"" + doingWell + "\",\"text\":\"Bé phân biệt tốt cần và muốn.\"}],"
                 + "\"needsPractice\":[{\"concept\":\"" + needsPractice + "\",\"text\":\"Cần luyện thêm.\"}],\"tips\":" + tips
                 + "}";
     }
@@ -28,12 +31,23 @@ class ReportAiOutputTest {
     @Test
     void acceptsFaithfulOutputAndComposesSections() {
         assertThat(ReportAiOutput.check(PKG, GOOD)).isNull();
-        assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.03", "Có cân nhắc.", "[]"))).isNull();
-        String text = ReportAiOutput.compose(GOOD);
+        String text = ReportAiOutput.compose(PKG, GOOD);
         assertThat(text).startsWith("Bé làm đúng 5/6 câu").contains("Quyết định trong truyện\n- Bé có bước cân nhắc.")
-                .contains("Bé làm tốt\n- Bé làm tốt D01.02.").contains("Cần luyện thêm\n- Cần luyện thêm.")
-                .doesNotContain("Gợi ý cho gia đình");
-        assertThat(ReportAiOutput.compose("không phải json")).isEqualTo("không phải json");
+                .contains("Bé làm tốt\n- Bé phân biệt tốt cần và muốn.").contains("Cần luyện thêm\n- Cần luyện thêm.")
+                .doesNotContain("Gợi ý cho gia đình")
+                // NO_DATA không nằm trong mục nào của AI: BE nối dòng bằng TÊN khái niệm (từ điển khung v3), không mã.
+                .endsWith("\n\nChưa đủ bài để nhận xét: Chi phí cơ hội.");
+        assertThat(ReportAiOutput.RAW_CODE.matcher(text).find()).isFalse();
+        assertThat(ReportAiOutput.compose(PKG, "không phải json")).isEqualTo("không phải json");
+        // Cảnh chỉ có trong lựa chọn của bé (result.decisions), không có trong khung → hợp lệ (19/11: UNKNOWN_SCENE oan).
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH04_RECAP_KEEP"))).isNull();
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH09_NOPE")))
+                .isEqualTo("UNKNOWN_SCENE: CH09_NOPE");
+        // Từ cấm có trong tên khái niệm của gói là nói về bài học → cho phép; ngoài gói vẫn cấm.
+        assertThat(ReportAiOutput.check(PKG, out("Bé đã học về thẻ tín dụng.", "D01.02", "D01.04", "Có.", "[]")))
+                .isNull();
+        assertThat(ReportAiOutput.check(PKG, out("Hãy mua cổ phiếu.", "D01.02", "D01.04", "Có.", "[]")))
+                .isEqualTo("FORBIDDEN_WORD: cổ phiếu");
     }
 
     @Test
@@ -51,6 +65,18 @@ class ReportAiOutputTest {
                 .isEqualTo("DOING_WELL_BAND: D01.04");
         assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.02", "Có.", "[]")))
                 .isEqualTo("NEEDS_PRACTICE_BAND: D01.02");
+        // 19/11: mã chưa đủ dữ liệu không còn được nằm trong "Cần luyện thêm".
+        assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.03", "Có.", "[]")))
+                .isEqualTo("NEEDS_PRACTICE_BAND: D01.03");
+        // Mã thô trong câu văn (lỗi thật 19/11) → RAW_CODE, trước cả luật con số.
+        assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.04", "Ở cảnh CH01_SC02_CHOICE bé chờ.", "[]")))
+                .isEqualTo("RAW_CODE: CH01_");
+        assertThat(ReportAiOutput.check(PKG, out("Bé hiểu khái niệm D01.02.", "D01.02", "D01.04", "Có.", "[]")))
+                .isEqualTo("RAW_CODE: D01.02");
+        assertThat(ReportAiOutput.check(PKG, out("Câu SMART_SHOPPING_CH04 chưa đúng.", "D01.02", "D01.04", "Có.", "[]")))
+                .isEqualTo("RAW_CODE: SMART_SHOPPING_CH04");
+        assertThat(ReportAiOutput.check(PKG, out("Câu ITEM_MEAL.", "D01.02", "D01.04", "Có.", "[]")))
+                .isEqualTo("RAW_CODE: ITEM_");
         assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.04", "Có.",
                 "[{\"concept\":\"D01.02\",\"keyPoint\":0,\"text\":\"Nói chuyện.\"}]"))).startsWith("TIPS_NOT_FROM_KEY_POINTS");
         assertThat(ReportAiOutput.check(PKG, out("Bé hơi Lười.", "D01.02", "D01.04", "Có.", "[]")))
