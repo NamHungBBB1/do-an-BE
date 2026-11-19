@@ -9,6 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,6 +35,13 @@ public class AiKeyController {
     @PostMapping
     public ApiResponse<AiKeyResponse> add(@AuthenticationPrincipal Jwt jwt, @RequestBody AiKeyRequest req) {
         return ApiResponse.ok(aiKeyService.add(currentAccountId(jwt), req));
+    }
+
+    /** Sửa thông tin quản lý của khoá (đợt D): priority, purpose, project, ownerNote, tierLabel, rpmLimit, rpdLimit. */
+    @PatchMapping("/{id}")
+    public ApiResponse<AiKeyResponse> update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                             @RequestBody AiKeyRequest req) {
+        return ApiResponse.ok(aiKeyService.update(currentAccountId(jwt), id, req));
     }
 
     @PostMapping("/{id}/test")

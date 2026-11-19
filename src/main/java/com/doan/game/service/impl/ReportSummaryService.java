@@ -114,7 +114,12 @@ public class ReportSummaryService {
         if (!done.isEmpty()) {
             AiJob job = done.get(0);
             s.setAiJob(job);
-            s.setSummary(job.getOutput());
+            // Bài đã ghép sẵn ở dòng khác cùng việc (kèm model / promptVersion); không còn dòng nào thì ghép lại từ đầu ra thô.
+            DailySummary prev = summaryRepo.findByAiJob_Id(job.getId()).stream()
+                    .filter(d -> d.getSource() == SummarySource.LLM).findFirst().orElse(null);
+            s.setSummary(prev != null ? prev.getSummary() : ReportAiOutput.compose(job.getOutput()));
+            s.setModel(prev == null ? null : prev.getModel());
+            s.setPromptVersion(prev == null ? null : prev.getPromptVersion());
             s.setSource(SummarySource.LLM);
             s.setTier(job.getTier());
             s.setProvider(job.getProvider());

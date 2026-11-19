@@ -62,4 +62,22 @@ public class AiKey {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "purpose", length = 16)
+    private String purpose;
+
+    @Column(name = "project", length = 80)
+    private String project;
+
+    @Column(name = "owner_note", length = 255)
+    private String ownerNote;
+
+    @Column(name = "tier_label", length = 8)
+    private String tierLabel;
+
+    @Column(name = "rpm_limit")
+    private Integer rpmLimit;
+
+    @Column(name = "rpd_limit")
+    private Integer rpdLimit;
 }
