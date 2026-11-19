@@ -130,7 +130,7 @@ class ReportAiWriterFlowTest {
         assertThat(after.getTier()).isEqualTo(1);
         assertThat(after.getProvider()).isEqualTo("GEMINI");
         assertThat(after.getModel()).isEqualTo("gemini-test");
-        assertThat(after.getPromptVersion()).isEqualTo("report-v2");
+        assertThat(after.getPromptVersion()).isEqualTo("report-v3");
         // D.1: mã chưa đủ dữ liệu không nằm trong mục nào của AI — BE nối dòng bằng tên khái niệm.
         assertThat(after.getSummary()).startsWith("Bé đã hoàn thành").contains("Bé làm tốt\n- ")
                 .endsWith("Chưa đủ bài để nhận xét: Chi phí cơ hội.").doesNotContain("D01.");
