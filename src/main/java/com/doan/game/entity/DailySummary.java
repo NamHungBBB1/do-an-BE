@@ -10,14 +10,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Tổng kết hằng ngày. Parent: một bản mỗi slot; Teacher: một bản mỗi slot + một bản cho cả lớp
- * (groupId). source = RULE khi AI lỗi và dùng bản theo luật. UNIQUE theo ngày để job chạy lại
- * không sinh bản thứ hai. Ràng buộc: CHECK: đúng một trong slotId / groupId khác NULL ·
- * UNIQUE(slotId, summaryDate) · UNIQUE(groupId, summaryDate)
+ * Bài viết cho người lớn về một học sinh (19/11): kind CHAPTER (xong một chương, đã nộp hậu trắc),
+ * FINAL (tổng kết 8 chương, chapter = 8) hoặc CLASS (bản lớp, groupId). summary = bài đang hiện:
+ * bản theo luật (source RULE, tier 0) có ngay, tầng AI viết xong thì thay (source LLM).
+ * packageHash = sha-256 gói số liệu ẩn danh (gói nằm ở AiJob.input); cùng hash thì dùng lại bài
+ * cũ. Chơi lại chương = dòng mới theo attemptIndex. Ràng buộc: CHECK: đúng một trong slotId /
+ * groupId khác NULL · UNIQUE(slotId, kind, chapter, attemptIndex) · UNIQUE(groupId, summaryDate)
  */
 @Entity
 @Table(name = "daily_summary", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"slot_id", "summary_date"}),
+    @UniqueConstraint(columnNames = {"slot_id", "kind", "chapter", "attempt_index"}),
     @UniqueConstraint(columnNames = {"group_id", "summary_date"})
 })
 @Getter
@@ -57,4 +59,30 @@ public class DailySummary {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "kind", length = 16)
+    private String kind;
+
+    @Column(name = "chapter")
+    private Integer chapter;
+
+    @Column(name = "attempt_index")
+    private Integer attemptIndex;
+
+    @Column(name = "build_version", length = 16)
+    private String buildVersion;
+
+    @Column(name = "package_hash", length = 64)
+    private String packageHash;
+
+    @Column(name = "tier")
+    private Integer tier;
+
+    @Column(name = "provider", length = 24)
+    private String provider;
+
+    /** AiJob. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "ai_job_id", nullable = true)
+    private AiJob aiJob;
 }

@@ -386,7 +386,9 @@ class ReportFlowTest {
                 .andExpect(jsonPath("$.result.chapters[0].postTest.status").value("PENDING"))
                 // quizId: null trên main (đề tạo khi bé mở danh sách bài); có id khi BR-53 (#69) tạo đề lúc nhận lô — không khẳng định.
                 .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
-                .andExpect(jsonPath("$.result.chapters[0].summary").value(nullValue()))
+                // 19/11 đợt C: chưa nộp hậu trắc → bài viết chờ, không có chữ (ReportSummaryFlowTest kiểm phần còn lại).
+                .andExpect(jsonPath("$.result.chapters[0].summary.status").value("WAITING_POST_TEST"))
+                .andExpect(jsonPath("$.result.chapters[0].summary.text").value(nullValue()))
                 .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.correct").value(contains(1)))
                 .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].game.total").value(contains(2)))
                 .andExpect(jsonPath("$.result.concepts[?(@.concept=='T01.01')].postTest.total").value(contains(0)))
@@ -470,7 +472,8 @@ class ReportFlowTest {
                 // RunState ghi tay, bé chưa nộp lô / mở danh sách bài → chương có câu nhưng đề chưa tạo: quizId null.
                 .andExpect(jsonPath("$.result.chapters[0].postTest.quizId").value(nullValue()))
                 .andExpect(jsonPath("$.result.chapters[0].reportStatus").value("PARTIAL"))
-                .andExpect(jsonPath("$.result.finalReport.status").value("PARTIAL"));
+                .andExpect(jsonPath("$.result.finalReport.status").value("PARTIAL"))
+                .andExpect(jsonPath("$.result.finalReport.summary.status").value("WAITING_POST_TEST"));
     }
 
     /**
