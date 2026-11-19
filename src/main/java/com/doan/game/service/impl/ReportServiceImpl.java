@@ -4,6 +4,10 @@ import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.configuration.ClockConfig;
 import com.doan.game.entity.Achievement;
+import com.doan.game.entity.AiJob;
+import com.doan.game.entity.DailySummary;
+import com.doan.game.enums.SummarySource;
+import com.doan.game.repository.DailySummaryRepository;
 import com.doan.game.entity.ChoiceEvent;
 import com.doan.game.entity.GroupReport;
 import com.doan.game.entity.GroupReportRow;
@@ -94,6 +98,7 @@ public class ReportServiceImpl implements ReportService {
     private final QuizResultRepository quizResultRepo;
     private final QuizAnswerRepository quizAnswerRepo;
     private final QuestionRepository questionRepo;
+    private final DailySummaryRepository summaryRepo;
     private final Personalizer personalizer;
     private final ObjectMapper objectMapper;
     private final QuizSupport support;
@@ -167,9 +172,67 @@ public class ReportServiceImpl implements ReportService {
                 myResults.size(), resultRows);
 
         ChapterBlocks blocks = chapterBlocks(slotId, group.getId(), run, myResults);
+        // Bài viết (19/11, khung báo cáo AI 13.3): dòng DailySummary của lần chơi hiện tại theo (kind, chương).
+        List<DailySummary> saved = summaryRepo.findBySlotWithJob(slotId);
+        Map<String, DailySummary> byKey = new HashMap<>();
+        DailySummary latest = null;
+        for (DailySummary d : saved) {
+            if (d.getAttemptIndex() != null && d.getAttemptIndex() == blocks.attemptIndex()) {
+                byKey.put(d.getKind() + "#" + d.getChapter(), d);
+            }
+            if (d.getCreatedAt() != null && (latest == null || d.getCreatedAt().isAfter(latest.getCreatedAt()))) {
+                latest = d;
+            }
+        }
+        List<SlotReportResponse.ChapterRow> chapters = new ArrayList<>(blocks.chapters().size());
+        for (SlotReportResponse.ChapterRow r : blocks.chapters()) {
+            chapters.add(new SlotReportResponse.ChapterRow(r.chapter(), r.attemptIndex(), r.finishedAt(), r.choices(),
+                    r.miniGames(), r.postTest(), r.reportStatus(),
+                    summaryOf(r.reportStatus(), byKey.get(ReportPackage.CHAPTER + "#" + r.chapter()),
+                            () -> ReportPackage.ruleText(ReportPackage.chapter(blocks, r)))));
+        }
+        String finalStatus = blocks.finalReport().status();
+        SlotReportResponse.FinalReport finalReport = new SlotReportResponse.FinalReport(finalStatus,
+                NONE.equals(finalStatus) ? null
+                        : summaryOf(finalStatus, byKey.get(ReportPackage.FINAL + "#" + FINAL_CHAPTER),
+                                () -> ReportPackage.ruleText(ReportPackage.finalPackage(blocks))));
+        SlotReportResponse.DailySummaryRow daily = latest == null ? null : new SlotReportResponse.DailySummaryRow(
+                LocalDate.ofInstant(latest.getCreatedAt(), ClockConfig.VN), latest.getSummary(),
+                latest.getSource() == null ? null : latest.getSource().name(), latest.getTier(), latest.getProvider());
         return new SlotReportResponse(learner, progress, indicatorsOf(run), List.copyOf(achievements),
-                blocks.concepts(), blocks.chapters(), blocks.finalReport(), quizzes, null);
+                blocks.concepts(), chapters, finalReport, quizzes, daily);
     }
+
+    static final String WAITING_POST_TEST = "WAITING_POST_TEST";
+    static final String GENERATING = "GENERATING";
+    static final String READY = "READY";
+    static final String FALLBACK = "FALLBACK";
+
+    /**
+     * Trạng thái bài viết (khung 13.3, Hưng 19/11): chưa nộp hậu trắc → WAITING_POST_TEST (không chữ). Có dòng: source LLM →
+     * READY; việc AI còn sống (QUEUED / RUNNING / WAITING_RETRY / WAITING_AGENT) → GENERATING (chữ = bản theo luật); còn lại
+     * (FAILED, không có việc) → FALLBACK. Chưa có dòng (chương xong trước PR này, hoặc lúc ghi lỗi) → FALLBACK với bản theo
+     * luật tính ngay từ cùng số liệu, generatedAt null — lần gửi lô / nộp bài sau sẽ ghi dòng.
+     */
+    static SlotReportResponse.Summary summaryOf(String reportStatus, DailySummary row,
+                                                java.util.function.Supplier<String> ruleText) {
+        if (PARTIAL.equals(reportStatus)) {
+            return new SlotReportResponse.Summary(WAITING_POST_TEST, null, null, null, null, null);
+        }
+        if (row == null) {
+            return new SlotReportResponse.Summary(FALLBACK, ruleText.get(), "RULE", 0, null, null);
+        }
+        AiJob job = row.getAiJob();
+        boolean llm = row.getSource() == SummarySource.LLM;
+        String status = llm ? READY
+                : job != null && ALIVE_JOB.contains(job.getStatus()) ? GENERATING : FALLBACK;
+        Instant at = llm && job != null && job.getDoneAt() != null ? job.getDoneAt() : row.getCreatedAt();
+        return new SlotReportResponse.Summary(status, row.getSummary(),
+                row.getSource() == null ? null : row.getSource().name(), row.getTier(), row.getProvider(), at);
+    }
+
+    private static final Set<String> ALIVE_JOB = Set.of(AiJobQueue.QUEUED, AiJobQueue.RUNNING,
+            AiJobQueue.WAITING_RETRY, AiJobQueue.WAITING_AGENT);
 
     // ------------------------------------------------------------------ chương / khái niệm (19/11)
 
@@ -183,9 +246,27 @@ public class ReportServiceImpl implements ReportService {
     static final String PARTIAL = "PARTIAL";
     static final String COMPLETE = "COMPLETE";
 
-    private record ChapterBlocks(List<SlotReportResponse.ChapterRow> chapters,
-                                 List<SlotReportResponse.ConceptRow> concepts,
-                                 SlotReportResponse.FinalReport finalReport) {
+    /**
+     * Khối chương của lần chơi hiện tại. Ngoài ba khối trả FE còn giữ phần dựng gói bài viết cần (19/11, ReportSummaryService):
+     * JSON gốc (không cá nhân hoá) + bản đã chơi của từng chương, và đếm theo mã của TỪNG chương ([đúng game, tổng game,
+     * đúng hậu trắc, tổng hậu trắc]).
+     */
+    record ChapterBlocks(List<SlotReportResponse.ChapterRow> chapters,
+                         List<SlotReportResponse.ConceptRow> concepts,
+                         SlotReportResponse.FinalReport finalReport,
+                         int attemptIndex,
+                         Map<Integer, JsonNode> chapterJson,
+                         Map<Integer, String> chapterVersion,
+                         Map<Integer, Map<String, int[]>> chapterConcepts) {
+    }
+
+    /** Khối chương của một em — cho ReportSummaryService dựng gói, cùng một hàm tính với báo cáo (không lệch số). */
+    public ChapterBlocks chapterBlocksOf(UUID slotId) {
+        LearnerSlot slot = slotRepo.findById(slotId)
+                .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
+        RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
+        return chapterBlocks(slotId, slot.getGroup().getId(), run,
+                quizResultRepo.findBySlot_IdOrderBySubmittedAtDesc(slotId));
     }
 
     /**
@@ -196,7 +277,8 @@ public class ReportServiceImpl implements ReportService {
     private ChapterBlocks chapterBlocks(UUID slotId, UUID groupId, RunState run, List<QuizResult> myResults) {
         Set<Integer> done = run == null ? Set.of() : new TreeSet<>(ChaptersDone.parse(run.getChaptersDone()));
         if (done.isEmpty()) {
-            return new ChapterBlocks(List.of(), List.of(), new SlotReportResponse.FinalReport(NONE));
+            return new ChapterBlocks(List.of(), List.of(), new SlotReportResponse.FinalReport(NONE, null), 1,
+                    Map.of(), Map.of(), Map.of());
         }
         int attempt = run.getAttemptIndex() == null ? 1 : run.getAttemptIndex();
 
@@ -246,12 +328,26 @@ public class ReportServiceImpl implements ReportService {
         }
 
         Map<String, int[]> concepts = new TreeMap<>();   // mã → [đúng game, tổng game, đúng hậu trắc, tổng hậu trắc]
+        Map<Integer, Map<String, int[]>> chapterConcepts = new HashMap<>();   // cùng đếm, theo từng chương
+        Map<Integer, JsonNode> chapterJson = new HashMap<>();
+        Map<Integer, String> chapterVersion = new HashMap<>();
+        Map<UUID, Integer> chapterOfResult = new HashMap<>();
         List<UUID> submittedPostTests = new ArrayList<>();
         List<SlotReportResponse.ChapterRow> chapters = new ArrayList<>(done.size());
         for (int ch : done) {
             List<ChoiceEvent> events = choicesByChapter.getOrDefault(ch, List.of());
             List<MiniGameResult> minis = minisByChapter.getOrDefault(ch, List.of());
             Instant finishedAt = null;
+            Map<String, int[]> mine = chapterConcepts.computeIfAbsent(ch, k -> new TreeMap<>());
+            String version = !events.isEmpty() ? events.get(0).getBuildVersion()
+                    : minis.isEmpty() ? null : minis.get(0).getBuildVersion();
+            if (version != null) {
+                chapterVersion.put(ch, version);
+                JsonNode json = played.get(playedKey(version, ch));
+                if (json != null) {
+                    chapterJson.put(ch, json);
+                }
+            }
 
             List<ChoiceEvent> ordered = new ArrayList<>(events);
             ordered.sort(Comparator.comparingInt(e -> sceneIndex(played.get(playedKey(e.getBuildVersion(), ch)),
@@ -273,9 +369,11 @@ public class ReportServiceImpl implements ReportService {
                 finishedAt = later(finishedAt, m.getReceivedAt());
                 String concept = resolveConcept(played.get(playedKey(m.getBuildVersion(), ch)), m);
                 if (concept != null && !concept.isBlank()) {
-                    int[] c = concepts.computeIfAbsent(concept, k -> new int[4]);
-                    c[1]++;
-                    c[0] += m.isCorrect() ? 1 : 0;
+                    for (int[] c : List.of(concepts.computeIfAbsent(concept, k -> new int[4]),
+                            mine.computeIfAbsent(concept, k -> new int[4]))) {
+                        c[1]++;
+                        c[0] += m.isCorrect() ? 1 : 0;
+                    }
                 }
                 if (m.isCorrect()) {
                     correct++;
@@ -291,6 +389,7 @@ public class ReportServiceImpl implements ReportService {
             QuizResult result = quiz == null ? null : resultByQuiz.get(quiz.getId());
             if (result != null) {
                 submittedPostTests.add(result.getId());
+                chapterOfResult.put(result.getId(), ch);
                 postTest = new SlotReportResponse.PostTest(quiz.getId(), SUBMITTED,
                         result.getScore() == null ? 0 : result.getScore(), support.questionsPerLearner(quiz));
             } else if (quiz != null || hasPool.contains(ch)) {
@@ -306,9 +405,12 @@ public class ReportServiceImpl implements ReportService {
 
         if (!submittedPostTests.isEmpty()) {
             for (Object[] row : quizAnswerRepo.conceptAnswers(submittedPostTests)) {
-                int[] c = concepts.computeIfAbsent((String) row[1], k -> new int[4]);
-                c[3]++;
-                c[2] += Boolean.TRUE.equals(row[2]) ? 1 : 0;
+                Map<String, int[]> mine = chapterConcepts.get(chapterOfResult.get((UUID) row[0]));
+                for (int[] c : List.of(concepts.computeIfAbsent((String) row[1], k -> new int[4]),
+                        mine.computeIfAbsent((String) row[1], k -> new int[4]))) {
+                    c[3]++;
+                    c[2] += Boolean.TRUE.equals(row[2]) ? 1 : 0;
+                }
             }
         }
         List<SlotReportResponse.ConceptRow> conceptRows = new ArrayList<>(concepts.size());
@@ -318,7 +420,8 @@ public class ReportServiceImpl implements ReportService {
 
         String finalStatus = !done.contains(FINAL_CHAPTER) ? NONE
                 : chapters.stream().allMatch(c -> COMPLETE.equals(c.reportStatus())) ? COMPLETE : PARTIAL;
-        return new ChapterBlocks(chapters, conceptRows, new SlotReportResponse.FinalReport(finalStatus));
+        return new ChapterBlocks(chapters, conceptRows, new SlotReportResponse.FinalReport(finalStatus, null), attempt,
+                chapterJson, chapterVersion, chapterConcepts);
     }
 
     /** BR-44, chỉ số nguyên: < 3 câu NO_DATA; < 50 % PRACTICE; < 70 % FAMILIAR; còn lại GOOD. */

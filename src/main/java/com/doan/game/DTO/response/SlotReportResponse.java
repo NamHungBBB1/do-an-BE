@@ -43,10 +43,19 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
 
     /**
      * Từng chương đã xong trong lần chơi hiện tại (19/11). reportStatus: COMPLETE khi hậu trắc SUBMITTED hoặc NONE,
-     * còn lại PARTIAL. summary: bài viết của chương — PR sau, nay luôn null.
+     * còn lại PARTIAL. summary: bài viết của chương (khung báo cáo AI mục 13.3), luôn có object.
      */
     public record ChapterRow(int chapter, int attemptIndex, Instant finishedAt, List<ChoiceRow> choices,
-                             MiniGames miniGames, PostTest postTest, String reportStatus, String summary) {}
+                             MiniGames miniGames, PostTest postTest, String reportStatus, Summary summary) {}
+
+    /**
+     * Bài viết cho người lớn (khung báo cáo AI mục 13.3). status: WAITING_POST_TEST (chưa nộp hậu trắc, text null) |
+     * GENERATING (việc AI đang chờ / đang chạy — text là bản theo luật, FE gọi lại sau 30 s) | READY (bài AI đã qua kiểm) |
+     * FALLBACK (bản theo luật: AI chưa bật, lỗi hoặc bị loại). source RULE | LLM; tier 0 = theo luật, 1–4 = tầng AI
+     * (spec kho ảnh + giọng 4.7b); provider = nhà cung cấp AI (null với RULE). generatedAt = lúc bài hiện tại được ghi.
+     */
+    public record Summary(String status, String text, String source, Integer tier, String provider,
+                          Instant generatedAt) {}
 
     /**
      * Một lựa chọn trong truyện — KHÔNG có đúng sai (BR-45). label = chữ của phương án trong JSON bản bé đã chơi (bản gốc,
@@ -66,8 +75,11 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
      */
     public record PostTest(UUID quizId, String status, Integer correct, Integer total) {}
 
-    /** Bản tổng kết 8 chương: NONE (chưa xong CH08), PARTIAL, COMPLETE (xong CH08 và mọi chương COMPLETE). */
-    public record FinalReport(String status) {}
+    /**
+     * Bản tổng kết 8 chương: NONE (chưa xong CH08), PARTIAL, COMPLETE (xong CH08 và mọi chương COMPLETE). summary: null
+     * khi NONE; PARTIAL → status WAITING_POST_TEST; COMPLETE → như bài chương.
+     */
+    public record FinalReport(String status, Summary summary) {}
 
     /** null với FAMILY (quiz chỉ cho lớp); CLASS: object với ba trường, results chờ API quiz. */
     public record Quizzes(int assigned, int submitted, List<QuizResultRow> results) {}
@@ -75,6 +87,6 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
     public record QuizResultRow(UUID quizId, String title, Integer score, Integer totalQuestions,
                                 Instant submittedAt) {}
 
-    /** Bản tổng kết AI — làm sau (Hưng 12/10); đợt 1 luôn null. */
-    public record DailySummaryRow(LocalDate date, String text, String source) {}
+    /** Bài viết mới nhất của em (chương hoặc tổng kết, 19/11); chưa có → null. date = ngày VN lúc ghi. */
+    public record DailySummaryRow(LocalDate date, String text, String source, Integer tier, String provider) {}
 }

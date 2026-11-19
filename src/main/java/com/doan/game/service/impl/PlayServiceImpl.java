@@ -70,6 +70,7 @@ public class PlayServiceImpl implements PlayService {
     private final QuizSupport quizSupport;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     // ---------------------------------------------------------- POST /api/play/chapter
     @Override
@@ -190,6 +191,9 @@ public class PlayServiceImpl implements PlayService {
         runStateRepo.save(run);
         // BR-53: đề hậu trắc của chương vừa xong có ngay (cùng transaction), em không phải mở danh sách quiz mới thấy.
         quizSupport.ensurePostTests(slot.getGroup(), List.of(req.chapter()));
+        // 19/11 (khung báo cáo AI 13.3): chương không có hậu trắc / hậu trắc đã nộp ở lần chơi trước → COMPLETE ngay, có bài
+        // viết; còn chờ hậu trắc thì việc sinh bài bỏ qua chương này. Chạy sau commit, lỗi không làm hỏng lô.
+        events.publishEvent(new ReportSummaryService.ProgressEvent(slotId));
 
         // Bước 6: đợt 1 chưa có luật cấp thành tựu → luôn rỗng.
         return toBatchResponse(attempt, done, total);

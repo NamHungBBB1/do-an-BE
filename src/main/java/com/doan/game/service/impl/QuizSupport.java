@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -68,6 +69,7 @@ class QuizSupport {
     private final LearnerGroupRepository groupRepo;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     // ------------------------------------------------------------------ học sinh
 
@@ -230,6 +232,10 @@ class QuizSupport {
             answers.add(answer);
         }
         quizAnswerRepo.saveAll(answers);
+        if (isPostTest(quiz)) {
+            // 19/11 (khung báo cáo AI 13.3): chương thành COMPLETE → bài viết cho người lớn, sau khi commit.
+            events.publishEvent(new ReportSummaryService.ProgressEvent(slot.getId()));
+        }
         return result;
     }
 
