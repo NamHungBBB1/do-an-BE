@@ -16,7 +16,8 @@ class ReportAiOutputTest {
             + "\"decisions\":[{\"options\":[],\"scene\":\"CH01_SC02_CHOICE\"}]},\"kind\":\"CHAPTER\","
             + "\"result\":{\"concepts\":[{\"band\":\"GOOD\",\"correct\":5,\"id\":\"D01.02\",\"total\":6},"
             + "{\"band\":\"PRACTICE\",\"correct\":1,\"id\":\"D01.04\",\"total\":4}],"
-            + "\"decisions\":[{\"chosen\":\"B\",\"scene\":\"CH04_RECAP_KEEP\"}],\"noData\":[\"D01.03\"]}}";
+            + "\"decisions\":[{\"chosen\":\"B\",\"deliberate\":true,\"scene\":\"CH04_RECAP_KEEP\"},"
+            + "{\"chosen\":\"GO\",\"scene\":\"CH01_SC03\"},{\"chosen\":\"X\",\"deliberate\":false,\"scene\":\"CH01_SC04\"}],\"noData\":[\"D01.03\"]}}";
 
     private static String out(String overview, String doingWell, String needsPractice, String decisionText, String tips) {
         return "{\"overview\":\"" + overview + "\",\"decisions\":[{\"scene\":\"CH01_SC02_CHOICE\",\"text\":\"" + decisionText
@@ -41,6 +42,18 @@ class ReportAiOutputTest {
         assertThat(ReportAiOutput.compose(PKG, "không phải json")).isEqualTo("không phải json");
         // Cảnh chỉ có trong lựa chọn của bé (result.decisions), không có trong khung → hợp lệ (19/11: UNKNOWN_SCENE oan).
         assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH04_RECAP_KEEP"))).isNull();
+        // BR-45: lời "cân nhắc" phải khớp nhãn (lỗi thật 19/11 CH05: lựa chọn không nhãn bị ghi "chưa có bước cân nhắc").
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH01_SC03")
+                .replace("Bé có bước cân nhắc.", "Bé đã chọn tiếp tục và chưa có bước cân nhắc.")))
+                .isEqualTo("DELIBERATE_MISMATCH: CH01_SC03");
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH01_SC03")
+                .replace("Bé có bước cân nhắc.", "Bé đã chọn tiếp tục."))).isNull();
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH01_SC04")))
+                .isEqualTo("DELIBERATE_MISMATCH: CH01_SC04");
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH01_SC04")
+                .replace("Bé có bước cân nhắc.", "Bé chưa có bước cân nhắc."))).isNull();
+        assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH04_RECAP_KEEP")
+                .replace("Bé có bước cân nhắc.", "Bé chưa cân nhắc."))).isEqualTo("DELIBERATE_MISMATCH: CH04_RECAP_KEEP");
         assertThat(ReportAiOutput.check(PKG, GOOD.replace("CH01_SC02_CHOICE", "CH09_NOPE")))
                 .isEqualTo("UNKNOWN_SCENE: CH09_NOPE");
         // Từ cấm có trong tên khái niệm của gói là nói về bài học → cho phép; ngoài gói vẫn cấm.

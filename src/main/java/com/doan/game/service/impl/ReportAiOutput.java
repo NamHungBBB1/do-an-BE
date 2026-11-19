@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  */
 final class ReportAiOutput {
 
-    static final String PROMPT_VERSION = "report-v2";
+    static final String PROMPT_VERSION = "report-v3";
     static final int MAX_WORDS_CHAPTER = 180;
     static final int MAX_WORDS_SUMMARY = 250;
     /** Độ dài nhắm trong prompt — thấp hơn giới hạn kiểm để AI có chỗ hụt (19/11: 2/4 bài bị loại vì 188–214 chữ). */
@@ -99,8 +99,7 @@ final class ReportAiOutput {
                 - overview: 2–3 câu tổng quan.
                 - decisions: mỗi phần tử {scene, text} cho một quyết định trong frame.decisions; trường scene chép nguyên \
                 giá trị scene của gói (chỉ là khoá). Trong text, nhắc quyết định bằng chữ phương án bé chọn (trường label), \
-                không nhắc mã. Chỉ nói bé "có" hoặc "chưa có" bước cân nhắc (trường deliberate); không có nhãn thì không \
-                nhận xét. Lựa chọn trong truyện không có đúng sai.
+                không nhắc mã. Chỉ nói bé "có" hoặc "chưa có" bước cân nhắc theo đúng trường deliberate; phần tử KHÔNG có trường \n                deliberate thì chỉ kể bé chọn gì, KHÔNG dùng chữ "cân nhắc". Lựa chọn trong truyện không có đúng sai.
                 - doingWell: {concept, text}, CHỈ mã có band = GOOD trong result.concepts. Trong text gọi khái niệm bằng tên \
                 (frame.concepts[].name).
                 - needsPractice: {concept, text}, CHỈ mã có band = PRACTICE hoặc FAMILIAR. Có thể nhắc cụ thể câu bé chưa \
@@ -196,6 +195,23 @@ final class ReportAiOutput {
         for (JsonNode it : out.path("decisions")) {
             if (!scenes.contains(it.path("scene").asText())) {
                 return "UNKNOWN_SCENE: " + it.path("scene").asText();
+            }
+        }
+        // BR-45: nhận xét "cân nhắc" phải khớp nhãn của lựa chọn bé. Lỗi thật 19/11 (CH05): lựa chọn KHÔNG có nhãn (gói bỏ
+        // trường deliberate) mà AI vẫn viết "chưa có bước cân nhắc" → phụ huynh hiểu sai về bé.
+        Map<String, JsonNode> chosen = new java.util.HashMap<>();
+        pkg.path("result").path("decisions").forEach(d -> chosen.put(d.path("scene").asText(), d));
+        for (JsonNode it : out.path("decisions")) {
+            JsonNode d = chosen.get(it.path("scene").asText());
+            if (d == null) {
+                continue;
+            }
+            String t = nfc(it.path("text").asText()).toLowerCase(Locale.ROOT);
+            boolean negative = t.contains("chưa có bước cân nhắc") || t.contains("chưa cân nhắc")
+                    || t.contains("không cân nhắc") || t.contains("không có bước cân nhắc");
+            JsonNode label = d.path("deliberate");
+            if (t.contains("cân nhắc") && (!label.isBoolean() || label.asBoolean() == negative)) {
+                return "DELIBERATE_MISMATCH: " + it.path("scene").asText();
             }
         }
         Map<String, Integer> keyPoints = new java.util.HashMap<>();
