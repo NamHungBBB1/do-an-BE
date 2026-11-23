@@ -37,7 +37,7 @@
   "name": "Delayed Gratification",
   "objective": "Hoãn phần thưởng hiện tại để đạt lợi ích lớn hơn trong tương lai.",
   "level": "Áp dụng",
-  "nameVi": "Hoãn hưởng thụ để được hơn"
+  "nameVi": "Trì hoãn hưởng thụ"
  },
  {
   "id": "D01.06",
@@ -61,7 +61,7 @@
   "name": "Gross vs Net Income",
   "objective": "Phân biệt thu nhập trước và sau các khoản khấu trừ/thuế.",
   "level": "Hiểu",
-  "nameVi": "Thu nhập trước, sau khấu trừ"
+  "nameVi": "Thu nhập gộp và thực nhận"
  },
  {
   "id": "D02.03",
@@ -69,7 +69,7 @@
   "name": "Human Capital",
   "objective": "Kỹ năng, học vấn, kinh nghiệm ảnh hưởng đến cơ hội và thu nhập.",
   "level": "Hiểu/Phân tích",
-  "nameVi": "Vốn con người"
+  "nameVi": "Năng lực tạo thu nhập"
  },
  {
   "id": "D02.04",
@@ -245,7 +245,7 @@
   "name": "Saving vs Investing",
   "objective": "Tiết kiệm thường ưu tiên an toàn/thanh khoản; đầu tư hướng đến tăng trưởng dài hạn và chấp nhận rủi ro.",
   "level": "Hiểu",
-  "nameVi": "Tiết kiệm khác đầu tư"
+  "nameVi": "Tiết kiệm và đầu tư"
  },
  {
   "id": "D05.02",
@@ -261,7 +261,7 @@
   "name": "Return",
   "objective": "Thu nhập và/hoặc tăng giá trị tài sản tạo ra lợi nhuận.",
   "level": "Hiểu",
-  "nameVi": "Lợi nhuận từ tài sản"
+  "nameVi": "Lợi nhuận đầu tư"
  },
  {
   "id": "D05.04",
@@ -293,7 +293,7 @@
   "name": "Behavioral Biases",
   "objective": "FOMO, herd behavior, overconfidence, loss aversion và ảnh hưởng tới quyết định. Đây là thuật ngữ minh họa FinTeen; không xem danh sách này là phân loại chính thức của CFPB.",
   "level": "Phân tích",
-  "nameVi": "Thiên kiến khi ra quyết định"
+  "nameVi": "Thiên kiến khi đầu tư"
  },
  {
   "id": "D05.08",
@@ -341,7 +341,7 @@
   "name": "Creditworthiness",
   "objective": "Lịch sử tín dụng, khả năng trả nợ và đặc điểm khoản vay ảnh hưởng quyết định của bên cho vay.",
   "level": "Hiểu",
-  "nameVi": "Uy tín tín dụng"
+  "nameVi": "Mức độ tín nhiệm khi vay"
  },
  {
   "id": "D06.05",
@@ -365,7 +365,7 @@
   "name": "Predatory Lending",
   "objective": "Nhận diện khoản vay/phí có điều kiện bất lợi và rủi ro cao.",
   "level": "Phân tích",
-  "nameVi": "Nhận diện khoản vay bất lợi"
+  "nameVi": "Nhận diện cho vay trục lợi"
  },
  {
   "id": "D06.08",
@@ -413,7 +413,7 @@
   "name": "Identity Theft & Fraud",
   "objective": "Bảo vệ thông tin cá nhân, nhận diện lừa đảo và giao dịch bất thường.",
   "level": "Áp dụng",
-  "nameVi": "Mạo danh và lừa đảo"
+  "nameVi": "Đánh cắp danh tính, lừa đảo"
  },
  {
   "id": "D07.06",
@@ -461,7 +461,7 @@
   "name": "Research",
   "objective": "Thu thập thông tin trước quyết định.",
   "level": "Áp dụng",
-  "nameVi": "Tìm hiểu thông tin trước"
+  "nameVi": "Tìm hiểu trước khi quyết định"
  },
  {
   "id": "D08.02",
