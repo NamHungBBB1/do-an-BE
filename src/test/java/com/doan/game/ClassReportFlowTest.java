@@ -251,6 +251,35 @@ class ClassReportFlowTest {
         assertThat(singles).contains(bad);
     }
 
+    /**
+     * Soát PR #77 (lỗi 1): lô ném lỗi không phải AiCallException (vd giải mã khoá hỏng) → mọi việc tính một lần thử và
+     * chờ gửi lẻ, KHÔNG đứng RUNNING rồi quay vòng tới 6 giờ.
+     */
+    @Test
+    void batchUnexpectedErrorDoesNotStrandJobs() {
+        List<AiJob> mine = List.of(laneJob("CLASS_MILESTONE"), laneJob("CLASS_MILESTONE"));
+        AiJobWriter boom = new AiJobWriter() {
+            @Override
+            public Output write(AiJob job, Progress progress) {
+                throw new IllegalStateException("khoa hong");
+            }
+
+            @Override
+            public BatchResult writeBatch(List<AiJob> jobs, Progress progress) {
+                throw new IllegalStateException("khoa hong");
+            }
+        };
+        for (int i = 0; i < 20 && mine.stream().anyMatch(j -> status(j.getId()).equals("QUEUED")); i++) {
+            queue.runOnce(boom);
+        }
+        for (AiJob j : mine) {
+            AiJob after = jobRepo.findById(j.getId()).orElseThrow();
+            assertThat(after.getStatus()).isEqualTo("WAITING_RETRY");
+            assertThat(after.getAttempts()).isEqualTo(1);
+            assertThat(after.getLockedAt()).isNull();
+        }
+    }
+
     /** Việc chờ quá 6 giờ → FAILED mã EXPIRED (bản theo luật), không kẹt mãi (rà rủi ro nhóm 1 #6). */
     @Test
     void jobsWaitingOverSixHoursExpire() {

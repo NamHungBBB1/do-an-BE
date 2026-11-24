@@ -115,8 +115,13 @@ public class ClassReportService {
 
     /** Gọi trong transaction (ReportSummaryService sau khi em nộp bài sau chương). */
     void onPostTest(UUID groupId) {
+        LearnerGroup peek = groupRepo.findById(groupId).orElse(null);
+        if (peek == null || peek.getContext() != LearningContext.CLASS || peek.getClosedAt() != null
+                || !anyNewMilestone(peek)) {
+            return;   // đếm rẻ trước: phần lớn sự kiện không chạm mốc mới nên không khoá dòng nhóm
+        }
         LearnerGroup group = groupRepo.lockById(groupId).orElse(null);
-        if (group == null || group.getContext() != LearningContext.CLASS || group.getClosedAt() != null) {
+        if (group == null || group.getClosedAt() != null) {
             return;
         }
         List<LearnerSlot> active = activeSlots(group);
@@ -130,6 +135,20 @@ public class ClassReportService {
             }
             write(group, quiz.getChapter(), m, submitted, active.size(), last);
         }
+    }
+
+    /** Có chương nào chạm mốc cao hơn bản gần nhất (không khoá). */
+    private boolean anyNewMilestone(LearnerGroup group) {
+        List<LearnerSlot> active = activeSlots(group);
+        for (Quiz quiz : postTests(group.getId()).values()) {
+            int m = reached(active.size(), submittedSlots(quiz, active).size());
+            DailySummary last = latest(group.getId(), quiz.getChapter());
+            if (m >= 0 && (last == null || last.getMilestone() == null
+                    || (last.getMilestone() != CLOSE && last.getMilestone() < m))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -151,6 +170,11 @@ public class ClassReportService {
         for (Quiz quiz : postTests(groupId).values()) {
             List<UUID> submitted = submittedSlots(quiz, active);
             DailySummary last = latest(groupId, quiz.getChapter());
+            if (last == null && reached(active.size(), submitted.size()) >= 0) {
+                // Đủ ngưỡng mà chưa từng có nhận xét (vd sĩ số giảm sau lần nộp cuối) → vẫn có bản chốt.
+                write(group, quiz.getChapter(), CLOSE, submitted, active.size(), null);
+                continue;
+            }
             if (last == null || submitted.size() < thresholds(active.size()).firstKey()
                     || (last.getMilestone() != null && last.getMilestone() == CLOSE)
                     || (last.getSubmittedCount() != null && submitted.size() <= last.getSubmittedCount())) {
@@ -172,7 +196,10 @@ public class ClassReportService {
         String rule = ReportPackage.ruleText(pkg);
         Instant now = Instant.now(clock);
 
-        AiJob pending = last == null ? null : last.getAiJob();
+        // Khoá dòng việc trước khi xét: hàng chờ (SKIP LOCKED) không lấy được việc đang bị thay, và việc vừa bị hàng chờ
+        // lấy (RUNNING) thì không bị ghi đè.
+        AiJob pending = last == null || last.getAiJob() == null ? null
+                : jobRepo.lockById(last.getAiJob().getId()).orElse(null);
         if (pending != null && PENDING_JOB.contains(pending.getStatus())
                 && summaryRepo.findByAiJob_Id(pending.getId()).size() == 1) {
             // Thay bản đang chờ: cùng dòng, cùng việc, giữ createdAt của việc (T tính từ lần xếp đầu).

@@ -134,6 +134,10 @@ public class ReportAiWriter implements AiJobWriter {
             }
             ids.forEach(id -> errors.put(id, nonFatal(e)));
             return new BatchResult(ok, errors, List.of());
+        } catch (RuntimeException e) {
+            // vd giải mã khoá hỏng (đổi JWT_SECRET): như lỗi thường, lần sau gửi lẻ
+            ids.forEach(id -> errors.put(id, new AiCallException(e.toString(), false, "AI_ERROR", false)));
+            return new BatchResult(ok, errors, List.of());
         }
         java.util.Map<String, JsonNode> byId = items(h.text());
         for (int i = 0; i < jobs.size(); i++) {
@@ -144,16 +148,20 @@ public class ReportAiWriter implements AiJobWriter {
                         AiCallClassifier.REJECTED_OUTPUT, false));
                 continue;
             }
-            com.fasterxml.jackson.databind.node.ObjectNode one = item.deepCopy();
-            one.remove("id");
-            String raw = one.toString();
-            String rule = ReportAiOutput.check(job.getInput(), raw);
-            if (rule != null) {
-                errors.put(job.getId(), new AiCallException(rule, false, AiCallClassifier.REJECTED_OUTPUT, false));
-                continue;
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode one = item.deepCopy();
+                one.remove("id");
+                String raw = one.toString();
+                String rule = ReportAiOutput.check(job.getInput(), raw);
+                if (rule != null) {
+                    errors.put(job.getId(), new AiCallException(rule, false, AiCallClassifier.REJECTED_OUTPUT, false));
+                    continue;
+                }
+                ok.put(job.getId(), new Output(ReportAiOutput.compose(job.getInput(), raw), tier(h.key()),
+                        h.key().getProvider().name(), h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, raw));
+            } catch (RuntimeException e) {
+                errors.put(job.getId(), new AiCallException(e.toString(), false, "AI_ERROR", false));
             }
-            ok.put(job.getId(), new Output(ReportAiOutput.compose(job.getInput(), raw), tier(h.key()),
-                    h.key().getProvider().name(), h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, raw));
         }
         return new BatchResult(ok, errors, List.of());
     }
@@ -167,7 +175,8 @@ public class ReportAiWriter implements AiJobWriter {
             }
             java.util.Map<String, JsonNode> byId = new java.util.HashMap<>();
             out.path("items").forEach(it -> {
-                if (it.isObject() && it.path("id").isTextual()) {
+                // id có thể là chuỗi hoặc số (tầng OpenRouter không ép schema).
+                if (it.isObject() && (it.path("id").isTextual() || it.path("id").isNumber())) {
                     byId.putIfAbsent(it.path("id").asText(), it);
                 }
             });
