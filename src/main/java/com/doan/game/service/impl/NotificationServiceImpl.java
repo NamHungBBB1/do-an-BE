@@ -57,6 +57,7 @@ public class NotificationServiceImpl implements NotificationService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private static final String ACTION_LEARNER_REPORT = "OPEN_LEARNER_REPORT";
+    private static final String ACTION_GROUP_REPORT = "OPEN_GROUP_REPORT";
     private static final String ACTION_QUIZ_RESULTS = "OPEN_QUIZ_RESULTS";
     private static final String ACTION_LEARNER_LIST = "OPEN_LEARNER_LIST";
 
@@ -170,8 +171,9 @@ public class NotificationServiceImpl implements NotificationService {
         }
         Integer chapter = postTest.getChapter();
         if (group.getContext() == LearningContext.CLASS) {
+            // Dòng gộp trỏ tới báo cáo CỦA NHÓM (GET /api/groups/{id}/report), không phải báo cáo của một slot.
             upsertTeacher(group, NotificationType.REPORT_READY, chapter, postTest.getId(),
-                    ACTION_LEARNER_REPORT, group.getId(),
+                    ACTION_GROUP_REPORT, group.getId(),
                     "T:RP:" + group.getId() + ":" + chapter);
         } else {
             insertParent(group, slot, NotificationType.REPORT_READY, chapter, postTest.getId(),

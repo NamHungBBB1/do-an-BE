@@ -233,7 +233,8 @@ class NotificationFlowTest {
                 .andExpect(jsonPath("$.result.items[0].updatedAt").exists())
                 .andExpect(jsonPath("$.result.items[0].type").value("REPORT_READY"))
                 .andExpect(jsonPath("$.result.items[0].title").value(containsString("1/1 em đã có báo cáo")))
-                .andExpect(jsonPath("$.result.items[0].action.type").value("OPEN_LEARNER_REPORT"))
+                .andExpect(jsonPath("$.result.items[0].action.type").value("OPEN_GROUP_REPORT"))
+                .andExpect(jsonPath("$.result.items[0].action.resourceId").value(room.getId().toString()))
                 .andExpect(jsonPath("$.result.items[1].type").value("QUIZ_SUBMITTED"))
                 .andExpect(jsonPath("$.result.items[1].title").value(containsString("Kiểm tra chương 1")))
                 .andExpect(jsonPath("$.result.items[1].action.type").value("OPEN_QUIZ_RESULTS"));
