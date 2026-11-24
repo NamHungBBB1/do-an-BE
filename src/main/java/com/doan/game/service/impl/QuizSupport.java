@@ -70,6 +70,7 @@ class QuizSupport {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final com.doan.game.service.NotificationService notificationService;
 
     // ------------------------------------------------------------------ học sinh
 
@@ -233,8 +234,13 @@ class QuizSupport {
         }
         quizAnswerRepo.saveAll(answers);
         if (isPostTest(quiz)) {
+            // 24/11: nộp hậu trắc = báo cáo chương của trẻ đã sẵn sàng (gộp POST_TEST_SUBMITTED).
+            notificationService.notifyReportReady(slot, quiz);
             // 19/11 (khung báo cáo AI 13.3): chương thành COMPLETE → bài viết cho người lớn, sau khi commit.
             events.publishEvent(new ReportSummaryService.ProgressEvent(slot.getId()));
+        } else {
+            // 24/11: nộp đề giáo viên giao → phụ huynh nhận tin của trẻ, giáo viên nhận dòng gộp của lớp.
+            notificationService.notifyQuizSubmitted(slot, quiz);
         }
         return result;
     }

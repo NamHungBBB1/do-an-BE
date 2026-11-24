@@ -21,6 +21,7 @@ import com.doan.game.repository.MiniGameResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.PlayService;
+import com.doan.game.service.NotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,6 +69,7 @@ public class PlayServiceImpl implements PlayService {
     private final ChoiceEventRepository choiceEventRepo;
     private final MiniGameResultRepository miniGameResultRepo;
     private final QuizSupport quizSupport;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final org.springframework.context.ApplicationEventPublisher events;
@@ -189,6 +191,9 @@ public class PlayServiceImpl implements PlayService {
         run.setChaptersDone(writeJson(done));
         run.setUpdatedAt(now);
         runStateRepo.save(run);
+        // Chuông người lớn (24/11): chương vừa xong → phụ huynh nhận tin của trẻ, giáo viên nhận dòng
+        // gộp của lớp. Cùng transaction với lô chơi; gửi lại lô đã xong đã trả sớm ở trên nên không trùng.
+        notificationService.notifyChapterCompleted(slot, req.chapter(), attempt);
         // BR-53: đề hậu trắc của chương vừa xong có ngay (cùng transaction), em không phải mở danh sách quiz mới thấy.
         quizSupport.ensurePostTests(slot.getGroup(), List.of(req.chapter()));
         // 19/11 (khung báo cáo AI 13.3): chương không có hậu trắc / hậu trắc đã nộp ở lần chơi trước → COMPLETE ngay, có bài

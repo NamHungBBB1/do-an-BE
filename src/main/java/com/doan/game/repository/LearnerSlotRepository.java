@@ -51,6 +51,12 @@ public interface LearnerSlotRepository extends JpaRepository<LearnerSlot, UUID> 
     /** Mọi slot đã tạo trong một nhóm, KHÔNG lọc status — slot đã xoá vẫn ăn chỗ của lớp (18/11). */
     long countByGroup_Id(UUID groupId);
 
+    /**
+     * Sĩ số hiển thị của lớp: mọi slot TRỪ slot đã xoá (WIPED). Lớp đã đóng vẫn giữ mẫu số cũ nên
+     * dòng gộp "12/40 em" của giáo viên không nhảy về 0/0 sau khi đóng lớp.
+     */
+    long countByGroup_IdAndStatusNot(UUID groupId, SlotStatus status);
+
     /** Số slot đã tạo của tài khoản trong một loại nhóm, KHÔNG lọc status và KHÔNG mốc ngày. */
     @Query("select count(s) from LearnerSlot s "
             + "where s.group.owner.id = :ownerId and s.group.context = :context")
