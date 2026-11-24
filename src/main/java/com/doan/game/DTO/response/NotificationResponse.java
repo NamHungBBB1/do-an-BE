@@ -22,6 +22,7 @@ public record NotificationResponse(
         boolean read,
         Instant readAt,
         Instant createdAt,
+        Instant updatedAt,
         NotificationAction action) {
 
     /** Gợi ý điều hướng cho FE; BE không trả URL tuyệt đối. */

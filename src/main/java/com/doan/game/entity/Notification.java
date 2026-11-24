@@ -19,7 +19,12 @@ import lombok.Setter;
  * event_key UNIQUE — FE gửi lại lô chơi / lượt nộp không sinh thông báo trùng.
  */
 @Entity
-@Table(name = "notification")
+@Table(name = "notification", indexes = {
+    // FE gọi đếm chưa đọc định kỳ cho mọi người dùng: không có index là mỗi lần quét cả bảng.
+    @Index(name = "idx_notification_recipient_read", columnList = "recipient_account_id, read_at"),
+    // Danh sách sắp theo updated_at (dòng gộp nổi lên khi có em nộp thêm).
+    @Index(name = "idx_notification_recipient_updated", columnList = "recipient_account_id, updated_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -34,6 +39,10 @@ public class Notification {
     @JoinColumn(name = "recipient_account_id", nullable = false)
     private Account recipient;
 
+    /**
+     * Ba giá trị hiện tại. Cột là VARCHAR + CHECK do Hibernate sinh từ @Enumerated(STRING): thêm loại
+     * mới sau này phải ALTER CHECK trong production (ddl-auto=update không sửa CHECK), đừng chỉ sửa enum.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 32)
     private NotificationType type;

@@ -79,7 +79,7 @@ class NotificationFlowTest {
         Account parent = adult("phu-huynh");
         LearnerGroup family = group(parent, LearningContext.FAMILY);
         LearnerSlot minh = slot(family, "Minh");
-        finishChapter(minh, 3);
+        finishChapters(minh, 3);
 
         notifications.notifyChapterCompleted(minh, 3, 1);
         notifications.notifyChapterCompleted(minh, 3, 1);   // FE gửi lại lô: không thêm dòng
@@ -175,30 +175,31 @@ class NotificationFlowTest {
         LearnerGroup room = group(teacher, LearningContext.CLASS);
         LearnerSlot first = slot(room, "An");
         LearnerSlot second = slot(room, "Binh");
-        finishChapter(first, 2);
+        finishChapters(first, 1, 2);
 
         notifications.notifyChapterCompleted(first, 2, 1);
-        mvc.perform(get("/api/notifications").with(as(teacher)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.items.length()").value(1))
-                .andExpect(jsonPath("$.result.items[0].type").value("CHAPTER_COMPLETED"))
-                .andExpect(jsonPath("$.result.items[0].slotId").doesNotExist())
-                .andExpect(jsonPath("$.result.items[0].title").value(containsString("1/2 em đã hoàn thành")));
+        notifications.notifyChapterCompleted(first, 1, 1);   // dòng chương 1 mới hơn -> đang đứng đầu
 
-        UUID rowId = notificationRepo.findByRecipient_Id(teacher.getId(),
-                org.springframework.data.domain.PageRequest.of(0, 1)).getContent().get(0).getId();
-        mvc.perform(patch("/api/notifications/" + rowId + "/read").with(as(teacher)))
+        UUID chapterTwo = notificationRepo.findByRecipient_Id(teacher.getId(),
+                        org.springframework.data.domain.PageRequest.of(0, 10)).getContent().stream()
+                .filter(n -> n.getChapter() != null && n.getChapter() == 2)
+                .findFirst().orElseThrow().getId();
+        mvc.perform(patch("/api/notifications/" + chapterTwo + "/read").with(as(teacher)))
                 .andExpect(status().isOk());
 
-        finishChapter(second, 2);
+        finishChapters(second, 1, 2);
         notifications.notifyChapterCompleted(second, 2, 1);
 
-        // Vẫn MỘT dòng, tiến độ cập nhật, và dòng nổi lại là chưa đọc.
+        // Vẫn MỘT dòng cho chương 2, tiến độ cập nhật, dòng nổi lại chưa đọc VÀ nhảy lên đầu danh sách.
         mvc.perform(get("/api/notifications").with(as(teacher)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.items.length()").value(1))
+                .andExpect(jsonPath("$.result.items.length()").value(2))
+                .andExpect(jsonPath("$.result.items[0].type").value("CHAPTER_COMPLETED"))
+                .andExpect(jsonPath("$.result.items[0].chapter").value(2))
+                .andExpect(jsonPath("$.result.items[0].slotId").doesNotExist())
                 .andExpect(jsonPath("$.result.items[0].title").value(containsString("2/2 em đã hoàn thành")))
-                .andExpect(jsonPath("$.result.items[0].read").value(false));
+                .andExpect(jsonPath("$.result.items[0].read").value(false))
+                .andExpect(jsonPath("$.result.items[0].updatedAt").exists());
     }
 
     @Test
@@ -219,14 +220,17 @@ class NotificationFlowTest {
         var rows = notificationRepo.findByRecipient_Id(teacher.getId(),
                 org.springframework.data.domain.PageRequest.of(0, 10)).getContent();
         for (var n : rows) {
-            n.setCreatedAt(n.getType() == NotificationType.REPORT_READY
-                    ? START.plusSeconds(2) : START.plusSeconds(1));
+            Instant at = n.getType() == NotificationType.REPORT_READY
+                    ? START.plusSeconds(2) : START.plusSeconds(1);
+            n.setCreatedAt(at);
+            n.setUpdatedAt(at);
         }
         notificationRepo.saveAll(rows);
 
         mvc.perform(get("/api/notifications").with(as(teacher)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.items.length()").value(2))
+                .andExpect(jsonPath("$.result.items[0].updatedAt").exists())
                 .andExpect(jsonPath("$.result.items[0].type").value("REPORT_READY"))
                 .andExpect(jsonPath("$.result.items[0].title").value(containsString("1/1 em đã có báo cáo")))
                 .andExpect(jsonPath("$.result.items[0].action.type").value("OPEN_LEARNER_REPORT"))
@@ -263,7 +267,9 @@ class NotificationFlowTest {
         var rows = notificationRepo.findByRecipient_Id(parent.getId(),
                 org.springframework.data.domain.PageRequest.of(0, 10)).getContent();
         for (var n : rows) {
-            n.setCreatedAt(START.plusSeconds(n.getChapter()));
+            Instant at = START.plusSeconds(n.getChapter());
+            n.setCreatedAt(at);
+            n.setUpdatedAt(at);
         }
         notificationRepo.saveAll(rows);
 
@@ -310,10 +316,17 @@ class NotificationFlowTest {
         return slotRepo.save(slot);
     }
 
-    private void finishChapter(LearnerSlot slot, int chapter) {
+    private void finishChapters(LearnerSlot slot, int... chapters) {
         RunState run = runStateRepo.findBySlot_Id(slot.getId()).orElseGet(RunState::new);
         run.setSlot(slot);
-        run.setChaptersDone("[" + chapter + "]");
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < chapters.length; i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(chapters[i]);
+        }
+        run.setChaptersDone(json.append(']').toString());
         run.setAttemptIndex(1);
         run.setUpdatedAt(START);
         runStateRepo.save(run);

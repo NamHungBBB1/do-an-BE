@@ -81,7 +81,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
         Pageable pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+                Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.desc("id")));
         Page<Notification> rows = unreadOnly
                 ? notificationRepo.findByRecipient_IdAndReadAtIsNull(accountId, pageable)
                 : notificationRepo.findByRecipient_Id(accountId, pageable);
@@ -117,7 +117,8 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public NotificationReadAllResponse markAllRead(UUID accountId) {
         int updated = notificationRepo.markAllRead(accountId, Instant.now(clock));
-        return new NotificationReadAllResponse(updated, 0);
+        long unread = notificationRepo.countByRecipient_IdAndReadAtIsNull(accountId);
+        return new NotificationReadAllResponse(updated, unread);
     }
 
     // ------------------------------------------------------------------ móc sự kiện
@@ -287,7 +288,7 @@ public class NotificationServiceImpl implements NotificationService {
         return new NotificationResponse(n.getId(), n.getType(), title, message,
                 slot == null ? null : slot.getId(), name,
                 group == null ? null : group.getId(), n.getChapter(), n.getQuizId(),
-                n.getReadAt() != null, n.getReadAt(), n.getCreatedAt(),
+                n.getReadAt() != null, n.getReadAt(), n.getCreatedAt(), n.getUpdatedAt(),
                 new NotificationResponse.NotificationAction(n.getActionType(), n.getActionResourceId()));
     }
 
