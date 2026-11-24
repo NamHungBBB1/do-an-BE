@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -74,9 +75,13 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
         this.cors = cors;
     }
 
+    /**
+     * So trên đường đã giải mã, bỏ context path (/finteen ở production) và phần ";..." — như Spring MVC khớp controller.
+     * 25/11: so getRequestURI() thô thì /api/auth/password/%66orgot lọt bộ lọc mà vẫn tới controller gửi mail.
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest req) {
-        String path = req.getRequestURI().substring(req.getContextPath().length());
+        String path = UrlPathHelper.defaultInstance.getPathWithinApplication(req);
         return !"POST".equals(req.getMethod()) || !MAIL_PATHS.contains(path);
     }
 

@@ -669,6 +669,11 @@ class QuizV3FlowTest {
         assertThat(pending.get(0).path("kind").asText()).isEqualTo("POST_TEST");
         assertThat(pending.get(0).path("chapter").asInt()).isEqualTo(8);
         String postTestId = pending.get(0).path("id").asText();
+        // 25/11: chủ nhóm xem đề hậu trắc — có câu, KHÔNG có đáp án (kho câu hậu trắc dùng chung mọi nhóm).
+        JsonNode postTestDetail = result(mvc.perform(get("/api/quizzes/" + postTestId).with(as(parent)))
+                .andExpect(status().isOk()));
+        assertThat(postTestDetail.path("questions")).hasSize(chapterEight);
+        postTestDetail.path("questions").forEach(n -> assertThat(n.hasNonNull("correctIndex")).isFalse());
         JsonNode opened = result(mvc.perform(post("/api/learner/quizzes/" + postTestId + "/attempts").with(as(kid)))
                 .andExpect(status().isOk()));
         assertThat(opened.path("kind").asText()).isEqualTo("POST_TEST");
