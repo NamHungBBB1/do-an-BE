@@ -93,6 +93,8 @@ public class AiJobQueue {
     private final Duration waitClass;
     private final ObjectProvider<com.doan.game.service.NotificationService> notifications;
     private final com.doan.game.repository.AiCallLogRepository callLogs;
+    /** Ngăn xét đầu tiên ở lượt kế (xoay vòng). */
+    private int laneStart;
     /** Số lần hết lượt liên tiếp của tiến trình này (các khoá dùng chung quota) — xong một việc thì về 0. */
     private int quotaStreak;
 
@@ -144,7 +146,7 @@ public class AiJobQueue {
 
     /** Một lượt. writer null = AI tắt. Trả số việc đã lấy. Test gọi thẳng (lịch tắt trong test). */
     public synchronized int runOnce(AiJobWriter writer) {
-        Claim c = tx.execute(s -> claim());
+        Claim c = tx.execute(s -> claim(writer == null));
         List<UUID> ids = c.ids();
         if (writer != null && c.batch()) {
             runBatch(writer, c);
@@ -190,7 +192,9 @@ public class AiJobQueue {
         for (UUID id : c.ids()) {
             jobRepo.findById(id).ifPresent(jobs::add);
         }
-        AiJobWriter.BatchResult r = writer.writeBatch(jobs, new AiJobWriter.Progress() {
+        AiJobWriter.BatchResult r;
+        try {
+            r = writer.writeBatch(jobs, new AiJobWriter.Progress() {
             @Override
             public void usingKey(String keyAlias) {
                 tx.executeWithoutResult(s -> c.ids().forEach(id ->
@@ -202,8 +206,14 @@ public class AiJobQueue {
                 return c.reason();
             }
         });
-        r.ok().forEach((id, out) -> tx.executeWithoutResult(s -> done(id, out)));
-        r.errors().forEach((id, e) -> tx.executeWithoutResult(s -> {
+        } catch (RuntimeException e) {
+            // Như đường lẻ: tính lần thử, lần sau gửi lẻ — không để cả lô đứng RUNNING rồi quay vòng tới 6 giờ.
+            log.warn("lo AI loi: {}", e.toString());
+            c.ids().forEach(id -> safely(id, () -> retryOrFail(id, "AI_ERROR", e.toString())));
+            return;
+        }
+        r.ok().forEach((id, out) -> safely(id, () -> done(id, out)));
+        r.errors().forEach((id, e) -> safely(id, () -> {
             if (e.fatal()) {
                 fail(id, e.code() == null ? "AI_ERROR" : e.code(), e.getMessage());
             } else {
@@ -217,30 +227,50 @@ public class AiJobQueue {
         }
     }
 
+    /** Ghi kết quả một việc trong giao dịch riêng; hỏng thì việc đó lỗi thường, các việc khác vẫn được ghi. */
+    private void safely(UUID id, Runnable write) {
+        try {
+            tx.executeWithoutResult(s -> write.run());
+        } catch (RuntimeException e) {
+            log.warn("khong ghi duoc ket qua viec AI {}: {}", id, e.toString());
+            try {
+                tx.executeWithoutResult(s -> retryOrFail(id, "AI_ERROR", e.toString()));
+            } catch (RuntimeException ignored) {
+                // requeueStale sẽ trả việc về hàng chờ sau 5 phút
+            }
+        }
+    }
+
     private Duration waitOf(String lane) {
         return LANE_CLASS.equals(lane) ? waitClass : waitParent;
     }
 
-    private Claim claim() {
+    /** noWait: AI tắt → lấy ngay, không chờ đủ lô / T (bài về bản theo luật trong một lượt như trước). */
+    private Claim claim(boolean noWait) {
         Instant now = Instant.now(clock);
         jobRepo.requeueStale(now.minus(STALE_AFTER));
         expire(now);
         // Việc gửi lẻ (đã lỗi / việc cũ không ngăn) trước: chúng đã chờ qua ít nhất một lượt.
         List<UUID> singles = new ArrayList<>();
         for (AiJob job : jobRepo.lockDueSingles(now, PageRequest.of(0, batchSize))) {
-            take(job, now, job.getLane() == null ? null : UUID.randomUUID());
+            // Gửi lẻ sau lỗi giữ mã lô gốc để trang admin vẫn thấy bài bị loại nằm trong lô của nó.
+            take(job, now, job.getBatchId() != null ? job.getBatchId()
+                    : job.getLane() == null ? null : UUID.randomUUID());
             singles.add(job.getId());
         }
         if (!singles.isEmpty()) {
             return new Claim(singles, false, SEND_SINGLE);
         }
-        for (String lane : LANES) {
+        int start = laneStart;
+        laneStart = (laneStart + 1) % LANES.size();   // xoay ngăn đầu tiên mỗi lượt: một ngăn đông không bỏ đói ngăn khác
+        for (int k = 0; k < LANES.size(); k++) {
+            String lane = LANES.get((start + k) % LANES.size());
             List<AiJob> due = jobRepo.lockDueLane(now, lane, PageRequest.of(0, maxBatch));
             if (due.isEmpty()) {
                 continue;
             }
             boolean full = due.size() >= maxBatch;
-            boolean waited = !due.get(0).getCreatedAt().isAfter(now.minus(waitOf(lane)));
+            boolean waited = noWait || !due.get(0).getCreatedAt().isAfter(now.minus(waitOf(lane)));
             if (full || waited) {
                 UUID batchId = UUID.randomUUID();
                 List<UUID> ids = new ArrayList<>();
@@ -396,7 +426,11 @@ public class AiJobQueue {
         if (logs.isEmpty() && jobs.isEmpty()) {
             throw new AppException(ErrorCode.NOT_FOUND, "không có lô " + batchId);
         }
-        com.doan.game.entity.AiCallLog last = logs.isEmpty() ? null : logs.get(logs.size() - 1);
+        // Lần gọi của cả lô (cỡ lớn nhất); các lần gửi lẻ sau lỗi cũng mang mã lô này.
+        com.doan.game.entity.AiCallLog last = logs.stream().max(java.util.Comparator.comparing(
+                (com.doan.game.entity.AiCallLog l) -> l.getBatchSize() == null ? 0 : l.getBatchSize())
+                .thenComparing(com.doan.game.entity.AiCallLog::getCreatedAt,
+                        java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))).orElse(null);
         if (last == null) {
             last = new com.doan.game.entity.AiCallLog();
             last.setBatchId(batchId);

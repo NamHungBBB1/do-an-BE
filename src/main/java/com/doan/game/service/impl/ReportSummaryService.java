@@ -94,7 +94,19 @@ public class ReportSummaryService {
                     () -> ReportPackage.finalPackage(blocks), !inClass);
         }
         if (inClass) {
-            classReports.onPostTest(slot.getGroup().getId());
+            UUID groupId = slot.getGroup().getId();
+            // Giao dịch riêng: nhận xét lớp hỏng không được kéo mất bản theo luật vừa ghi của em.
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                tx.executeWithoutResult(s -> classReports.onPostTest(groupId));
+                            } catch (RuntimeException e) {
+                                log.warn("khong ghi duoc nhan xet lop {}: {}", groupId, e.toString());
+                            }
+                        }
+                    });
         }
     }
 

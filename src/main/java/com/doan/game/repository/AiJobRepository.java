@@ -57,6 +57,11 @@ public interface AiJobRepository extends JpaRepository<AiJob, UUID> {
     @Query("select j from AiJob j where j.status in ('QUEUED', 'WAITING_RETRY') and j.createdAt < :before")
     List<AiJob> findExpired(@Param("before") Instant before);
 
+    /** Khoá ghi một việc (thay bản nhận xét lớp đang chờ: không chen ngang lúc hàng chờ lấy việc). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select j from AiJob j where j.id = :id")
+    java.util.Optional<AiJob> lockById(@Param("id") UUID id);
+
     /** Admin theo dõi lô (25/11): mọi việc của một lô. */
     List<AiJob> findByBatchIdOrderByCreatedAtAsc(UUID batchId);
 
