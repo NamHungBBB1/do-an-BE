@@ -114,7 +114,7 @@ class ReportAiWriterFlowTest {
     void happyPathThroughQueue() throws Exception {
         String k = addKey("GEMINI", "aiw-ok", 1, null, null);
         respond(c -> ok(goodOutput(), 1200, 150));
-        AiJob job = job("QUEUED", Instant.EPOCH);
+        AiJob job = job("QUEUED", Instant.now().minusSeconds(3600));
         DailySummary row = summary(job);
 
         drain(job.getId());
@@ -292,7 +292,7 @@ class ReportAiWriterFlowTest {
     void safetyBlockFailsJobAndKeepsRuleText() {
         addKey("GEMINI", "aiw-safe", 1, null, null);
         respond(c -> new AiTextClient.RawReply(200, "{\"candidates\":[{\"finishReason\":\"SAFETY\"}]}", 4));
-        AiJob job = job("QUEUED", Instant.EPOCH);
+        AiJob job = job("QUEUED", Instant.now().minusSeconds(3600));
         DailySummary row = summary(job);
 
         drain(job.getId());

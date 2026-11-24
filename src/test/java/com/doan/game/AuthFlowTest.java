@@ -869,6 +869,26 @@ class AuthFlowTest {
         register("khac-ip-" + System.nanoTime() + "@test.local");
     }
 
+    /** 25/11: đường mã hoá phần trăm (%66orgot = forgot) vẫn tới controller → phải bị đếm như đường thường. */
+    @Test
+    void percentEncodedMailPathIsRateLimitedToo() throws Exception {
+        String ip = "198.18.0." + (System.nanoTime() % 200 + 1);
+        java.net.URI encoded = java.net.URI.create("/api/auth/password/%66orgot");
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(post(encoded)
+                            .header("X-Forwarded-For", "10.0.0.2, " + ip)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"enc-" + System.nanoTime() + "-" + i + "@test.local\"}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post(encoded)
+                        .header("X-Forwarded-For", "10.0.0.2, " + ip)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"enc-cuoi-" + System.nanoTime() + "@test.local\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value(1005));
+    }
+
     /**
      * Sự cố 24/10: qua đường hầm cloudflared, phần tử cuối X-Forwarded-For luôn là 127.0.0.1 → phải tách người dùng theo
      * CF-Connecting-IP, không thì cả hệ thống chung một bộ đếm. 429 phải có header CORS để FE đọc được câu báo.

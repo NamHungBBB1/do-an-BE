@@ -29,8 +29,9 @@ public interface QuizAttemptService {
     void finalizeExpired(UUID quizId);
 
     /**
-     * Chốt mọi lượt quá giờ trong các đề của một nhóm, giao dịch RIÊNG (REQUIRES_NEW) — gọi ở đầu báo cáo slot / nhóm, danh
-     * sách đề giáo viên, chi tiết đề, danh sách của em (đường đọc readOnly không ghi được).
+     * Chốt mọi lượt quá giờ trong các đề của một nhóm, giao dịch RIÊNG (REQUIRES_NEW, chỉ mở khi có lượt quá giờ) — gọi ở
+     * đầu báo cáo slot / nhóm, danh sách đề giáo viên, chi tiết đề, danh sách của em (đường đọc readOnly không ghi được).
+     * Gọi khi CHƯA mở giao dịch nếu được: lồng trong giao dịch khác là giữ hai kết nối DB cùng lúc.
      */
     void finalizeExpiredInGroup(UUID groupId);
 }

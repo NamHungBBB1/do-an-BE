@@ -40,6 +40,10 @@ final class ReportPackage {
 
     static final String CHAPTER = "CHAPTER";
     static final String FINAL = "FINAL";
+    /** Nhận xét cả lớp theo mốc (25/11, spec báo cáo lớp): gói chỉ có số GỘP, không tên / id / dòng từng em. */
+    static final String CLASS = "CLASS";
+    /** D3 (25/11): mức của LỚP cần ít nhất 10 câu cộng dồn (một em mỗi chương chỉ khoảng 1–2 câu / khái niệm). */
+    static final int MIN_ITEMS_FOR_CLASS_BAND = 10;
 
     /** Bỏ trường null để gói gọn và hash không đổi khi thêm trường tuỳ chọn về sau. */
     private static final ObjectMapper MAPPER = new ObjectMapper()
@@ -71,8 +75,13 @@ final class ReportPackage {
 
     record OptionFrame(String id, String label, Boolean deliberate) {}
 
+    /** submitted / active / classDecisions chỉ có ở gói CLASS (null ở gói em → bỏ khỏi JSON, hash gói cũ không đổi). */
     record Result(Integer chaptersDone, List<ConceptResult> concepts, List<String> noData, List<WrongItem> wrongItems,
-                  List<DecisionResult> decisions, DecisionSummary decisionSummary, Count miniGames, Count postTest) {}
+                  List<DecisionResult> decisions, DecisionSummary decisionSummary, Count miniGames, Count postTest,
+                  Integer submitted, Integer active, List<ClassDecision> classDecisions) {}
+
+    /** counts = số em chọn mỗi phương án (id phương án → số em). */
+    record ClassDecision(String scene, Map<String, Integer> counts) {}
 
     record ConceptResult(String id, Count game, Count postTest, int correct, int total, String band) {}
 
@@ -127,7 +136,8 @@ final class ReportPackage {
 
         Frame frame = new Frame(List.of(chapterFrame(ch, json)), conceptFrames(core), frames, STATS_NOTE, BANDS);
         Result result = new Result(null, conceptResults(counts, core), noData(counts, core), wrong, decisions,
-                decisionSummary(row.choices()), new Count(row.miniGames().correct(), row.miniGames().total()), postTest);
+                decisionSummary(row.choices()), new Count(row.miniGames().correct(), row.miniGames().total()), postTest,
+                null, null, null);
         return new Pkg(CHAPTER, frame, result);
     }
 
@@ -162,8 +172,93 @@ final class ReportPackage {
         Frame frame = new Frame(chapters, conceptFrames(core), null, STATS_NOTE, BANDS);
         Result result = new Result(chapters.size(), conceptResults(counts, core), noData(counts, core), null, null,
                 decisionSummary(choices), new Count(miniCorrect, miniTotal),
-                anyPost ? new Count(postCorrect, postTotal) : null);
+                anyPost ? new Count(postCorrect, postTotal) : null, null, null, null);
         return new Pkg(FINAL, frame, result);
+    }
+
+    /**
+     * Gói nhận xét lớp cho một chương (25/11). kids = khối chương của các em ĐANG HOẠT ĐỘNG đã nộp bài sau chương (lần chơi
+     * hiện tại); active = số em đang hoạt động. Khái niệm: cộng dồn câu cả lớp rồi mới xếp mức (D3: dưới 10 câu → NO_DATA).
+     * Quyết định: chỉ đếm em chơi bản nội dung phổ biến nhất của chương trong lớp, để chữ phương án khớp một khung duy nhất.
+     */
+    static Pkg classChapter(int ch, List<ReportServiceImpl.ChapterBlocks> kids, int active) {
+        Map<String, Integer> versionCount = new TreeMap<>();
+        for (ReportServiceImpl.ChapterBlocks b : kids) {
+            String v = b.chapterVersion().get(ch);
+            if (v != null) {
+                versionCount.merge(v, 1, Integer::sum);
+            }
+        }
+        String version = versionCount.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey)
+                .orElse(null);
+        JsonNode json = null;
+        Map<String, int[]> counts = new TreeMap<>();
+        Map<String, Map<String, Integer>> picks = new java.util.LinkedHashMap<>();
+        int miniCorrect = 0;
+        int miniTotal = 0;
+        int postCorrect = 0;
+        int postTotal = 0;
+        for (ReportServiceImpl.ChapterBlocks b : kids) {
+            SlotReportResponse.ChapterRow row = b.chapters().stream().filter(r -> r.chapter() == ch).findFirst()
+                    .orElse(null);
+            if (row == null) {
+                continue;
+            }
+            b.chapterConcepts().getOrDefault(ch, Map.of()).forEach((id, c) -> {
+                int[] t = counts.computeIfAbsent(id, k -> new int[4]);
+                for (int i = 0; i < 4; i++) {
+                    t[i] += c[i];
+                }
+            });
+            miniCorrect += row.miniGames().correct();
+            miniTotal += row.miniGames().total();
+            if (ReportServiceImpl.SUBMITTED.equals(row.postTest().status())) {
+                postCorrect += row.postTest().correct();
+                postTotal += row.postTest().total();
+            }
+            if (version != null && version.equals(b.chapterVersion().get(ch))) {
+                if (json == null) {
+                    json = b.chapterJson().get(ch);
+                }
+                for (SlotReportResponse.ChoiceRow c : row.choices()) {
+                    picks.computeIfAbsent(c.sceneId(), k -> new TreeMap<>()).merge(c.optionId(), 1, Integer::sum);
+                }
+            }
+        }
+        Set<String> core = coreConcepts(json);
+        List<DecisionFrame> frames = new ArrayList<>();
+        List<ClassDecision> decisions = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Integer>> e : picks.entrySet()) {
+            JsonNode scene = json == null ? null : PlayServiceImpl.findScene(json.path("scenes"), e.getKey());
+            List<OptionFrame> options = new ArrayList<>();
+            if (scene != null && scene.path("options").isArray()) {
+                for (JsonNode o : scene.path("options")) {
+                    options.add(new OptionFrame(o.path("id").asText(null), label(o), null));
+                }
+            }
+            frames.add(new DecisionFrame(e.getKey(), options));
+            decisions.add(new ClassDecision(e.getKey(), e.getValue()));
+        }
+        List<ConceptResult> concepts = new ArrayList<>();
+        counts.forEach((id, c) -> {
+            if (core.isEmpty() || core.contains(id)) {
+                concepts.add(new ConceptResult(id, new Count(c[0], c[1]), new Count(c[2], c[3]), c[0] + c[2],
+                        c[1] + c[3], classBand(c[0] + c[2], c[1] + c[3])));
+            }
+        });
+        Frame frame = new Frame(List.of(chapterFrame(ch, json)), conceptFrames(core), frames, null, CLASS_BANDS);
+        Result result = new Result(null, concepts, noData(counts, core), null, null, null,
+                new Count(miniCorrect, miniTotal), postTotal > 0 ? new Count(postCorrect, postTotal) : null,
+                kids.size(), active, decisions);
+        return new Pkg(CLASS, frame, result);
+    }
+
+    static final Map<String, String> CLASS_BANDS = new TreeMap<>(Map.of("NO_DATA", "dưới 10 câu cả lớp", "PRACTICE",
+            "< 50%", "FAMILIAR", "50–69%", "GOOD", "≥ 70%"));
+
+    /** Mức của lớp: như BR-44 nhưng cần ≥ 10 câu cộng dồn (D3). */
+    static String classBand(int correct, int total) {
+        return total < MIN_ITEMS_FOR_CLASS_BAND ? "NO_DATA" : ReportServiceImpl.band(correct, total);
     }
 
     private static ChapterFrame chapterFrame(int ch, JsonNode json) {
@@ -175,7 +270,7 @@ final class ReportPackage {
     }
 
     /** Mã lõi của chương (metadata.coreKnowledgeUnits) — báo cáo chỉ nói về mã lõi; chương không khai thì mọi mã. */
-    private static Set<String> coreConcepts(JsonNode json) {
+    static Set<String> coreConcepts(JsonNode json) {
         Set<String> out = new LinkedHashSet<>();
         JsonNode units = json == null ? null : json.path("metadata").path("coreKnowledgeUnits");
         if (units != null && units.isArray()) {
@@ -299,6 +394,9 @@ final class ReportPackage {
      */
     static String ruleText(Pkg pkg) {
         Result r = pkg.result();
+        if (CLASS.equals(pkg.kind())) {
+            return classRuleText(pkg);
+        }
         List<String> lines = new ArrayList<>();
         if (FINAL.equals(pkg.kind())) {
             lines.add("Tổng kết " + r.chaptersDone() + " chương.");
@@ -336,6 +434,41 @@ final class ReportPackage {
             int others = r.miniGames().total() - r.miniGames().correct() - items.size();
             lines.add("Câu chưa đúng: " + String.join("; ", items) + (others > 0 ? "; và " + others + " câu khác" : "")
                     + ".");
+        }
+        return String.join("\n", lines);
+    }
+
+    /** Bản tóm tắt nhanh của nhận xét lớp: mẫu câu cố định, mọi số lấy từ gói; không nói đúng sai về lựa chọn truyện. */
+    private static String classRuleText(Pkg pkg) {
+        Result r = pkg.result();
+        ChapterFrame c = pkg.frame().chapters().get(0);
+        List<String> lines = new ArrayList<>();
+        lines.add("Chương " + c.number() + (c.title() == null ? "." : " — " + c.title() + ".")
+                + " Đã nộp bài sau chương: " + r.submitted() + "/" + r.active() + " em.");
+        Map<String, DecisionFrame> frames = new java.util.HashMap<>();
+        pkg.frame().decisions().forEach(f -> frames.put(f.scene(), f));
+        for (ClassDecision d : r.classDecisions()) {
+            Map.Entry<String, Integer> top = d.counts().entrySet().stream().max(Map.Entry.comparingByValue()).orElse(null);
+            DecisionFrame f = frames.get(d.scene());
+            String name = top == null || f == null ? null : f.options().stream()
+                    .filter(o -> top.getKey().equals(o.id())).map(OptionFrame::label).findFirst().orElse(null);
+            if (name != null) {
+                int all = d.counts().values().stream().mapToInt(Integer::intValue).sum();
+                lines.add("Quyết định: nhiều em chọn “" + name + "” nhất (" + top.getValue() + "/" + all + " em).");
+            }
+        }
+        if (r.miniGames().total() > 0) {
+            lines.add("Mini-game: lớp làm đúng " + r.miniGames().correct() + "/" + r.miniGames().total() + " câu.");
+        }
+        if (r.postTest() != null) {
+            lines.add("Bài sau chương: lớp làm đúng " + r.postTest().correct() + "/" + r.postTest().total() + " câu.");
+        }
+        addBand(lines, r, "GOOD", "Lớp làm tốt");
+        addBand(lines, r, "FAMILIAR", "Đang làm quen");
+        addBand(lines, r, "PRACTICE", "Cần ôn lại");
+        String few = noDataLine(r);
+        if (few != null) {
+            lines.add(few);
         }
         return String.join("\n", lines);
     }

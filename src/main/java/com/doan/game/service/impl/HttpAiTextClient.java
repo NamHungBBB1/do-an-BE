@@ -42,7 +42,7 @@ public class HttpAiTextClient implements AiTextClient {
     @Override
     public String generateJson(AiProviderKind provider, String key, String prompt) {
         try {
-            HttpRequest.Builder b = HttpRequest.newBuilder().timeout(Duration.ofSeconds(60))
+            HttpRequest.Builder b = HttpRequest.newBuilder().timeout(Duration.ofSeconds(120))
                     .header("Content-Type", "application/json");
             ObjectNode body = json.createObjectNode();
             if (provider == AiProviderKind.GEMINI) {
@@ -84,7 +84,7 @@ public class HttpAiTextClient implements AiTextClient {
                          JsonNode responseSchema) {
         long start = System.nanoTime();
         try {
-            HttpRequest.Builder b = HttpRequest.newBuilder().timeout(Duration.ofSeconds(60))
+            HttpRequest.Builder b = HttpRequest.newBuilder().timeout(Duration.ofSeconds(120))
                     .header("Content-Type", "application/json");
             ObjectNode body = json.createObjectNode();
             if (provider == AiProviderKind.GEMINI) {

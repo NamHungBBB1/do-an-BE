@@ -79,4 +79,13 @@ public class AiCallLog {
 
     @Column(name = "rejected_rule", length = 160)
     private String rejectedRule;
+
+    @Column(name = "batch_id")
+    private UUID batchId;
+
+    @Column(name = "batch_size")
+    private Integer batchSize;
+
+    @Column(name = "send_reason", length = 16)
+    private String sendReason;
 }

@@ -12,7 +12,31 @@ import java.util.UUID;
  * đóng vẫn đúng). Không phân trang — nhà ≤ 4 slot, lớp ≤ 40; CSV FE tự xuất từ rows.
  */
 public record GroupReportResponse(GroupInfo group, Instant frozenAt, String formulaVersion,
-                                  Summary summary, List<ReportRow> rows) {
+                                  Summary summary, List<ReportRow> rows, List<ClassChapter> chapters) {
+
+    /**
+     * Báo cáo lớp theo chương (25/11, spec báo cáo lớp): chỉ nhóm CLASS, nhóm FAMILY là mảng rỗng. Số liệu tính sống; nhận xét
+     * cả lớp lấy bản mới nhất. Không lộ cơ chế bên trong (mốc, hàng chờ, AI): comment.state chỉ có WAITING | PREPARING |
+     * READY | BASIC. learners / wrongLearners / notFinished / notSubmitted có tên em — chỉ chủ nhóm đọc được (requireOwner).
+     */
+    public record ClassChapter(int chapter, String title, int active, int finished, int submitted, Comment comment,
+                               List<HistoryItem> history, List<ClassConcept> concepts, List<ClassDecision> decisions,
+                               List<LearnerRef> notFinished, List<LearnerRef> notSubmitted) {}
+
+    /** basedOn = số em đã nộp lúc viết nhận xét. */
+    public record Comment(String state, String text, Instant at, Integer basedOn) {}
+
+    public record HistoryItem(Instant at, Integer basedOn, String text) {}
+
+    /** band của LỚP (cộng dồn câu cả lớp; dưới 10 câu → NO_DATA). Mảng xếp nội dung yếu nhất trước. */
+    public record ClassConcept(String name, String objective, int correct, int total, String band,
+                               List<LearnerRef> wrongLearners) {}
+
+    public record ClassDecision(String question, List<ClassOption> options) {}
+
+    public record ClassOption(String label, int count, List<LearnerRef> learners) {}
+
+    public record LearnerRef(UUID slotId, String displayName) {}
 
     public record GroupInfo(UUID id, String name, String context, Integer slotLimit,
                             Instant openedAt, Instant closedAt) {}

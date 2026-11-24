@@ -57,6 +57,7 @@ public class GroupServiceImpl implements GroupService {
     private final SlotQuotaService quotaService;
     private final ReportService reportService;
     private final Clock clock;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     /**
      * Mở nhóm. Thứ tự kiểm: name → context → gói còn hạn (3005) → còn nhóm FAMILY đang mở? (5001)
@@ -238,6 +239,8 @@ public class GroupServiceImpl implements GroupService {
         groupRepo.save(group);
         reportService.freezeOnClose(groupId);
         slotRepo.archiveActiveSlots(groupId, now, SlotStatus.ACTIVE, SlotStatus.ARCHIVED);
+        // 25/11: sau commit, chương có em nộp thêm sau nhận xét gần nhất → một bản nhận xét chốt (ClassReportService).
+        events.publishEvent(new ClassReportService.ClassClosedEvent(groupId));
     }
 
     /**

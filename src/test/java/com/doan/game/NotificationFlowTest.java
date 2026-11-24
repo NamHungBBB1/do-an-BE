@@ -215,6 +215,11 @@ class NotificationFlowTest {
         Quiz postTest = quiz(teacher, room, "Hậu trắc chương 2", QuizKind.POST_TEST, 2);
         quizResultRepo.save(result(postTest, kid));
         notifications.notifyReportReady(kid, postTest);
+        // D2 (25/11): em trong lớp nộp bài sau chương KHÔNG bắn chuông giáo viên; chỉ khi có nhận xét cả lớp mới.
+        org.junit.jupiter.api.Assertions.assertTrue(notificationRepo.findByRecipient_Id(teacher.getId(),
+                        org.springframework.data.domain.PageRequest.of(0, 10)).getContent().stream()
+                .noneMatch(n -> n.getType() == NotificationType.REPORT_READY));
+        notifications.notifyClassCommentReady(room, 2);
 
         // Mốc thời gian cố định để thứ tự không phụ thuộc độ phân giải đồng hồ.
         var rows = notificationRepo.findByRecipient_Id(teacher.getId(),

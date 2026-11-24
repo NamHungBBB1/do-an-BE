@@ -55,6 +55,10 @@ public class AiCallLogService {
                     new long[] {((Number) row[2]).longValue(), ((Number) row[3]).longValue(),
                             ((Number) row[4]).longValue()});
         }
+        Map<String, long[]> batches = new HashMap<>();   // gom lô (25/11): [số lô, số bài] hôm nay theo khoá
+        for (Object[] row : logRepo.batchesSince(dayStart)) {
+            batches.put((String) row[0], new long[] {((Number) row[1]).longValue(), ((Number) row[2]).longValue()});
+        }
         Map<String, Instant> lastOk = new HashMap<>();
         for (Object[] row : logRepo.lastOk()) {
             lastOk.put((String) row[0], (Instant) row[1]);
@@ -84,7 +88,8 @@ public class AiCallLogService {
                     k.getPurpose() == null ? ReportAiWriter.GENERAL : k.getPurpose(), k.getProject(), k.getTierLabel(),
                     k.isEnabled(), k.getCoolDownUntil(), ok, calls, byOutcome.getOrDefault(AiCallClassifier.OK, 0L),
                     byOutcome, in, outTokens, lastOk.get(k.getAlias()), k.getLastError(), k.getRpmLimit(),
-                    k.getRpdLimit()));
+                    k.getRpdLimit(), batches.getOrDefault(k.getAlias(), new long[2])[0],
+                    batches.getOrDefault(k.getAlias(), new long[2])[1]));
         }
         String warning = healthy >= 2 ? null : "Chỉ còn " + healthy + " khoá AI dùng được (nên có ít nhất 2). "
                 + (healthy == 0 ? "Báo cáo người lớn đang dùng bản viết theo luật. " : "")

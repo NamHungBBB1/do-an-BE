@@ -16,10 +16,12 @@ import lombok.Setter;
  * lượt (429) thì hẹn lại, không tính attempts. keyAlias = khoá đã viết ra kết quả, currentKeyAlias
  * = khoá đang dùng (chỉ tên gợi nhớ, không bao giờ là khoá); lastErrorCode / lastErrorText = lỗi
  * gần nhất. Ràng buộc: Không cột nào trỏ về slot / nhóm / tài khoản: input là gói ẩn danh
- * (whitelist trường)
+ * (whitelist trường) · INDEX(status, lane, nextAttemptAt): hàng chờ lấy việc theo ngăn
  */
 @Entity
-@Table(name = "ai_job")
+@Table(name = "ai_job", indexes = {
+    @Index(columnList = "status, lane, next_attempt_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -79,4 +81,10 @@ public class AiJob {
 
     @Column(name = "locked_at")
     private Instant lockedAt;
+
+    @Column(name = "lane", length = 32)
+    private String lane;
+
+    @Column(name = "batch_id")
+    private UUID batchId;
 }

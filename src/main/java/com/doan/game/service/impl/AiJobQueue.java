@@ -45,6 +45,12 @@ import java.util.UUID;
  *   luật, báo cáo hiện FALLBACK sau tối đa một chu kỳ.
  * - lỗi "fatal" (SAFETY, đầu ra bị loại lần hai, không còn khoá nào bật): FAILED ngay với mã của lỗi (đợt D).
  * Lỗi gần nhất ghi lastErrorCode / lastErrorText trên việc; sổ từng lần gọi HTTP ở AiCallLog (ReportAiWriter, đợt D).
+ *
+ * Gom lô (Hưng chốt 25/11, spec báo cáo lớp mục 4): việc có ngăn (lane) và chưa lỗi lần nào đi theo LÔ — mỗi ngăn gửi khi đủ
+ * {@code max-size} (10) việc HOẶC việc cũ nhất đã chờ đủ T (bài của em 15 phút, nhận xét lớp 30 phút, chế độ demo 1 phút);
+ * một lô = một lần gọi (AiJobWriter.writeBatch), kiểm từng bài. Việc đã lỗi (attempts > 0) hoặc không có ngăn (việc cũ) gửi
+ * LẺ như trước. Việc chờ quá 6 giờ (kể cả do hết lượt) → FAILED mã EXPIRED (bản theo luật), không kẹt "đang chuẩn bị" mãi.
+ * Nhận xét cả lớp xong / hỏng → báo giáo viên (thông báo REPORT_READY, D2).
  */
 @Slf4j
 @Component
@@ -57,6 +63,16 @@ public class AiJobQueue {
     static final String DONE = "DONE";
     static final String FAILED = "FAILED";
     static final String REPORT_SUMMARY = "REPORT_SUMMARY";
+
+    static final String LANE_PARENT_CHAPTER = "PARENT_CHAPTER";
+    static final String LANE_PARENT_FINAL = "PARENT_FINAL";
+    static final String LANE_CLASS = ClassReportService.LANE;
+    static final List<String> LANES = List.of(LANE_PARENT_CHAPTER, LANE_PARENT_FINAL, LANE_CLASS);
+    /** Lý do gửi (AiCallLog.sendReason): đủ lô / hết giờ chờ / gửi lẻ sau lỗi. */
+    static final String SEND_FULL = "FULL";
+    static final String SEND_TIMEOUT = "TIMEOUT";
+    static final String SEND_SINGLE = "SINGLE";
+    static final Duration EXPIRE_AFTER = Duration.ofHours(6);
 
     /** Lùi sau lỗi thường thứ 1, 2, 3; lỗi thứ 4 thì FAILED. */
     static final List<Duration> BACKOFF = List.of(Duration.ofSeconds(30), Duration.ofMinutes(2), Duration.ofMinutes(10));
@@ -72,6 +88,11 @@ public class AiJobQueue {
     private final boolean queueEnabled;
     private final boolean aiEnabled;
     private final int batchSize;
+    private final int maxBatch;
+    private final Duration waitParent;
+    private final Duration waitClass;
+    private final ObjectProvider<com.doan.game.service.NotificationService> notifications;
+    private final com.doan.game.repository.AiCallLogRepository callLogs;
     /** Số lần hết lượt liên tiếp của tiến trình này (các khoá dùng chung quota) — xong một việc thì về 0. */
     private int quotaStreak;
 
@@ -79,7 +100,13 @@ public class AiJobQueue {
                       PlatformTransactionManager txManager, Clock clock,
                       @Value("${app.report.queue.enabled:true}") boolean queueEnabled,
                       @Value("${app.report.ai-enabled:false}") boolean aiEnabled,
-                      @Value("${app.report.queue.batch-size:5}") int batchSize) {
+                      @Value("${app.report.queue.batch-size:5}") int batchSize,
+                      @Value("${app.report.batch.max-size:10}") int maxBatch,
+                      @Value("${app.report.batch.wait-parent-seconds:900}") long waitParentSeconds,
+                      @Value("${app.report.batch.wait-class-seconds:1800}") long waitClassSeconds,
+                      @Value("${app.ai.demo-mode:false}") boolean demoMode,
+                      ObjectProvider<com.doan.game.service.NotificationService> notifications,
+                      com.doan.game.repository.AiCallLogRepository callLogs) {
         this.jobRepo = jobRepo;
         this.summaryRepo = summaryRepo;
         this.writers = writers;
@@ -89,6 +116,17 @@ public class AiJobQueue {
         this.queueEnabled = queueEnabled;
         this.aiEnabled = aiEnabled;
         this.batchSize = batchSize;
+        this.maxBatch = Math.max(1, maxBatch);
+        // Chế độ demo: chờ tối đa 1 phút để buổi demo thấy bài ngay.
+        this.waitParent = demoMode ? Duration.ofMinutes(1) : Duration.ofSeconds(Math.max(0, waitParentSeconds));
+        this.waitClass = demoMode ? Duration.ofMinutes(1) : Duration.ofSeconds(Math.max(0, waitClassSeconds));
+        this.notifications = notifications;
+        this.callLogs = callLogs;
+    }
+
+    /** Việc đã khoá ở một lượt: batch = một lô ≥ 2 việc cùng ngăn (gọi writeBatch); reason = lý do gửi. */
+    private record Claim(List<UUID> ids, boolean batch, String reason) {
+        static final Claim EMPTY = new Claim(List.of(), false, null);
     }
 
     @Scheduled(fixedDelayString = "${app.report.queue.interval-ms:10000}",
@@ -106,7 +144,12 @@ public class AiJobQueue {
 
     /** Một lượt. writer null = AI tắt. Trả số việc đã lấy. Test gọi thẳng (lịch tắt trong test). */
     public synchronized int runOnce(AiJobWriter writer) {
-        List<UUID> ids = tx.execute(s -> claim());
+        Claim c = tx.execute(s -> claim());
+        List<UUID> ids = c.ids();
+        if (writer != null && c.batch()) {
+            runBatch(writer, c);
+            return ids.size();
+        }
         for (int i = 0; i < ids.size(); i++) {
             UUID id = ids.get(i);
             if (writer == null) {
@@ -141,17 +184,107 @@ public class AiJobQueue {
         return ids.size();
     }
 
-    private List<UUID> claim() {
+    /** Một lô: một lần gọi, rồi ghi từng việc (xong / lỗi riêng / hết lượt). */
+    private void runBatch(AiJobWriter writer, Claim c) {
+        List<AiJob> jobs = new ArrayList<>();
+        for (UUID id : c.ids()) {
+            jobRepo.findById(id).ifPresent(jobs::add);
+        }
+        AiJobWriter.BatchResult r = writer.writeBatch(jobs, new AiJobWriter.Progress() {
+            @Override
+            public void usingKey(String keyAlias) {
+                tx.executeWithoutResult(s -> c.ids().forEach(id ->
+                        jobRepo.findById(id).ifPresent(j -> j.setCurrentKeyAlias(keyAlias))));
+            }
+
+            @Override
+            public String sendReason() {
+                return c.reason();
+            }
+        });
+        r.ok().forEach((id, out) -> tx.executeWithoutResult(s -> done(id, out)));
+        r.errors().forEach((id, e) -> tx.executeWithoutResult(s -> {
+            if (e.fatal()) {
+                fail(id, e.code() == null ? "AI_ERROR" : e.code(), e.getMessage());
+            } else {
+                retryOrFail(id, e.code() == null ? "AI_ERROR" : e.code(), e.getMessage());
+            }
+        }));
+        if (!r.quota().isEmpty()) {
+            tx.executeWithoutResult(s -> quota(r.quota(), "mọi khoá AI hết lượt"));
+        } else if (!r.ok().isEmpty()) {
+            quotaStreak = 0;
+        }
+    }
+
+    private Duration waitOf(String lane) {
+        return LANE_CLASS.equals(lane) ? waitClass : waitParent;
+    }
+
+    private Claim claim() {
         Instant now = Instant.now(clock);
         jobRepo.requeueStale(now.minus(STALE_AFTER));
-        List<UUID> ids = new ArrayList<>();
-        for (AiJob job : jobRepo.lockDue(now, PageRequest.of(0, batchSize))) {
-            job.setStatus(RUNNING);
-            job.setLockedAt(now);
-            job.setStartedAt(now);
-            ids.add(job.getId());
+        expire(now);
+        // Việc gửi lẻ (đã lỗi / việc cũ không ngăn) trước: chúng đã chờ qua ít nhất một lượt.
+        List<UUID> singles = new ArrayList<>();
+        for (AiJob job : jobRepo.lockDueSingles(now, PageRequest.of(0, batchSize))) {
+            take(job, now, job.getLane() == null ? null : UUID.randomUUID());
+            singles.add(job.getId());
         }
-        return ids;
+        if (!singles.isEmpty()) {
+            return new Claim(singles, false, SEND_SINGLE);
+        }
+        for (String lane : LANES) {
+            List<AiJob> due = jobRepo.lockDueLane(now, lane, PageRequest.of(0, maxBatch));
+            if (due.isEmpty()) {
+                continue;
+            }
+            boolean full = due.size() >= maxBatch;
+            boolean waited = !due.get(0).getCreatedAt().isAfter(now.minus(waitOf(lane)));
+            if (full || waited) {
+                UUID batchId = UUID.randomUUID();
+                List<UUID> ids = new ArrayList<>();
+                for (AiJob job : due) {
+                    take(job, now, batchId);
+                    ids.add(job.getId());
+                }
+                return new Claim(ids, ids.size() > 1, full ? SEND_FULL : SEND_TIMEOUT);
+            }
+        }
+        return Claim.EMPTY;
+    }
+
+    private static void take(AiJob job, Instant now, UUID batchId) {
+        job.setStatus(RUNNING);
+        job.setLockedAt(now);
+        job.setStartedAt(now);
+        job.setBatchId(batchId);
+    }
+
+    /** Việc chờ quá 6 giờ → FAILED (EXPIRED): bài giữ bản theo luật. */
+    private void expire(Instant now) {
+        for (AiJob job : jobRepo.findExpired(now.minus(EXPIRE_AFTER))) {
+            job.setStatus(FAILED);
+            job.setLastErrorCode("EXPIRED");
+            job.setLastErrorText("chờ quá " + EXPIRE_AFTER.toHours() + " giờ — dùng bản theo luật");
+            job.setLockedAt(null);
+            job.setDoneAt(now);
+            job.setNextAttemptAt(null);
+            notifyClass(job.getId());
+        }
+    }
+
+    /** D2: nhận xét cả lớp vừa xong / hỏng → báo giáo viên (dòng gộp REPORT_READY của lớp + chương). */
+    private void notifyClass(UUID jobId) {
+        com.doan.game.service.NotificationService n = notifications.getIfAvailable();
+        if (n == null) {
+            return;
+        }
+        for (DailySummary s : summaryRepo.findByAiJob_Id(jobId)) {
+            if (ReportPackage.CLASS.equals(s.getKind()) && s.getGroup() != null) {
+                n.notifyClassCommentReady(s.getGroup(), s.getChapter());
+            }
+        }
     }
 
     private void done(UUID id, AiJobWriter.Output out) {
@@ -172,6 +305,7 @@ public class AiJobQueue {
             s.setModel(out.model());
             s.setPromptVersion(out.promptVersion());
         }
+        notifyClass(id);
     }
 
     /** Hết lượt: hẹn lại phần còn lại của lô, không tính lần thử. */
@@ -204,6 +338,7 @@ public class AiJobQueue {
             job.setStatus(FAILED);   // đợt D: leo tầng 3–4 (WAITING_AGENT) thay vì dừng
             job.setDoneAt(Instant.now(clock));
             job.setNextAttemptAt(null);
+            notifyClass(id);
         } else {
             job.setStatus(WAITING_RETRY);
             job.setNextAttemptAt(Instant.now(clock).plus(BACKOFF.get(attempts - 1)));
@@ -218,13 +353,20 @@ public class AiJobQueue {
             job.setLockedAt(null);
             job.setDoneAt(Instant.now(clock));
         });
+        notifyClass(id);
     }
 
     // ------------------------------------------------------------------ trang admin (chỉ đọc)
 
     @Transactional(readOnly = true)
     public PageResponse<AiJobResponse> list(String status, String kind, int page, int size) {
-        Page<AiJob> p = jobRepo.search(blankToNull(status), blankToNull(kind),
+        return list(status, kind, null, page, size);
+    }
+
+    /** Lọc thêm theo lô (25/11, admin theo dõi lô). */
+    @Transactional(readOnly = true)
+    public PageResponse<AiJobResponse> list(String status, String kind, UUID batchId, int page, int size) {
+        Page<AiJob> p = jobRepo.search(blankToNull(status), blankToNull(kind), batchId,
                 PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)));
         return PageResponse.of(p, AiJobResponse::of);
     }
@@ -233,6 +375,50 @@ public class AiJobQueue {
     public AiJobResponse get(UUID id) {
         return jobRepo.findById(id).map(AiJobResponse::of)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có việc AI " + id));
+    }
+
+    // ------------------------------------------------------------------ admin theo dõi lô (25/11)
+
+    @Transactional(readOnly = true)
+    public PageResponse<com.doan.game.DTO.response.AiBatchResponse> batches(String keyAlias, String outcome, Instant from,
+                                                                            Instant to, int page, int size) {
+        Page<com.doan.game.entity.AiCallLog> p = callLogs.searchBatches(blankToNull(keyAlias), blankToNull(outcome),
+                from == null ? Instant.EPOCH : from, to == null ? Instant.parse("9999-12-31T00:00:00Z") : to,
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)));
+        return PageResponse.of(p, l -> batchOf(l, jobRepo.findByBatchIdOrderByCreatedAtAsc(l.getBatchId()), false));
+    }
+
+    /** Một lô: lần gọi gần nhất của lô + từng việc. Không có → 1003. */
+    @Transactional(readOnly = true)
+    public com.doan.game.DTO.response.AiBatchResponse batch(UUID batchId) {
+        List<com.doan.game.entity.AiCallLog> logs = callLogs.findByBatchIdOrderByCreatedAtAsc(batchId);
+        List<AiJob> jobs = jobRepo.findByBatchIdOrderByCreatedAtAsc(batchId);
+        if (logs.isEmpty() && jobs.isEmpty()) {
+            throw new AppException(ErrorCode.NOT_FOUND, "không có lô " + batchId);
+        }
+        com.doan.game.entity.AiCallLog last = logs.isEmpty() ? null : logs.get(logs.size() - 1);
+        if (last == null) {
+            last = new com.doan.game.entity.AiCallLog();
+            last.setBatchId(batchId);
+        }
+        return batchOf(last, jobs, true);
+    }
+
+    private static com.doan.game.DTO.response.AiBatchResponse batchOf(com.doan.game.entity.AiCallLog l, List<AiJob> jobs,
+                                                                      boolean withItems) {
+        int passed = (int) jobs.stream().filter(j -> DONE.equals(j.getStatus())).count();
+        int rejected = (int) jobs.stream().filter(j -> "REJECTED_OUTPUT".equals(j.getLastErrorCode())
+                && !DONE.equals(j.getStatus())).count();
+        List<com.doan.game.DTO.response.AiBatchResponse.Item> items = !withItems ? null : jobs.stream()
+                .map(j -> new com.doan.game.DTO.response.AiBatchResponse.Item(j.getId(), j.getKind(), j.getLane(),
+                        j.getStatus(), "REJECTED_OUTPUT".equals(j.getLastErrorCode()) ? j.getLastErrorText() : null,
+                        WAITING_RETRY.equals(j.getStatus()) ? "SINGLE_RETRY" : FAILED.equals(j.getStatus()) ? "FALLBACK"
+                                : null))
+                .toList();
+        return new com.doan.game.DTO.response.AiBatchResponse(l.getBatchId(), jobs.isEmpty() ? null : jobs.get(0).getLane(),
+                l.getCreatedAt(), l.getSendReason(), l.getBatchSize() != null ? l.getBatchSize() : jobs.size(),
+                l.getKeyAlias(), l.getModel(), l.getLatencyMs(), l.getTokensIn(), l.getTokensOut(), l.getOutcome(), passed,
+                rejected, items);
     }
 
     private static String blankToNull(String s) {

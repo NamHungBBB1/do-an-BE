@@ -57,6 +57,7 @@ import com.doan.game.service.impl.QuizSupport.PaperEntry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -105,6 +106,7 @@ public class QuizServiceImpl implements QuizService {
     private final QuizAttemptService quizAttemptService;
     private final QuizSupport support;
     private final Clock clock;
+    private final TransactionTemplate txTemplate;
 
     // ------------------------------------------------------------------ kho câu hỏi
 
@@ -241,12 +243,18 @@ public class QuizServiceImpl implements QuizService {
         return QuizMapper.toResponse(quiz, ids.size(), 0);
     }
 
-    /** Đề của một lớp, cả hai kiểu, mới nhất trước — nháp không có publishedAt nên xếp sau bản đã publish cùng giờ. */
+    /**
+     * Đề của một lớp, cả hai kiểu, mới nhất trước — nháp không có publishedAt nên xếp sau bản đã publish cùng giờ.
+     * Không @Transactional: chốt lượt quá giờ chạy giữa hai giao dịch ngắn, mỗi lúc chỉ giữ một kết nối DB (25/11, cạn pool).
+     */
     @Override
-    @Transactional(readOnly = true)
     public List<QuizResponse> listQuizzes(UUID callerId, UUID groupId) {
-        requireOwnedGroup(callerId, groupId);
-        quizAttemptService.finalizeExpiredInGroup(groupId);   // giao dịch riêng: hàm này readOnly
+        txTemplate.executeWithoutResult(s -> requireOwnedGroup(callerId, groupId));
+        quizAttemptService.finalizeExpiredInGroup(groupId);
+        return txTemplate.execute(s -> listQuizzesFinalized(groupId));
+    }
+
+    private List<QuizResponse> listQuizzesFinalized(UUID groupId) {
         Map<UUID, Long> submitted = submittedCounts(groupId);
         List<Quiz> quizzes = new ArrayList<>(quizRepo.findByGroup_Id(groupId));
         quizzes.sort(Comparator.comparing((Quiz quiz) -> quiz.getPublishedAt() == null
@@ -259,23 +267,37 @@ public class QuizServiceImpl implements QuizService {
         return out;
     }
 
-    /** Một đề kèm câu đầy đủ (giáo viên thấy correctIndex). */
+    /**
+     * Một đề kèm câu đầy đủ (giáo viên thấy correctIndex). Không @Transactional — như listQuizzes.
+     * Đề hậu trắc: correctIndex = null (25/11) — kho câu hậu trắc dùng chung mọi nhóm, lộ đáp án ở đây là lộ cho mọi em.
+     */
     @Override
-    @Transactional(readOnly = true)
     public QuizDetailResponse getQuiz(UUID callerId, UUID quizId) {
-        Quiz quiz = requireOwnedQuiz(callerId, quizId);
-        quizAttemptService.finalizeExpiredInGroup(quiz.getGroup().getId());
+        UUID groupId = txTemplate.execute(s -> requireOwnedQuiz(callerId, quizId).getGroup().getId());
+        quizAttemptService.finalizeExpiredInGroup(groupId);
+        return txTemplate.execute(s -> getQuizFinalized(requireOwnedQuiz(callerId, quizId)));
+    }
+
+    private QuizDetailResponse getQuizFinalized(Quiz quiz) {
+        boolean postTest = QuizSupport.isPostTest(quiz);
         List<UUID> ids = support.parseIds(quiz.getQuestionIds());
         Map<UUID, Question> questions = support.loadQuestions(ids);
         List<QuestionResponse> rows = new ArrayList<>();
         for (UUID id : ids) {
             Question question = questions.get(id);
             if (question != null) {
-                rows.add(support.questionResponse(question, null));
+                QuestionResponse row = support.questionResponse(question, null);
+                rows.add(postTest ? withoutAnswer(row) : row);
             }
         }
         return new QuizDetailResponse(QuizMapper.toResponse(quiz, rows.size(),
                 submittedCount(quiz.getId())), rows);
+    }
+
+    private static QuestionResponse withoutAnswer(QuestionResponse r) {
+        return new QuestionResponse(r.id(), r.externalId(), r.pool(), r.stem(), r.options(), null, r.standard(),
+                r.concept(), r.source(), r.chapter(), r.retiredAt(), r.replacesId(), r.reference(), r.keepOptionOrder(),
+                r.copiedFromId(), r.usedInPublished());
     }
 
     /** Sửa — chỉ khi chưa publish và không phải đề hậu trắc (8002). mode null = giữ chế độ cũ. */
@@ -411,11 +433,17 @@ public class QuizServiceImpl implements QuizService {
      * biến khỏi pending, bài đã nộp vẫn trong completed. Gia đình (v3) chỉ có hậu trắc.
      */
     @Override
-    @Transactional
     public LearnerQuizListResponse listForLearner(UUID slotId) {
+        // Không @Transactional: chốt lượt quá giờ trước, rồi mới mở giao dịch — một request không giữ hai kết nối (25/11).
+        // Gọi từ dashboard (đang trong giao dịch) thì hai khối dưới nhập chung giao dịch đó; dashboard đã chốt trước.
+        UUID groupId = txTemplate.execute(s -> support.requireLearnerSlot(slotId).getGroup().getId());
+        quizAttemptService.finalizeExpiredInGroup(groupId);
+        return txTemplate.execute(s -> listForLearnerFinalized(slotId));
+    }
+
+    private LearnerQuizListResponse listForLearnerFinalized(UUID slotId) {
         LearnerSlot slot = support.requireLearnerSlot(slotId);
         LearnerGroup group = slot.getGroup();
-        quizAttemptService.finalizeExpiredInGroup(group.getId());
         boolean isClass = group.getContext() == LearningContext.CLASS;
         List<Integer> done = support.chaptersDone(slotId);
         support.ensurePostTests(group, done);   // 17/11 (Hưng): hậu trắc luôn có cho mọi nhóm, không còn bật / tắt

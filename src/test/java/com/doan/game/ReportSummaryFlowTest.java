@@ -375,7 +375,8 @@ class ReportSummaryFlowTest {
         job.setAttempts(0);
         job.setTier(1);
         job.setLockedAt(lockedAt);
-        job.setCreatedAt(Instant.EPOCH.plusSeconds(n * 1000L + System.nanoTime() % 1000));
+        // Cũ nhất hàng (trước mọi việc tạo lúc FIXED_CLOCK) nhưng trong 6 giờ — quá 6 giờ thì hàng chờ dừng việc (EXPIRED).
+        job.setCreatedAt(Instant.now(FIXED_CLOCK).minusSeconds(3600).plusSeconds(n * 10L + System.nanoTime() % 10));
         return jobRepo.save(job);
     }
 

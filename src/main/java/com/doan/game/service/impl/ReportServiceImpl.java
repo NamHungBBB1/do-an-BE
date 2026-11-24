@@ -7,6 +7,7 @@ import com.doan.game.entity.Achievement;
 import com.doan.game.entity.AiJob;
 import com.doan.game.entity.DailySummary;
 import com.doan.game.enums.SummarySource;
+import com.doan.game.enums.LearningContext;
 import com.doan.game.repository.DailySummaryRepository;
 import com.doan.game.entity.ChoiceEvent;
 import com.doan.game.entity.GroupReport;
@@ -104,6 +105,8 @@ public class ReportServiceImpl implements ReportService {
     private final QuizSupport support;
     private final QuizAttemptService quizAttemptService;
     private final Clock clock;
+    /** Báo cáo lớp theo chương (25/11). ObjectProvider: ClassReportService cũng dùng chapterBlocksOf của lớp này. */
+    private final org.springframework.beans.factory.ObjectProvider<ClassReportService> classReports;
 
     /**
      * figures JSON trong GroupReportRow — đúng "dòng không có code / displayName / status"
@@ -532,14 +535,21 @@ public class ReportServiceImpl implements ReportService {
                 group.getId(), group.getName(),
                 group.getContext() == null ? null : group.getContext().name(),
                 group.getSlotLimit(), group.getOpenedAt(), group.getClosedAt());
+        GroupReportResponse base = null;
         if (group.getClosedAt() != null) {
             GroupReport frozen = groupReportRepo.findFirstByGroup_IdOrderByFrozenAtDesc(groupId)
                     .orElse(null);
             if (frozen != null) {
-                return frozenResponse(group, info, frozen);
+                base = frozenResponse(group, info, frozen);
             }
         }
-        return liveResponse(group, info);
+        if (base == null) {
+            base = liveResponse(group, info);
+        }
+        List<GroupReportResponse.ClassChapter> chapters = group.getContext() == LearningContext.CLASS
+                ? classReports.getObject().liveChapters(group) : List.of();
+        return new GroupReportResponse(base.group(), base.frozenAt(), base.formulaVersion(), base.summary(), base.rows(),
+                chapters);
     }
 
     // ------------------------------------------------------------------ đóng băng lúc đóng nhóm
@@ -624,7 +634,7 @@ public class ReportServiceImpl implements ReportService {
             }
         }
         return new GroupReportResponse(info, frozen.getFrozenAt(), frozen.getFormulaVersion(),
-                summary, rows);
+                summary, rows, List.of());
     }
 
     /** Nhóm đang mở (hoặc đóng mà chưa có bản đóng băng): tính sống từ RunState / event. */
@@ -653,7 +663,7 @@ public class ReportServiceImpl implements ReportService {
                 quizAssigned,
                 quizSubmittedOf(quizTotals),
                 quizAverageOf(quizTotals));
-        return new GroupReportResponse(info, null, null, summary, rows);
+        return new GroupReportResponse(info, null, null, summary, rows, List.of());
     }
 
     /** Dòng báo cáo: con số (đóng băng hay sống) + danh tính LUÔN đọc sống từ LearnerSlot. */

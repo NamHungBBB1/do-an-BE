@@ -17,10 +17,11 @@ import com.doan.game.repository.MiniGameResultRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.LearnerDashboardService;
+import com.doan.game.service.QuizAttemptService;
 import com.doan.game.service.QuizService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,14 +52,26 @@ public class LearnerDashboardServiceImpl implements LearnerDashboardService {
     private final MiniGameResultRepository miniGameResultRepo;
     private final QuizService quizService;
     private final QuizSupport quizSupport;
+    private final QuizAttemptService quizAttemptService;
+    private final TransactionTemplate txTemplate;
 
     /**
      * Không readOnly: khối quizzes gọi listForLearner — đọc DANH SÁCH chính là chỗ BE tự tạo đề
      * hậu trắc cho chương đã xong (quiz.md v2), nên dashboard cũng là điểm ghi.
      */
     @Override
-    @Transactional
     public LearnerDashboardResponse getDashboard(UUID slotId) {
+        // 25/11 (cạn pool): chốt lượt quá giờ TRƯỚC khi mở giao dịch dashboard — trong giao dịch, listForLearner chỉ còn
+        // một câu đọc rẻ, không mở giao dịch riêng (= không xin kết nối DB thứ hai).
+        UUID groupId = txTemplate.execute(s -> slotRepo.findById(slotId)
+                .map(x -> x.getGroup() == null ? null : x.getGroup().getId()).orElse(null));
+        if (groupId != null) {
+            quizAttemptService.finalizeExpiredInGroup(groupId);
+        }
+        return txTemplate.execute(s -> buildDashboard(slotId));
+    }
+
+    private LearnerDashboardResponse buildDashboard(UUID slotId) {
         LearnerSlot slot = slotRepo.findById(slotId)
                 .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
         // Cùng luật loginSlot (08/10): WIPED / không có → 3007, ARCHIVED → 3009. Token SLOT vẫn

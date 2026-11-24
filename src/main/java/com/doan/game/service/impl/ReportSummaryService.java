@@ -3,6 +3,8 @@ package com.doan.game.service.impl;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.entity.AiJob;
 import com.doan.game.entity.DailySummary;
+import com.doan.game.entity.LearnerSlot;
+import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SummarySource;
 import com.doan.game.repository.AiJobRepository;
 import com.doan.game.repository.DailySummaryRepository;
@@ -34,7 +36,8 @@ import java.util.UUID;
  *
  * Chạy SAU khi transaction nộp bài / gửi lô đã commit, trong transaction riêng; lỗi ở đây chỉ ghi log — bé nộp bài không bao
  * giờ hỏng vì báo cáo. Lỗi giữa chừng (máy chết sau commit) thì lần gửi lô / nộp bài sau của em sẽ vá.
- * TODO: bản lớp (kind CLASS, mốc đề quiz hết hạn) — ngoài phạm vi PR này.
+ * 25/11 (spec báo cáo lớp): em trong nhóm CLASS chỉ có bản theo luật, KHÔNG tạo việc AI (BR-52); nhận xét cả lớp theo
+ * mốc do ClassReportService lo. Việc AI của em nhóm gia đình mang ngăn (lane) để hàng chờ gom lô.
  */
 @Slf4j
 @Service
@@ -48,15 +51,18 @@ public class ReportSummaryService {
     private final DailySummaryRepository summaryRepo;
     private final AiJobRepository jobRepo;
     private final LearnerSlotRepository slotRepo;
+    private final ClassReportService classReports;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public ReportSummaryService(ReportServiceImpl reports, DailySummaryRepository summaryRepo, AiJobRepository jobRepo,
-                                LearnerSlotRepository slotRepo, PlatformTransactionManager txManager, Clock clock) {
+                                LearnerSlotRepository slotRepo, ClassReportService classReports,
+                                PlatformTransactionManager txManager, Clock clock) {
         this.reports = reports;
         this.summaryRepo = summaryRepo;
         this.jobRepo = jobRepo;
         this.slotRepo = slotRepo;
+        this.classReports = classReports;
         this.tx = new TransactionTemplate(txManager);
         this.tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.clock = clock;
@@ -73,21 +79,27 @@ public class ReportSummaryService {
 
     /** Ghi mọi bài còn thiếu của em (gọi trong transaction). */
     void enqueue(UUID slotId) {
+        LearnerSlot slot = slotRepo.findById(slotId).orElse(null);
+        boolean inClass = slot != null && slot.getGroup() != null
+                && slot.getGroup().getContext() == LearningContext.CLASS;
         ReportServiceImpl.ChapterBlocks blocks = reports.chapterBlocksOf(slotId);
         for (SlotReportResponse.ChapterRow row : blocks.chapters()) {
             if (ReportServiceImpl.COMPLETE.equals(row.reportStatus())) {
                 ensure(slotId, ReportPackage.CHAPTER, row.chapter(), blocks,
-                        () -> ReportPackage.chapter(blocks, row));
+                        () -> ReportPackage.chapter(blocks, row), !inClass);
             }
         }
         if (ReportServiceImpl.COMPLETE.equals(blocks.finalReport().status())) {
             ensure(slotId, ReportPackage.FINAL, ReportServiceImpl.FINAL_CHAPTER, blocks,
-                    () -> ReportPackage.finalPackage(blocks));
+                    () -> ReportPackage.finalPackage(blocks), !inClass);
+        }
+        if (inClass) {
+            classReports.onPostTest(slot.getGroup().getId());
         }
     }
 
     private void ensure(UUID slotId, String kind, int chapter, ReportServiceImpl.ChapterBlocks blocks,
-                        java.util.function.Supplier<ReportPackage.Pkg> build) {
+                        java.util.function.Supplier<ReportPackage.Pkg> build, boolean useAi) {
         if (summaryRepo.findBySlot_IdAndKindAndChapterAndAttemptIndex(slotId, kind, chapter, blocks.attemptIndex())
                 .isPresent()) {
             return;
@@ -108,6 +120,10 @@ public class ReportSummaryService {
         s.setSource(SummarySource.RULE);
         s.setTier(0);
         s.setCreatedAt(now);
+        if (!useAi) {
+            summaryRepo.saveAndFlush(s);   // BR-52: em trong lớp chỉ có bản theo luật
+            return;
+        }
 
         List<AiJob> done = jobRepo.findByKindAndInputHashAndStatusInOrderByCreatedAtDesc(AiJobQueue.REPORT_SUMMARY,
                 hash, List.of(AiJobQueue.DONE));
@@ -127,14 +143,20 @@ public class ReportSummaryService {
             List<AiJob> pending = jobRepo.findByKindAndInputHashAndStatusInOrderByCreatedAtDesc(
                     AiJobQueue.REPORT_SUMMARY, hash, List.of(AiJobQueue.QUEUED, AiJobQueue.RUNNING,
                             AiJobQueue.WAITING_RETRY, AiJobQueue.WAITING_AGENT));
-            s.setAiJob(pending.isEmpty() ? newJob(json, hash, now) : pending.get(0));
+            s.setAiJob(pending.isEmpty() ? newJob(json, hash, now, laneOf(kind)) : pending.get(0));
         }
         summaryRepo.saveAndFlush(s);
     }
 
-    private AiJob newJob(String json, String hash, Instant now) {
+    /** Ngăn gom lô của bài em (nhóm gia đình). */
+    static String laneOf(String kind) {
+        return ReportPackage.FINAL.equals(kind) ? AiJobQueue.LANE_PARENT_FINAL : AiJobQueue.LANE_PARENT_CHAPTER;
+    }
+
+    private AiJob newJob(String json, String hash, Instant now, String lane) {
         AiJob job = new AiJob();
         job.setKind(AiJobQueue.REPORT_SUMMARY);
+        job.setLane(lane);
         job.setInput(json);
         job.setInputHash(hash);
         job.setStatus(AiJobQueue.QUEUED);

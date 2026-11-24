@@ -69,11 +69,17 @@ final class ReportAiOutput {
     // ------------------------------------------------------------------ gửi đi
 
     static int maxWords(JsonNode pkg) {
-        return ReportPackage.CHAPTER.equals(pkg.path("kind").asText()) ? MAX_WORDS_CHAPTER : MAX_WORDS_SUMMARY;
+        return shortKind(pkg) ? MAX_WORDS_CHAPTER : MAX_WORDS_SUMMARY;
     }
 
     static int targetWords(JsonNode pkg) {
-        return ReportPackage.CHAPTER.equals(pkg.path("kind").asText()) ? TARGET_WORDS_CHAPTER : TARGET_WORDS_SUMMARY;
+        return shortKind(pkg) ? TARGET_WORDS_CHAPTER : TARGET_WORDS_SUMMARY;
+    }
+
+    /** Bài một chương (của em hoặc của lớp) dùng giới hạn ngắn; tổng kết 8 chương dùng giới hạn dài. */
+    private static boolean shortKind(JsonNode pkg) {
+        String kind = pkg.path("kind").asText();
+        return ReportPackage.CHAPTER.equals(kind) || ReportPackage.CLASS.equals(kind);
     }
 
     /** Số chữ viết bằng lời trong prompt (chỉ các mốc độ dài đang dùng). */
@@ -87,8 +93,11 @@ final class ReportAiOutput {
         };
     }
 
-    /** Lớp 3 (systemInstruction). Người đọc PARENT; gói đi riêng ở tin người dùng. */
+    /** Lớp 3 (systemInstruction). Người đọc PARENT (gói CLASS: TEACHER); gói đi riêng ở tin người dùng. */
     static String systemPrompt(JsonNode pkg) {
+        if (ReportPackage.CLASS.equals(pkg.path("kind").asText())) {
+            return classSystemPrompt(pkg);
+        }
         int target = targetWords(pkg);
         int max = maxWords(pkg);
         return """
@@ -121,6 +130,78 @@ final class ReportAiOutput {
                 kỳ chữ IN_HOA nối bằng gạch dưới nào. Mã chỉ được nằm trong trường concept / scene. Gọi khái niệm bằng tên, \
                 gọi quyết định bằng tình huống hoặc chữ phương án.
                 """.formatted(target, inWords(target), max, inWords(max), ReportPackage.STATS_NOTE);
+    }
+
+    /**
+     * Nhận xét cả lớp cho giáo viên (25/11). Gói chỉ có số gộp, AI không biết em nào là em nào; không được nhắc riêng một
+     * em. Cùng schema 5 mục và cùng luật kiểm với bài của em (ReportAiOutput.check): decisions dẫn cảnh trong
+     * frame.decisions, doingWell / needsPractice theo band của LỚP, tips chỉ từ adultKeyPoints.
+     */
+    static String classSystemPrompt(JsonNode pkg) {
+        int target = targetWords(pkg);
+        int max = maxWords(pkg);
+        return """
+                Bạn viết nhận xét kết quả học tài chính của MỘT LỚP sau một chương cho giáo viên (người đọc: TEACHER), \
+                bằng tiếng Việt, giọng chuyên nghiệp, ngắn gọn, hữu ích cho việc dạy. Dữ liệu duy nhất được dùng là gói JSON ở \
+                tin nhắn người dùng: số đã cộng dồn của cả lớp (result.submitted em đã nộp bài sau chương trên result.active \
+                em đang hoạt động); không suy đoán điều gì ngoài gói.
+                Trả về JSON đúng schema, 5 mục:
+                - overview: 2–3 câu tổng quan về lớp.
+                - decisions: mỗi phần tử {scene, text} cho một cảnh trong result.classDecisions; trường scene chép nguyên giá \
+                trị scene của gói. Trong text, nói lớp nghiêng về phương án nào (gọi phương án bằng chữ label trong \
+                frame.decisions, kèm số em trong counts). Lựa chọn trong truyện không có đúng sai; không dùng chữ "cân nhắc".
+                - doingWell: {concept, text}, CHỈ mã có band = GOOD trong result.concepts (mức của cả lớp). Gọi khái niệm bằng \
+                tên (frame.concepts[].name).
+                - needsPractice: {concept, text}, CHỈ mã có band = PRACTICE hoặc FAMILIAR. Gợi ý ngắn nên ôn phần nào.
+                - tips: {concept, keyPoint, text}, CHỈ dựa vào frame.concepts[].adultKeyPoints (keyPoint là chỉ số ý, đếm \
+                từ 0), viết thành gợi ý cho tiết học. Gói không có adultKeyPoints thì tips là mảng rỗng.
+                Khái niệm có band NO_DATA hoặc nằm trong result.noData: KHÔNG đưa vào mục nào, KHÔNG nhắc tới.
+                Luật bắt buộc:
+                1. Mọi con số phải có nguyên văn trong gói, viết bằng chữ số đúng như trong gói. Không tự tính phần trăm hay \
+                con số mới. Không viết số bằng chữ.
+                2. Độ dài: nhắm khoảng %d chữ (%s chữ), TUYỆT ĐỐI không quá %d chữ (%s chữ), tính tổng mọi mục, đếm \
+                theo khoảng trắng. Mỗi phần tử chỉ 1–2 câu ngắn.
+                3. Không nhắc riêng một em nào, không đoán em nào làm gì; không dán nhãn tính cách hay hoàn cảnh.
+                4. Không gọi lựa chọn trong truyện là sai hay đúng; ở mục overview và decisions không dùng các chữ \
+                "sai", "nhầm", "đúng đắn".
+                5. Không khuyên dùng sản phẩm tài chính thật (cổ phiếu, tiền ảo, thẻ tín dụng, quỹ đầu tư, vay).
+                6. Trong câu văn TUYỆT ĐỐI không viết mã: mã khái niệm (dạng D01.02), mã cảnh, mã phương án hay bất kỳ chữ \
+                IN_HOA nối bằng gạch dưới nào. Mã chỉ được nằm trong trường concept / scene.
+                """.formatted(target, inWords(target), max, inWords(max));
+    }
+
+    /**
+     * Gom lô (25/11): tin người dùng là {"packages": [{"id", "package"}]}; mỗi gói là một bài riêng, viết theo đúng lời dặn
+     * của bài lẻ (lấy theo gói đầu — mọi gói trong lô cùng ngăn nên cùng lời dặn). Đo 24/11 (build/exp-gom-lo-2026-11-24):
+     * lô 10 đạt 18/20 bài, ≈ 2,2k token / bài; lô 20 bắt đầu lẫn dữ liệu nên giữ tối đa 10.
+     */
+    static String batchSystemPrompt(JsonNode first) {
+        return """
+                Tin nhắn người dùng là JSON {"packages": [{"id": ..., "package": {...}}]}. MỖI GÓI LÀ MỘT BÀI RIÊNG, hoàn \
+                toàn độc lập: bài của gói nào chỉ dùng dữ liệu trong chính gói đó; TUYỆT ĐỐI không lấy con số, phương án, \
+                khái niệm hay câu chữ từ gói khác. Không so sánh các gói với nhau.
+                Trả về {"items": [...]}, đúng MỘT phần tử cho MỖI gói, cùng thứ tự, chép nguyên id. Mỗi phần tử có id và 5 \
+                mục như mô tả bên dưới; mọi luật bên dưới (kể cả độ dài) áp cho TỪNG bài riêng, không phải tổng cả danh \
+                sách. Trong các luật, "gói" nghĩa là gói của chính bài đó.
+
+                Mô tả một bài:
+                """ + systemPrompt(first);
+    }
+
+    /** Schema lô: items[] = schema bài lẻ + id. */
+    static JsonNode batchResponseSchema() {
+        com.fasterxml.jackson.databind.node.ObjectNode item = responseSchema().deepCopy();
+        com.fasterxml.jackson.databind.node.ArrayNode required = JSON.createArrayNode().add("id");
+        item.path("required").forEach(required::add);
+        item.set("required", required);
+        com.fasterxml.jackson.databind.node.ObjectNode props = JSON.createObjectNode();
+        props.set("id", JSON.createObjectNode().put("type", "STRING"));
+        item.path("properties").fields().forEachRemaining(e -> props.set(e.getKey(), e.getValue()));
+        item.set("properties", props);
+        com.fasterxml.jackson.databind.node.ObjectNode out = JSON.createObjectNode().put("type", "OBJECT");
+        out.putArray("required").add("items");
+        out.putObject("properties").putObject("items").put("type", "ARRAY").set("items", item);
+        return out;
     }
 
     /** Schema đầu ra cho Gemini (OpenAPI subset). */
@@ -274,10 +355,12 @@ final class ReportAiOutput {
         }
         List<String> parts = new ArrayList<>();
         parts.add(out.path("overview").asText().trim());
+        boolean cls = ReportPackage.CLASS.equals(String.valueOf(read(pkgText) == null ? null
+                : read(pkgText).path("kind").asText()));
         section(parts, out, "decisions", "Quyết định trong truyện");
-        section(parts, out, "doingWell", "Bé làm tốt");
-        section(parts, out, "needsPractice", "Cần luyện thêm");
-        section(parts, out, "tips", "Gợi ý cho gia đình");
+        section(parts, out, "doingWell", cls ? "Lớp làm tốt" : "Bé làm tốt");
+        section(parts, out, "needsPractice", cls ? "Cần ôn lại" : "Cần luyện thêm");
+        section(parts, out, "tips", cls ? "Gợi ý cho tiết học" : "Gợi ý cho gia đình");
         ReportPackage.Pkg pkg = ReportPackage.read(pkgText);
         String few = pkg == null || pkg.result() == null || pkg.result().concepts() == null
                 || pkg.result().noData() == null ? null : ReportPackage.noDataLine(pkg.result());

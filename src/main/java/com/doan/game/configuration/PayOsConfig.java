@@ -29,6 +29,10 @@ public class PayOsConfig {
                 .clientId(p.clientId())
                 .apiKey(p.apiKey())
                 .checksumKey(p.checksumKey())
+                // 25/11: mặc định SDK 60 s x thử lại 2 lần, gọi trong giao dịch đang khoá dòng → treo luồng + kết nối DB
+                // vài phút khi PayOS chậm. 10 s, không thử lại: lỗi thì người dùng bấm lại, cron đối soát tự dò sau.
+                .timeoutMs(10_000)
+                .maxRetries(0)
                 .build());
     }
 }
