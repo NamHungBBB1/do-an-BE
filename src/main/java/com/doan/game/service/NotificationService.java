@@ -35,4 +35,7 @@ public interface NotificationService {
 
     /** Trẻ vừa nộp hậu trắc → báo cáo chương của trẻ đã sẵn sàng. */
     void notifyReportReady(LearnerSlot slot, Quiz postTest);
+
+    /** Nhận xét cả lớp của một chương vừa có (bài mới hoặc bản tóm tắt nhanh) → dòng gộp REPORT_READY của giáo viên (D2, 25/11). */
+    void notifyClassCommentReady(com.doan.game.entity.LearnerGroup group, Integer chapter);
 }

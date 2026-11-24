@@ -23,4 +23,12 @@ public interface DailySummaryRepository extends JpaRepository<DailySummary, UUID
 
     /** Việc AI xong / hỏng: mọi bài đang trỏ tới việc đó. */
     List<DailySummary> findByAiJob_Id(UUID aiJobId);
+
+    /** Nhận xét cả lớp (kind CLASS) của một nhóm + chương, mới nhất trước (25/11). */
+    List<DailySummary> findByGroup_IdAndKindAndChapterOrderByCreatedAtDesc(UUID groupId, String kind, Integer chapter);
+
+    /** Mọi nhận xét cả lớp của một nhóm kèm việc AI, mới nhất trước — báo cáo lớp ghép theo chương. */
+    @Query("select s from DailySummary s left join fetch s.aiJob where s.group.id = :groupId and s.kind = :kind "
+            + "order by s.createdAt desc")
+    List<DailySummary> findByGroupWithJob(@Param("groupId") UUID groupId, @Param("kind") String kind);
 }

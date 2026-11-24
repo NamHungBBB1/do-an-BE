@@ -41,6 +41,22 @@ public interface AiCallLogRepository extends JpaRepository<AiCallLog, UUID> {
 
     List<AiCallLog> findByAiJobIdOrderByCreatedAtAsc(UUID aiJobId);
 
+    /** Admin theo dõi lô (25/11): các lần gọi có mã lô, lọc tuỳ chọn, mới nhất trước. */
+    @Query("select l from AiCallLog l where l.batchId is not null "
+            + "and (:keyAlias is null or l.keyAlias = :keyAlias) and (:outcome is null or l.outcome = :outcome) "
+            + "and l.createdAt >= :from and l.createdAt < :to order by l.createdAt desc, l.id desc")
+    org.springframework.data.domain.Page<AiCallLog> searchBatches(@Param("keyAlias") String keyAlias,
+                                                                 @Param("outcome") String outcome,
+                                                                 @Param("from") Instant from, @Param("to") Instant to,
+                                                                 org.springframework.data.domain.Pageable page);
+
+    List<AiCallLog> findByBatchIdOrderByCreatedAtAsc(UUID batchId);
+
+    /** Lô đã viết xong hôm nay theo khoá: [alias, số lô, số bài]. Lô = lần gọi OK có batchSize ≥ 2. */
+    @Query("select l.keyAlias, count(l), coalesce(sum(l.batchSize), 0) from AiCallLog l where l.createdAt >= :since "
+            + "and l.batchSize >= 2 and l.outcome = 'OK' group by l.keyAlias")
+    List<Object[]> batchesSince(@Param("since") Instant since);
+
     /** Giữ 30 ngày (khung 13.4). */
     @Modifying
     @Query("delete from AiCallLog l where l.createdAt < :before")

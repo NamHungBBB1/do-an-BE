@@ -85,4 +85,13 @@ public class DailySummary {
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "ai_job_id", nullable = true)
     private AiJob aiJob;
+
+    @Column(name = "milestone")
+    private Integer milestone;
+
+    @Column(name = "submitted_count")
+    private Integer submittedCount;
+
+    @Column(name = "active_count")
+    private Integer activeCount;
 }

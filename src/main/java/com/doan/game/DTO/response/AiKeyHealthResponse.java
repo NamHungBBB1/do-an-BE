@@ -18,6 +18,7 @@ public record AiKeyHealthResponse(Instant dayStartedAt, int healthyKeys, String 
     public record KeyHealth(UUID id, String alias, AiProviderKind provider, String purpose, String project,
                             String tierLabel, boolean enabled, Instant coolDownUntil, boolean healthy, long callsToday,
                             long okToday, Map<String, Long> outcomesToday, long tokensInToday, long tokensOutToday,
-                            Instant lastOkAt, String lastError, Integer rpmLimit, Integer rpdLimit) {
+                            Instant lastOkAt, String lastError, Integer rpmLimit, Integer rpdLimit,
+                            long batchesToday, long itemsToday) {
     }
 }

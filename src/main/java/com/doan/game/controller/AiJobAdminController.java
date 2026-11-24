@@ -25,9 +25,10 @@ public class AiJobAdminController {
     @GetMapping
     public ApiResponse<PageResponse<AiJobResponse>> list(@RequestParam(required = false) String status,
                                                          @RequestParam(required = false) String kind,
+                                                         @RequestParam(required = false) UUID batchId,
                                                          @RequestParam(defaultValue = "0") int page,
                                                          @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(aiJobQueue.list(status, kind, page, size));
+        return ApiResponse.ok(aiJobQueue.list(status, kind, batchId, page, size));
     }
 
     /** Một việc; không có → 1003. */

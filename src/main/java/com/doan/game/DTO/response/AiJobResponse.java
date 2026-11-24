@@ -13,12 +13,12 @@ import java.util.UUID;
 public record AiJobResponse(UUID id, String kind, String status, Integer tier, String provider, String keyAlias,
                             String currentKeyAlias, Integer attempts, String lastErrorCode, String lastErrorText,
                             String inputHash, Integer inputBytes, Instant createdAt, Instant startedAt,
-                            Instant nextAttemptAt, Instant lockedAt, Instant doneAt) {
+                            Instant nextAttemptAt, Instant lockedAt, Instant doneAt, String lane, UUID batchId) {
 
     public static AiJobResponse of(AiJob j) {
         return new AiJobResponse(j.getId(), j.getKind(), j.getStatus(), j.getTier(), j.getProvider(), j.getKeyAlias(),
                 j.getCurrentKeyAlias(), j.getAttempts(), j.getLastErrorCode(), j.getLastErrorText(), j.getInputHash(),
                 j.getInput() == null ? null : j.getInput().getBytes(StandardCharsets.UTF_8).length,
-                j.getCreatedAt(), j.getStartedAt(), j.getNextAttemptAt(), j.getLockedAt(), j.getDoneAt());
+                j.getCreatedAt(), j.getStartedAt(), j.getNextAttemptAt(), j.getLockedAt(), j.getDoneAt(), j.getLane(), j.getBatchId());
     }
 }

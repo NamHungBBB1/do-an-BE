@@ -171,15 +171,28 @@ public class NotificationServiceImpl implements NotificationService {
         }
         Integer chapter = postTest.getChapter();
         if (group.getContext() == LearningContext.CLASS) {
-            // Dòng gộp trỏ tới báo cáo CỦA NHÓM (GET /api/groups/{id}/report), không phải báo cáo của một slot.
-            upsertTeacher(group, NotificationType.REPORT_READY, chapter, postTest.getId(),
-                    ACTION_GROUP_REPORT, group.getId(),
-                    "T:RP:" + group.getId() + ":" + chapter);
+            // D2 (25/11): giáo viên không nhận mỗi lần một em nộp (lớp 40 em = chuông nhảy 40 lần một tiết) — dòng gộp chỉ
+            // cập nhật khi có nhận xét cả lớp mới (notifyClassCommentReady, gọi từ hàng chờ AI).
+            return;
         } else {
             insertParent(group, slot, NotificationType.REPORT_READY, chapter, postTest.getId(),
                     ACTION_LEARNER_REPORT, slot.getId(),
                     "P:RP:" + slot.getId() + ":" + chapter);
         }
+    }
+
+    @Override
+    @Transactional
+    public void notifyClassCommentReady(LearnerGroup group, Integer chapter) {
+        if (group == null || group.getOwner() == null || chapter == null) {
+            return;
+        }
+        UUID quizId = quizRepo.findByGroup_Id(group.getId()).stream()
+                .filter(q -> QuizSupport.isPostTest(q) && chapter.equals(q.getChapter()))
+                .map(Quiz::getId).findFirst().orElse(null);
+        // Dòng gộp trỏ tới báo cáo CỦA NHÓM (GET /api/groups/{id}/report); số em đếm lúc đọc theo đề hậu trắc.
+        upsertTeacher(group, NotificationType.REPORT_READY, chapter, quizId, ACTION_GROUP_REPORT, group.getId(),
+                "T:RP:" + group.getId() + ":" + chapter);
     }
 
     /** Dòng của phụ huynh: một sự kiện một dòng; gửi lại thì thôi. */

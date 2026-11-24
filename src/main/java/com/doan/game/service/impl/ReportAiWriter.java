@@ -75,16 +75,118 @@ public class ReportAiWriter implements AiJobWriter {
         this.demoMode = demoMode;
     }
 
+    /** Ngữ cảnh ghi AiCallLog: việc lẻ (jobId) hoặc lô (batchId + batchSize, jobId null). */
+    record LogCtx(UUID jobId, String kind, int attempt, UUID batchId, Integer batchSize, String sendReason) {}
+
+    /** Kết quả lần gọi đã qua bước chấp nhận (accept). */
+    private record Hit(String text, AiKey key, String model) {}
+
     @Override
     public Output write(AiJob job, Progress progress) {
         if (!AiJobQueue.REPORT_SUMMARY.equals(job.getKind())) {
             throw new AiCallException("chưa có tầng AI cho loại việc " + job.getKind(), false, "UNSUPPORTED_KIND", true);
         }
         JsonNode pkg = readPackage(job.getInput());
-        String system = ReportAiOutput.systemPrompt(pkg);
-        JsonNode schema = ReportAiOutput.responseSchema();
         int attempt = (job.getAttempts() == null ? 0 : job.getAttempts()) + 1;
+        // Việc lẻ của ngăn gom lô: lần đầu = hết giờ chờ mà lô chỉ có nó; đã lỗi trước đó = gửi lẻ.
+        String reason = job.getLane() == null ? null : attempt > 1 ? AiJobQueue.SEND_SINGLE : AiJobQueue.SEND_TIMEOUT;
+        Hit h = call(ReportAiOutput.systemPrompt(pkg), job.getInput(), ReportAiOutput.responseSchema(),
+                text -> ReportAiOutput.check(job.getInput(), text),
+                new LogCtx(job.getId(), job.getKind(), attempt, job.getBatchId(), job.getBatchId() == null ? null : 1,
+                        reason), progress);
+        return new Output(ReportAiOutput.compose(job.getInput(), h.text()), tier(h.key()), h.key().getProvider().name(),
+                h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, h.text());
+    }
 
+    /**
+     * Gom lô (25/11, spec báo cáo lớp mục 4): MỘT lần gọi cho mọi việc (cùng ngăn, cùng phiên bản prompt). Gói đi kèm số thứ
+     * tự 1..N (không phải id thật); kết quả tách theo số thứ tự rồi KIỂM TỪNG BÀI với gói của chính nó bằng luật của bài
+     * lẻ. Lỗi cả lần gọi → mọi việc vào errors (không fatal, lần sau gửi lẻ); hết lượt → quota.
+     */
+    @Override
+    public BatchResult writeBatch(List<AiJob> jobs, Progress progress) {
+        java.util.Map<UUID, Output> ok = new java.util.LinkedHashMap<>();
+        java.util.Map<UUID, AiCallException> errors = new java.util.LinkedHashMap<>();
+        List<UUID> ids = jobs.stream().map(AiJob::getId).toList();
+        com.fasterxml.jackson.databind.node.ObjectNode user = JSON.createObjectNode();
+        com.fasterxml.jackson.databind.node.ArrayNode packages = user.putArray("packages");
+        JsonNode first;
+        try {
+            first = readPackage(jobs.get(0).getInput());
+            for (int i = 0; i < jobs.size(); i++) {
+                packages.addObject().put("id", String.valueOf(i + 1)).set("package", readPackage(jobs.get(i).getInput()));
+            }
+        } catch (AiCallException e) {
+            ids.forEach(id -> errors.put(id, nonFatal(e)));
+            return new BatchResult(ok, errors, List.of());
+        }
+        AiJob head = jobs.get(0);
+        Hit h;
+        try {
+            h = call(ReportAiOutput.batchSystemPrompt(first), user.toString(), ReportAiOutput.batchResponseSchema(),
+                    text -> items(text) == null ? "SHAPE: không có items" : null,
+                    new LogCtx(null, head.getKind(), 1, head.getBatchId(), jobs.size(),
+                            progress.sendReason()),
+                    progress);
+        } catch (AiCallException e) {
+            if (e.quota()) {
+                return new BatchResult(ok, errors, ids);
+            }
+            ids.forEach(id -> errors.put(id, nonFatal(e)));
+            return new BatchResult(ok, errors, List.of());
+        }
+        java.util.Map<String, JsonNode> byId = items(h.text());
+        for (int i = 0; i < jobs.size(); i++) {
+            AiJob job = jobs.get(i);
+            JsonNode item = byId.get(String.valueOf(i + 1));
+            if (item == null) {
+                errors.put(job.getId(), new AiCallException("MISSING_ITEM: lô không trả bài số " + (i + 1), false,
+                        AiCallClassifier.REJECTED_OUTPUT, false));
+                continue;
+            }
+            com.fasterxml.jackson.databind.node.ObjectNode one = item.deepCopy();
+            one.remove("id");
+            String raw = one.toString();
+            String rule = ReportAiOutput.check(job.getInput(), raw);
+            if (rule != null) {
+                errors.put(job.getId(), new AiCallException(rule, false, AiCallClassifier.REJECTED_OUTPUT, false));
+                continue;
+            }
+            ok.put(job.getId(), new Output(ReportAiOutput.compose(job.getInput(), raw), tier(h.key()),
+                    h.key().getProvider().name(), h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, raw));
+        }
+        return new BatchResult(ok, errors, List.of());
+    }
+
+    /** items của đầu ra lô theo id; đầu ra không đúng hình → null. */
+    private static java.util.Map<String, JsonNode> items(String text) {
+        try {
+            JsonNode out = text == null ? null : JSON.readTree(text);
+            if (out == null || !out.path("items").isArray() || out.path("items").isEmpty()) {
+                return null;
+            }
+            java.util.Map<String, JsonNode> byId = new java.util.HashMap<>();
+            out.path("items").forEach(it -> {
+                if (it.isObject() && it.path("id").isTextual()) {
+                    byId.putIfAbsent(it.path("id").asText(), it);
+                }
+            });
+            return byId.isEmpty() ? null : byId;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static AiCallException nonFatal(AiCallException e) {
+        return new AiCallException(e.getMessage(), false, e.code() == null ? "AI_ERROR" : e.code(), false);
+    }
+
+    /**
+     * Xoay khoá + model dự phòng + xử lý từng loại lỗi (chú thích lớp). accept(text) trả luật bị vi phạm hoặc null khi nhận;
+     * bị từ chối → thử lại một lần ở khoá kế. Trả lần gọi được nhận; hết cách → ném AiCallException như trước.
+     */
+    private Hit call(String system, String user, JsonNode schema, java.util.function.UnaryOperator<String> accept,
+                     LogCtx ctx, Progress progress) {
         List<AiKey> candidates = usableKeys();
         if (candidates.isEmpty()) {
             boolean cooling = keyRepo.findAll().stream().anyMatch(AiKey::isEnabled);
@@ -112,17 +214,16 @@ public class ReportAiWriter implements AiJobWriter {
                 String model = models.get(m);
                 boolean hasFallback = m + 1 < models.size();
                 progress.usingKey(key.getAlias());
-                AiTextClient.RawReply reply = ai.send(key.getProvider(), secret, model, system, job.getInput(), schema);
+                AiTextClient.RawReply reply = ai.send(key.getProvider(), secret, model, system, user, schema);
                 AiCallClassifier.Result r = AiCallClassifier.classify(key.getProvider(), reply, secret);
                 String outcome = r.outcome();
                 String rule = null;
                 if (AiCallClassifier.OK.equals(outcome)) {
-                    rule = r.text() == null ? "SHAPE: không có nội dung" : ReportAiOutput.check(job.getInput(), r.text());
+                    rule = r.text() == null ? "SHAPE: không có nội dung" : accept.apply(r.text());
                     if (rule == null) {
-                        record(job, attempt, key, model, reply, r, outcome, null,
+                        record(ctx, key, model, reply, r, outcome, null,
                                 AiCallClassifier.humanText(outcome, key.getAlias(), model, r, null));
-                        return new Output(ReportAiOutput.compose(job.getInput(), r.text()), tier(key), key.getProvider().name(),
-                                key.getAlias(), model, ReportAiOutput.PROMPT_VERSION, r.text());
+                        return new Hit(r.text(), key, model);
                     }
                     outcome = AiCallClassifier.REJECTED_OUTPUT;
                 }
@@ -139,7 +240,7 @@ public class ReportAiWriter implements AiJobWriter {
                             + "phòng " + models.get(m + 1) + " trên cùng khoá, chưa cho khoá nghỉ."
                             + (AiCallClassifier.NOT_FOUND.equals(outcome) ? " Báo dev đổi app.ai.gemini-model." : "");
                 }
-                record(job, attempt, key, model, reply, r, outcome, rule, human);
+                record(ctx, key, model, reply, r, outcome, rule, human);
                 lastCode = outcome;
                 lastText = key.getAlias() + ": " + human;
 
@@ -289,13 +390,16 @@ public class ReportAiWriter implements AiJobWriter {
         log.warn("AI-ALERT {} — khoá {} ({}) đã bị tắt: {}", outcome, key.getAlias(), key.getProvider(), human);
     }
 
-    private void record(AiJob job, int attempt, AiKey key, String model, AiTextClient.RawReply reply,
+    private void record(LogCtx ctx, AiKey key, String model, AiTextClient.RawReply reply,
                         AiCallClassifier.Result r, String outcome, String rule, String human) {
         AiCallLog l = new AiCallLog();
         l.setCreatedAt(Instant.now(clock));
-        l.setAiJobId(job.getId());
-        l.setAttempt(attempt);
-        l.setKind(job.getKind());
+        l.setAiJobId(ctx.jobId());
+        l.setAttempt(ctx.attempt());
+        l.setKind(ctx.kind());
+        l.setBatchId(ctx.batchId());
+        l.setBatchSize(ctx.batchSize());
+        l.setSendReason(ctx.sendReason());
         l.setKeyAlias(key.getAlias());
         l.setProvider(key.getProvider().name());
         l.setModel(model);
