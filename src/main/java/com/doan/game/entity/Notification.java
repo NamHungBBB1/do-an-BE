@@ -9,21 +9,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Một thông báo học tập cho người lớn (phụ huynh / giáo viên), 24/11/2026.
- *
- * KHÔNG lưu tên trẻ và không lưu sẵn title/message: xoá slot là xoá tên thật (Luật BVDLCN 2025), nên
- * câu chữ được ghép lúc đọc từ slot hiện tại — slot đã xoá thì trả tên null. Cũng không lưu cột đếm
- * tiến độ: dòng gộp của giáo viên ("12/40 em đã nộp") đếm lúc đọc để không lệch khi có em bị xoá.
- *
- * Dòng của phụ huynh gắn một slot; dòng gộp của giáo viên có slotId NULL và gắn groupId. Ràng buộc:
- * event_key UNIQUE — FE gửi lại lô chơi / lượt nộp không sinh thông báo trùng.
+ * Thông báo học tập cho tài khoản người lớn: xong chương, nộp đề, báo cáo sẵn sàng. Không lưu tên
+ * trẻ và câu chữ (ghép lúc đọc). Giáo viên nhận một dòng gộp mỗi lớp + chương / đề, có em nộp thêm
+ * thì cập nhật. Ràng buộc: eventKey UNIQUE: gửi lại cùng sự kiện không tạo dòng trùng ·
+ * INDEX(recipientId, readAt): đếm chưa đọc · INDEX(recipientId, updatedAt): danh sách mới nhất
+ * trước
  */
 @Entity
 @Table(name = "notification", indexes = {
-    // FE gọi đếm chưa đọc định kỳ cho mọi người dùng: không có index là mỗi lần quét cả bảng.
-    @Index(name = "idx_notification_recipient_read", columnList = "recipient_account_id, read_at"),
-    // Danh sách sắp theo updated_at (dòng gộp nổi lên khi có em nộp thêm).
-    @Index(name = "idx_notification_recipient_updated", columnList = "recipient_account_id, updated_at")
+    @Index(columnList = "recipient_id, read_at"),
+    @Index(columnList = "recipient_id, updated_at")
 })
 @Getter
 @Setter
@@ -34,27 +29,23 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** Account nhận thông báo. Khoá ngoại thật, không phải một chuỗi id rời. */
+    /** Account. Khoá ngoại thật, không phải một chuỗi id rời. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "recipient_account_id", nullable = false)
+    @JoinColumn(name = "recipient_id", nullable = false)
     private Account recipient;
 
-    /**
-     * Ba giá trị hiện tại. Cột là VARCHAR + CHECK do Hibernate sinh từ @Enumerated(STRING): thêm loại
-     * mới sau này phải ALTER CHECK trong production (ddl-auto=update không sửa CHECK), đừng chỉ sửa enum.
-     */
     @Enumerated(EnumType.STRING)
-    @Column(name = "type", nullable = false, length = 32)
+    @Column(name = "type")
     private NotificationType type;
 
-    /** Trẻ liên quan. NULL với dòng gộp của giáo viên (một dòng cho cả lớp). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "slot_id")
+    /** LearnerSlot. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "slot_id", nullable = true)
     private LearnerSlot slot;
 
-    /** Nhóm chứa sự kiện — luôn có, kể cả dòng của phụ huynh. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "group_id")
+    /** LearnerGroup. Khoá ngoại thật, không phải một chuỗi id rời. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "group_id", nullable = true)
     private LearnerGroup group;
 
     @Column(name = "chapter")
@@ -63,18 +54,15 @@ public class Notification {
     @Column(name = "quiz_id")
     private UUID quizId;
 
-    /** Gợi ý điều hướng cho FE: OPEN_LEARNER_REPORT / OPEN_QUIZ_RESULTS / OPEN_LEARNER_LIST. */
     @Column(name = "action_type", length = 32)
     private String actionType;
 
     @Column(name = "action_resource_id")
     private UUID actionResourceId;
 
-    /** Khoá chống trùng do BE sinh; UNIQUE. */
     @Column(name = "event_key", length = 160, unique = true)
     private String eventKey;
 
-    /** NULL = chưa đọc. Dòng gộp có em nộp thêm thì bị đặt lại NULL (nổi lại là chưa đọc). */
     @Column(name = "read_at")
     private Instant readAt;
 
