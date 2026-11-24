@@ -23,8 +23,10 @@ import com.doan.game.service.impl.QuizSupport.PaperEntry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -64,6 +66,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     private final QuizSupport support;
     private final Random quizRandom;
     private final Clock clock;
+    private final PlatformTransactionManager txManager;
 
     /** Trễ cho mạng sau deadline (vận hành chỉnh được, mặc định 30 giây). */
     @Value("${app.quiz.grace-seconds:30}")
@@ -189,17 +192,24 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     }
 
     /**
-     * Như finalizeExpired nhưng cho mọi đề của một nhóm. REQUIRES_NEW: người gọi (báo cáo, danh sách đề) chạy giao dịch
-     * readOnly — FlushMode MANUAL của nó sẽ bỏ mất phần ghi nếu chạy chung.
+     * Như finalizeExpired nhưng cho mọi đề của một nhóm. REQUIRES_NEW: người gọi (báo cáo, danh sách đề) có thể đang chạy
+     * giao dịch readOnly — FlushMode MANUAL của nó sẽ bỏ mất phần ghi nếu chạy chung.
+     * 25/11 (cạn pool): đọc rẻ trước, không có lượt quá giờ thì KHÔNG mở giao dịch riêng — giao dịch riêng lồng trong giao
+     * dịch người gọi là xin kết nối thứ hai; ~10 request cùng lúc làm vậy là cạn pool Hikari (10), treo 30 s rồi 500.
+     * Đường đông người (danh sách của em, dashboard, danh sách / chi tiết đề) gọi hàm này TRƯỚC khi mở giao dịch của mình.
      */
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void finalizeExpiredInGroup(UUID groupId) {
         Instant cutoff = Instant.now(clock).minusSeconds(graceSeconds);
-        finalizeLocked(attemptRepo.findSlotIdsWithExpiredOpenInGroup(groupId, cutoff),
+        if (attemptRepo.findSlotIdsWithExpiredOpenInGroup(groupId, cutoff).isEmpty()) {
+            return;
+        }
+        TransactionTemplate tx = new TransactionTemplate(txManager);
+        tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        tx.executeWithoutResult(s -> finalizeLocked(attemptRepo.findSlotIdsWithExpiredOpenInGroup(groupId, cutoff),
                 () -> attemptRepo.findByQuiz_Group_IdAndSubmittedAtIsNullAndDeadlineAtBefore(groupId, cutoff),
                 () -> quizResultRepo.findQuizSlotPairsInGroup(groupId).stream()
-                        .map(r -> resultKey((UUID) r[0], (UUID) r[1])).collect(Collectors.toSet()));
+                        .map(r -> resultKey((UUID) r[0], (UUID) r[1])).collect(Collectors.toSet())));
     }
 
     /**
