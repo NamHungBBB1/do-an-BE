@@ -25,7 +25,11 @@ public record NotificationResponse(
         Instant updatedAt,
         NotificationAction action) {
 
-    /** Gợi ý điều hướng cho FE; BE không trả URL tuyệt đối. */
+    /**
+     * Gợi ý điều hướng cho FE; BE không trả URL tuyệt đối. Bốn loại: OPEN_LEARNER_REPORT (phụ huynh,
+     * resourceId = slotId), OPEN_GROUP_REPORT (giáo viên, resourceId = groupId), OPEN_QUIZ_RESULTS
+     * (resourceId = quizId), OPEN_LEARNER_LIST (resourceId = groupId).
+     */
     public record NotificationAction(String type, UUID resourceId) {
     }
 }
