@@ -53,6 +53,13 @@ public interface AuthService {
     AccountResponse getMe(UUID accountId);
 
     /**
+     * Sửa hồ sơ của chính mình (24/11): chỉ tên hiển thị. Trả về đúng dạng getMe để FE cập nhật
+     * một lần. KHÔNG đụng tokenVersion — token không mang tên, đổi tên không phải lý do đá
+     * người dùng ra ngoài.
+     */
+    AccountResponse updateMe(UUID accountId, UpdateProfileRequest req);
+
+    /**
      * Đổi mật khẩu khi đang đăng nhập. Trả token MỚI vì đổi mật khẩu làm mọi token cũ hết hiệu
      * lực — kể cả token của chính người vừa đổi — nếu không trả mới thì tự đá mình ra ngoài.
      */

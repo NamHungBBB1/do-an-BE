@@ -6,6 +6,7 @@ import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
 import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
+import com.doan.game.DTO.request.UpdateProfileRequest;
 import com.doan.game.DTO.request.VerifyEmailRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.TokenResponse;
@@ -419,6 +420,31 @@ public class AuthServiceImpl implements AuthService {
                 .map(r -> r.getRole().name())
                 .toList();
         return AccountMapper.toResponse(a, plans, roles);
+    }
+
+    /**
+     * Sửa hồ sơ của chính mình (24/11). Chỉ nhận tên hiển thị; mọi trường khác trong body bị bỏ
+     * qua vì DTO không khai — không có đường nào để client tự đổi email, gói hay vai.
+     *
+     * Tên: bắt buộc, cắt khoảng trắng hai đầu, không rỗng, tối đa 80 ký tự (khớp cột
+     * account.display_name và luật lúc đăng ký). Trả lại bản getMe để FE dựng lại một lần.
+     */
+    @Override
+    @Transactional
+    public AccountResponse updateMe(UUID accountId, UpdateProfileRequest req) {
+        if (req == null || req.displayName() == null || req.displayName().isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "thiếu tên hiển thị");
+        }
+        String displayName = req.displayName().trim();
+        if (displayName.length() > MAX_DISPLAY_NAME_LENGTH) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "tên hiển thị tối đa " + MAX_DISPLAY_NAME_LENGTH + " ký tự");
+        }
+        Account a = accountRepo.findById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+        a.setDisplayName(displayName);
+        accountRepo.save(a);
+        return getMe(accountId);
     }
 
     /**

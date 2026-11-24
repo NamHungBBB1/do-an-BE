@@ -49,6 +49,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -404,6 +405,56 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.result.displayName").value("Nguyen Test"))
                 .andExpect(jsonPath("$.result.plans").isArray())
                 .andExpect(jsonPath("$.result.roles").isArray());
+    }
+
+    // ------------------------------------------------------------------ 12b  (hồ sơ)
+    /**
+     * Sửa hồ sơ: đổi tên hiển thị rồi đọc lại phải thấy tên mới; tên rỗng bị từ chối; tên quá
+     * dài bị từ chối; và client không có đường nào tự đổi email dù có gửi kèm trong body.
+     */
+    @Test
+    void updateMeChangesDisplayNameOnly() throws Exception {
+        String email = "suahoso-" + System.nanoTime() + "@test.local";
+        register(email);
+        verify(tokenFromMail());
+
+        String jwt = extractJwt(mvc.perform(login(email, "matkhau123"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+
+        mvc.perform(patch("/api/auth/me")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"  Phu Huynh Moi  \",\"email\":\"hacker@test.local\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.displayName").value("Phu Huynh Moi"))
+                .andExpect(jsonPath("$.result.email").value(email));
+
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.displayName").value("Phu Huynh Moi"))
+                .andExpect(jsonPath("$.result.email").value(email));
+
+        // Đổi tên không được đá người dùng ra ngoài: token cũ vẫn dùng được.
+        mvc.perform(patch("/api/auth/me")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        mvc.perform(patch("/api/auth/me")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"" + "a".repeat(81) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        // Không có token thì không sửa được hồ sơ ai cả.
+        mvc.perform(patch("/api/auth/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Ke Gian\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     // ------------------------------------------------------------------ 13  (C2 + C3)

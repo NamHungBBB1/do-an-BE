@@ -6,6 +6,7 @@ import com.doan.game.DTO.request.LinkCredentialRequest;
 import com.doan.game.DTO.request.LoginRequest;
 import com.doan.game.DTO.request.RegisterRequest;
 import com.doan.game.DTO.request.ResetPasswordRequest;
+import com.doan.game.DTO.request.UpdateProfileRequest;
 import com.doan.game.DTO.request.VerifyEmailRequest;
 import com.doan.game.DTO.response.AccountResponse;
 import com.doan.game.DTO.response.ApiResponse;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -71,6 +73,16 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<AccountResponse> getMe(@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.ok(authService.getMe(currentAccountId(jwt)));
+    }
+
+    /**
+     * Sửa hồ sơ của CHÍNH mình (24/11): chỉ tên hiển thị. Không có accountId trên đường dẫn hay
+     * trong body — danh tính lấy từ token, nên không có cửa sửa hồ sơ người khác.
+     */
+    @PatchMapping("/me")
+    public ApiResponse<AccountResponse> updateMe(@AuthenticationPrincipal Jwt jwt,
+                                                 @RequestBody UpdateProfileRequest req) {
+        return ApiResponse.ok(authService.updateMe(currentAccountId(jwt), req));
     }
 
     /**
