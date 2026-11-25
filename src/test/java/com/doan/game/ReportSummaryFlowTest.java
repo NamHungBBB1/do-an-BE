@@ -185,6 +185,9 @@ class ReportSummaryFlowTest {
         assertThat(fallback.path("status").asText()).isEqualTo("FALLBACK");
         assertThat(fallback.path("text").asText()).isEqualTo(row.getSummary());
         assertThat(fallback.path("tier").asInt()).isZero();
+        // 25/11: bản theo luật cũng có sections cùng hình (không lời) để FE vẽ thẻ.
+        assertThat(fallback.path("sections").path("overview").isNull()).isTrue();
+        assertThat(fallback.path("sections").path("notEnough").isArray()).isTrue();
         assertThat(result.path("dailySummary").path("text").asText()).isEqualTo(row.getSummary());
         assertThat(result.path("finalReport").path("status").asText()).isEqualTo("NONE");
         assertThat(result.path("finalReport").path("summary").isNull()).isTrue();
