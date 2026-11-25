@@ -23,6 +23,34 @@ final class KnowledgeUnits {
     private KnowledgeUnits() {
     }
 
+    /**
+     * Tám chủ đề (domain) của khung v3, theo thứ tự. Tên tiếng Việt dịch từ tên khung (build/khung-bao-cao-ai/
+     * khung-kien-thuc-v3.md mục D01–D08) — nháp 26/11, chờ HA duyệt câu chữ.
+     */
+    static final Map<String, String> DOMAINS = orderedDomains();
+
+    private static Map<String, String> orderedDomains() {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put("D01", "Nền tảng về tiền");
+        m.put("D02", "Thu nhập và nghề nghiệp");
+        m.put("D03", "Chi tiêu và ngân sách");
+        m.put("D04", "Tiết kiệm và ngân hàng");
+        m.put("D05", "Đầu tư");
+        m.put("D06", "Tín dụng và nợ");
+        m.put("D07", "Rủi ro, bảo hiểm và an toàn");
+        m.put("D08", "Ra quyết định tài chính");
+        return java.util.Collections.unmodifiableMap(m);
+    }
+
+    /** Chủ đề của một mã (D04.02 → D04); mã ngoài khung → null. */
+    static String domainOf(String id) {
+        Unit u = get(id);
+        if (u != null) {
+            return u.domain();
+        }
+        return id != null && id.length() >= 3 && DOMAINS.containsKey(id.substring(0, 3)) ? id.substring(0, 3) : null;
+    }
+
     static Unit get(String id) {
         return id == null ? null : ALL.get(id);
     }
