@@ -86,6 +86,15 @@
             <artifactId>payos-java</artifactId>
             <version>2.0.1</version>
         </dependency>
+        <!-- Push notification (FCM HTTP v1) cho app mobile. Chi dung khi co FIREBASE_PUSH_CREDENTIALS
+             hoac FIREBASE_PUSH_CREDENTIALS_PATH; thieu khoa thi PushService tu tat, may dev va test
+             khong can service account. Project RIENG cua mobile, khong dung chung voi project web
+             o app.firebase.project-id (project do chi de kiem ID token Google). -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.12.0</version>
+        </dependency>
     </dependencies>
 
     <build>
