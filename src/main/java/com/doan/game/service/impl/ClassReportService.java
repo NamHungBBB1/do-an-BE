@@ -8,6 +8,7 @@ import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
 import com.doan.game.entity.Quiz;
 import com.doan.game.entity.QuizResult;
+import com.doan.game.enums.QuizKind;
 import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.enums.SummarySource;
@@ -304,12 +305,14 @@ public class ClassReportService {
 
         List<GroupReportResponse.ClassChapter> out = new ArrayList<>();
         for (int ch : chapters) {
-            out.add(chapterOf(ch, active, blocks, comments.getOrDefault(ch, List.of())));
+            UUID quizId = quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, ch)
+                    .map(Quiz::getId).orElse(null);
+            out.add(chapterOf(ch, quizId, active, blocks, comments.getOrDefault(ch, List.of())));
         }
         return out;
     }
 
-    private GroupReportResponse.ClassChapter chapterOf(int ch, List<LearnerSlot> active,
+    private GroupReportResponse.ClassChapter chapterOf(int ch, UUID quizId, List<LearnerSlot> active,
                                                       Map<UUID, ReportServiceImpl.ChapterBlocks> blocks,
                                                       List<DailySummary> comments) {
         List<GroupReportResponse.LearnerRef> notFinished = new ArrayList<>();
@@ -409,7 +412,7 @@ public class ClassReportService {
 
         String title = json == null ? null : json.path("title").asText(null);
         CommentPick pick = comment(comments);
-        return new GroupReportResponse.ClassChapter(ch, title, active.size(), finished.size(), submitted.size(),
+        return new GroupReportResponse.ClassChapter(ch, title, quizId, active.size(), finished.size(), submitted.size(),
                 pick.comment(), pick.history(), concepts, decisions, notFinished, notSubmitted);
     }
 

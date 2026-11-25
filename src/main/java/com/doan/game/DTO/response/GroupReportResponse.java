@@ -19,7 +19,7 @@ public record GroupReportResponse(GroupInfo group, Instant frozenAt, String form
      * cả lớp lấy bản mới nhất. Không lộ cơ chế bên trong (mốc, hàng chờ, AI): comment.state chỉ có WAITING | PREPARING |
      * READY | BASIC. learners / wrongLearners / notFinished / notSubmitted có tên em — chỉ chủ nhóm đọc được (requireOwner).
      */
-    public record ClassChapter(int chapter, String title, int active, int finished, int submitted, Comment comment,
+    public record ClassChapter(int chapter, String title, UUID quizId, int active, int finished, int submitted, Comment comment,
                                List<HistoryItem> history, List<ClassConcept> concepts, List<ClassDecision> decisions,
                                List<LearnerRef> notFinished, List<LearnerRef> notSubmitted) {}
 

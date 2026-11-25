@@ -157,6 +157,7 @@ class ClassReportFlowTest {
         assertThat(r.chapters()).hasSize(1);
         GroupReportResponse.ClassChapter ch = r.chapters().get(0);
         assertThat(ch.chapter()).isEqualTo(2);
+        assertThat(ch.quizId()).isEqualTo(post.getId());   // FE mở bài từng em: /api/quizzes/{quizId}/results/{slotId}
         assertThat(ch.active()).isEqualTo(5);
         assertThat(ch.comment().state()).isEqualTo("PREPARING");
         assertThat(ch.comment().text()).isNull();
