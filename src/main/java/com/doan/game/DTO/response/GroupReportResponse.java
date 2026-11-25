@@ -24,9 +24,9 @@ public record GroupReportResponse(GroupInfo group, Instant frozenAt, String form
                                List<LearnerRef> notFinished, List<LearnerRef> notSubmitted) {}
 
     /** basedOn = số em đã nộp lúc viết nhận xét. */
-    public record Comment(String state, String text, Instant at, Integer basedOn) {}
+    public record Comment(String state, String text, Instant at, Integer basedOn, SlotReportResponse.Sections sections) {}
 
-    public record HistoryItem(Instant at, Integer basedOn, String text) {}
+    public record HistoryItem(Instant at, Integer basedOn, String text, SlotReportResponse.Sections sections) {}
 
     /** band của LỚP (cộng dồn câu cả lớp; dưới 10 câu → NO_DATA). Mảng xếp nội dung yếu nhất trước. */
     public record ClassConcept(String name, String objective, int correct, int total, String band,

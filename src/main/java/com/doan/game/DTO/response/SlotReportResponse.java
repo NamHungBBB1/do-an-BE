@@ -57,7 +57,25 @@ public record SlotReportResponse(Learner learner, Progress progress, Indicators 
      * (spec kho ảnh + giọng 4.7b); provider = nhà cung cấp AI (null với RULE). generatedAt = lúc bài hiện tại được ghi.
      */
     public record Summary(String status, String text, String source, Integer tier, String provider,
-                          Instant generatedAt) {}
+                          Instant generatedAt, Sections sections) {}
+
+    /**
+     * Nhận xét có cấu trúc (25/11) — cùng nội dung với text, để FE vẽ thẻ. overview = đoạn mở đầu (null ở bản theo luật);
+     * decisions = quyết định trong truyện (em: phương án bé chọn + deliberate; lớp: phương án nhiều em chọn nhất,
+     * picked / of = số em); doingWell / needsPractice = khái niệm theo mức (band, correct / total lấy từ số liệu, không từ
+     * lời AI); tips = gợi ý cho gia đình / tiết học; notEnough = khái niệm chưa đủ bài để nhận xét. text từng mục = lời
+     * nhận xét (null ở bản theo luật). Mọi mảng luôn có (rỗng khi không có gì).
+     */
+    public record Sections(String overview, List<DecisionNote> decisions, List<ConceptNote> doingWell,
+                           List<ConceptNote> needsPractice, List<TipNote> tips, List<ConceptCount> notEnough) {}
+
+    public record DecisionNote(String option, Boolean deliberate, Integer picked, Integer of, String text) {}
+
+    public record ConceptNote(String concept, String name, String band, int correct, int total, String text) {}
+
+    public record TipNote(String concept, String name, String text) {}
+
+    public record ConceptCount(String concept, String name, int correct, int total) {}
 
     /**
      * Một lựa chọn trong truyện — KHÔNG có đúng sai (BR-45). label = chữ của phương án trong JSON bản bé đã chơi (bản gốc,

@@ -170,6 +170,7 @@ class ClassReportFlowTest {
         assertThat(ch.comment().state()).isEqualTo("READY");
         assertThat(ch.comment().text()).isEqualTo("Lớp làm tốt.");
         assertThat(ch.comment().basedOn()).isEqualTo(5);
+        assertThat(ch.comment().sections()).isNotNull();   // lời AI giả không phải JSON → sections dựng từ gói
 
         var bell = notificationRepo.findByRecipient_Id(teacher.getId(), PageRequest.of(0, 10)).getContent();
         assertThat(bell).anySatisfy(n -> {

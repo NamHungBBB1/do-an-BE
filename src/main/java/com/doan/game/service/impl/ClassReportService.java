@@ -421,25 +421,29 @@ public class ClassReportService {
     /** Bản mới nhất → state; đang chuẩn bị thì hiện bản trước (nếu có). Không lộ mốc / hàng chờ / AI. */
     static CommentPick comment(List<DailySummary> rows) {
         if (rows.isEmpty()) {
-            return new CommentPick(new GroupReportResponse.Comment(WAITING, null, null, null), List.of());
+            return new CommentPick(new GroupReportResponse.Comment(WAITING, null, null, null, null), List.of());
         }
         DailySummary latest = rows.get(0);
         int from = 1;
         GroupReportResponse.Comment c;
         if (latest.getSource() == SummarySource.LLM) {
-            c = new GroupReportResponse.Comment(READY, latest.getSummary(), at(latest), latest.getSubmittedCount());
+            c = new GroupReportResponse.Comment(READY, latest.getSummary(), at(latest), latest.getSubmittedCount(),
+                    ReportSections.of(latest, null));
         } else if (latest.getAiJob() != null && ALIVE_JOB.contains(latest.getAiJob().getStatus())) {
             DailySummary prev = rows.size() > 1 ? rows.get(1) : null;
             c = new GroupReportResponse.Comment(PREPARING, prev == null ? null : prev.getSummary(),
-                    prev == null ? null : at(prev), prev == null ? null : prev.getSubmittedCount());
+                    prev == null ? null : at(prev), prev == null ? null : prev.getSubmittedCount(),
+                    prev == null ? null : ReportSections.of(prev, null));
             from = prev == null ? 1 : 2;
         } else {
-            c = new GroupReportResponse.Comment(BASIC, latest.getSummary(), at(latest), latest.getSubmittedCount());
+            c = new GroupReportResponse.Comment(BASIC, latest.getSummary(), at(latest), latest.getSubmittedCount(),
+                    ReportSections.of(latest, null));
         }
         List<GroupReportResponse.HistoryItem> history = new ArrayList<>();
         for (int i = from; i < rows.size(); i++) {
             DailySummary d = rows.get(i);
-            history.add(new GroupReportResponse.HistoryItem(at(d), d.getSubmittedCount(), d.getSummary()));
+            history.add(new GroupReportResponse.HistoryItem(at(d), d.getSubmittedCount(), d.getSummary(),
+                    ReportSections.of(d, null)));
         }
         return new CommentPick(c, history);
     }

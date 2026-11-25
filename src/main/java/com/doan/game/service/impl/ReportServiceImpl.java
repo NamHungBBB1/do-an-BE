@@ -192,13 +192,13 @@ public class ReportServiceImpl implements ReportService {
             chapters.add(new SlotReportResponse.ChapterRow(r.chapter(), r.attemptIndex(), r.finishedAt(), r.choices(),
                     r.miniGames(), r.postTest(), r.reportStatus(),
                     summaryOf(r.reportStatus(), byKey.get(ReportPackage.CHAPTER + "#" + r.chapter()),
-                            () -> ReportPackage.ruleText(ReportPackage.chapter(blocks, r)))));
+                            () -> ReportPackage.chapter(blocks, r))));
         }
         String finalStatus = blocks.finalReport().status();
         SlotReportResponse.FinalReport finalReport = new SlotReportResponse.FinalReport(finalStatus,
                 NONE.equals(finalStatus) ? null
                         : summaryOf(finalStatus, byKey.get(ReportPackage.FINAL + "#" + FINAL_CHAPTER),
-                                () -> ReportPackage.ruleText(ReportPackage.finalPackage(blocks))));
+                                () -> ReportPackage.finalPackage(blocks)));
         SlotReportResponse.DailySummaryRow daily = latest == null ? null : new SlotReportResponse.DailySummaryRow(
                 LocalDate.ofInstant(latest.getCreatedAt(), ClockConfig.VN), latest.getSummary(),
                 latest.getSource() == null ? null : latest.getSource().name(), latest.getTier(), latest.getProvider());
@@ -218,12 +218,14 @@ public class ReportServiceImpl implements ReportService {
      * luật tính ngay từ cùng số liệu, generatedAt null — lần gửi lô / nộp bài sau sẽ ghi dòng.
      */
     static SlotReportResponse.Summary summaryOf(String reportStatus, DailySummary row,
-                                                java.util.function.Supplier<String> ruleText) {
+                                                java.util.function.Supplier<ReportPackage.Pkg> pkg) {
         if (PARTIAL.equals(reportStatus)) {
-            return new SlotReportResponse.Summary(WAITING_POST_TEST, null, null, null, null, null);
+            return new SlotReportResponse.Summary(WAITING_POST_TEST, null, null, null, null, null, null);
         }
         if (row == null) {
-            return new SlotReportResponse.Summary(FALLBACK, ruleText.get(), "RULE", 0, null, null);
+            ReportPackage.Pkg live = pkg.get();
+            return new SlotReportResponse.Summary(FALLBACK, ReportPackage.ruleText(live), "RULE", 0, null, null,
+                    ReportSections.fromPackage(live));
         }
         AiJob job = row.getAiJob();
         boolean llm = row.getSource() == SummarySource.LLM;
@@ -231,7 +233,8 @@ public class ReportServiceImpl implements ReportService {
                 : job != null && ALIVE_JOB.contains(job.getStatus()) ? GENERATING : FALLBACK;
         Instant at = llm && job != null && job.getDoneAt() != null ? job.getDoneAt() : row.getCreatedAt();
         return new SlotReportResponse.Summary(status, row.getSummary(),
-                row.getSource() == null ? null : row.getSource().name(), row.getTier(), row.getProvider(), at);
+                row.getSource() == null ? null : row.getSource().name(), row.getTier(), row.getProvider(), at,
+                ReportSections.of(row, pkg));
     }
 
     private static final Set<String> ALIVE_JOB = Set.of(AiJobQueue.QUEUED, AiJobQueue.RUNNING,
