@@ -1,8 +1,11 @@
 package com.doan.game.service.impl;
 
+import com.doan.game.DTO.response.ClassChapterReportResponse;
+import com.doan.game.DTO.response.ClassCourseReportResponse;
 import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.entity.AiJob;
+import com.doan.game.entity.Chapter;
 import com.doan.game.entity.DailySummary;
 import com.doan.game.entity.LearnerGroup;
 import com.doan.game.entity.LearnerSlot;
@@ -13,6 +16,7 @@ import com.doan.game.enums.LearningContext;
 import com.doan.game.enums.SlotStatus;
 import com.doan.game.enums.SummarySource;
 import com.doan.game.repository.AiJobRepository;
+import com.doan.game.repository.ChapterRepository;
 import com.doan.game.repository.DailySummaryRepository;
 import com.doan.game.repository.LearnerGroupRepository;
 import com.doan.game.repository.LearnerSlotRepository;
@@ -79,12 +83,14 @@ public class ClassReportService {
     private final LearnerSlotRepository slotRepo;
     private final QuizRepository quizRepo;
     private final QuizResultRepository quizResultRepo;
+    private final ChapterRepository chapterRepo;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public ClassReportService(ReportServiceImpl reports, DailySummaryRepository summaryRepo, AiJobRepository jobRepo,
                               LearnerGroupRepository groupRepo, LearnerSlotRepository slotRepo, QuizRepository quizRepo,
-                              QuizResultRepository quizResultRepo, PlatformTransactionManager txManager, Clock clock) {
+                              QuizResultRepository quizResultRepo, ChapterRepository chapterRepo,
+                              PlatformTransactionManager txManager, Clock clock) {
         this.reports = reports;
         this.summaryRepo = summaryRepo;
         this.jobRepo = jobRepo;
@@ -92,6 +98,7 @@ public class ClassReportService {
         this.slotRepo = slotRepo;
         this.quizRepo = quizRepo;
         this.quizResultRepo = quizResultRepo;
+        this.chapterRepo = chapterRepo;
         this.tx = new TransactionTemplate(txManager);
         this.tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.clock = clock;
@@ -292,14 +299,8 @@ public class ClassReportService {
      */
     List<GroupReportResponse.ClassChapter> liveChapters(LearnerGroup group) {
         List<LearnerSlot> active = activeSlots(group);
-        Map<UUID, ReportServiceImpl.ChapterBlocks> blocks = new LinkedHashMap<>();
-        for (LearnerSlot s : active) {
-            blocks.put(s.getId(), reports.chapterBlocksOf(s.getId()));
-        }
-        Map<Integer, List<DailySummary>> comments = new TreeMap<>();
-        for (DailySummary d : summaryRepo.findByGroupWithJob(group.getId(), ReportPackage.CLASS)) {
-            comments.computeIfAbsent(d.getChapter(), k -> new ArrayList<>()).add(d);
-        }
+        Map<UUID, ReportServiceImpl.ChapterBlocks> blocks = blocksOf(active);
+        Map<Integer, List<DailySummary>> comments = commentsOf(group);
         Set<Integer> chapters = new TreeSet<>(comments.keySet());
         blocks.values().forEach(b -> b.chapters().forEach(r -> chapters.add(r.chapter())));
 
@@ -310,6 +311,22 @@ public class ClassReportService {
             out.add(chapterOf(ch, quizId, active, blocks, comments.getOrDefault(ch, List.of())));
         }
         return out;
+    }
+
+    private Map<UUID, ReportServiceImpl.ChapterBlocks> blocksOf(List<LearnerSlot> active) {
+        Map<UUID, ReportServiceImpl.ChapterBlocks> blocks = new LinkedHashMap<>();
+        for (LearnerSlot s : active) {
+            blocks.put(s.getId(), reports.chapterBlocksOf(s.getId()));
+        }
+        return blocks;
+    }
+
+    private Map<Integer, List<DailySummary>> commentsOf(LearnerGroup group) {
+        Map<Integer, List<DailySummary>> comments = new TreeMap<>();
+        for (DailySummary d : summaryRepo.findByGroupWithJob(group.getId(), ReportPackage.CLASS)) {
+            comments.computeIfAbsent(d.getChapter(), k -> new ArrayList<>()).add(d);
+        }
+        return comments;
     }
 
     private GroupReportResponse.ClassChapter chapterOf(int ch, UUID quizId, List<LearnerSlot> active,
@@ -414,6 +431,185 @@ public class ClassReportService {
         CommentPick pick = comment(comments);
         return new GroupReportResponse.ClassChapter(ch, title, quizId, active.size(), finished.size(), submitted.size(),
                 pick.comment(), pick.history(), concepts, decisions, notFinished, notSubmitted);
+    }
+
+    // ------------------------------------------------------------------ báo cáo lớp theo chương / toàn khoá (26/11)
+
+    /** Dưới số em này thì không trả % lựa chọn (1 em = 100% gây hiểu nhầm). */
+    static final int MIN_LEARNERS_FOR_RATE = 5;
+    /** Khoảng % đúng của phân bố điểm bài sau chương: [from, to], nhãn hiện thẳng cho giáo viên. */
+    static final int[][] SCORE_BANDS = {{0, 49}, {50, 69}, {70, 84}, {85, 100}};
+    static final String[] SCORE_LABELS = {"Dưới 50%", "50–69%", "70–84%", "Từ 85%"};
+
+    /**
+     * Một chương: cùng phép tính với chapters[] của báo cáo lớp (chapterOf) + bốn nhóm tiến độ. Gọi trong transaction đọc
+     * đã kiểm chủ nhóm. Nhận xét chỉ có ở lớp học (nhóm gia đình → null).
+     */
+    ClassChapterReportResponse chapterReport(LearnerGroup group, int ch) {
+        List<LearnerSlot> active = activeSlots(group);
+        Map<UUID, ReportServiceImpl.ChapterBlocks> blocks = blocksOf(active);
+        boolean isClass = group.getContext() == LearningContext.CLASS;
+        UUID quizId = quizRepo.findByGroup_IdAndKindAndChapter(group.getId(), QuizKind.POST_TEST, ch)
+                .map(Quiz::getId).orElse(null);
+        GroupReportResponse.ClassChapter c = chapterOf(ch, quizId, active, blocks,
+                isClass ? commentsOf(group).getOrDefault(ch, List.of()) : List.of());
+
+        List<GroupReportResponse.LearnerRef> submitted = new ArrayList<>();
+        List<GroupReportResponse.LearnerRef> finishedOnly = new ArrayList<>();
+        List<GroupReportResponse.LearnerRef> inProgress = new ArrayList<>();
+        List<GroupReportResponse.LearnerRef> notStarted = new ArrayList<>();
+        for (LearnerSlot s : active) {
+            List<SlotReportResponse.ChapterRow> rows = blocks.get(s.getId()).chapters();
+            SlotReportResponse.ChapterRow row = rows.stream().filter(r -> r.chapter() == ch).findFirst().orElse(null);
+            if (row != null) {
+                (ReportServiceImpl.SUBMITTED.equals(row.postTest().status()) ? submitted : finishedOnly).add(ref(s));
+            } else {
+                // Chương tiếp theo phải chơi = số chương đã xong + 1 (như progress.continueChapter của báo cáo em).
+                (ch <= rows.size() + 1 ? inProgress : notStarted).add(ref(s));
+            }
+        }
+        ClassChapterReportResponse.Progress progress = new ClassChapterReportResponse.Progress(bucket(submitted),
+                bucket(finishedOnly), bucket(inProgress), bucket(notStarted));
+
+        List<ClassChapterReportResponse.Concept> concepts = c.concepts().stream()
+                .map(k -> new ClassChapterReportResponse.Concept(k.name(), k.objective(), k.correct(), k.total(),
+                        rate(k.correct(), k.total()), k.band(), !NO_DATA.equals(k.band()), k.wrongLearners()))
+                .toList();
+        List<ClassChapterReportResponse.StoryDecision> decisions = new ArrayList<>();
+        for (GroupReportResponse.ClassDecision d : c.decisions()) {
+            int reached = d.options().stream().mapToInt(GroupReportResponse.ClassOption::count).sum();
+            List<ClassChapterReportResponse.Option> options = new ArrayList<>();
+            for (int i = 0; i < d.options().size(); i++) {
+                GroupReportResponse.ClassOption o = d.options().get(i);
+                options.add(new ClassChapterReportResponse.Option(optionKey(i), o.label(), o.count(),
+                        reached < MIN_LEARNERS_FOR_RATE ? null : rate(o.count(), reached), o.learners()));
+            }
+            decisions.add(new ClassChapterReportResponse.StoryDecision(d.question(), reached, active.size(), options));
+        }
+        String title = c.title() != null ? c.title() : chapterTitles().get(ch);
+        return new ClassChapterReportResponse(new ClassChapterReportResponse.ChapterInfo(ch, title, quizId),
+                active.size(), progress, isClass ? c.comment() : null, concepts, decisions);
+    }
+
+    /**
+     * Toàn khoá: tiến độ đủ chương 1..total, bài sau chương (trung bình gộp + phân bố theo em), tám chủ đề cộng dồn, danh
+     * sách em. Chỉ em đang hoạt động. Gọi trong transaction đọc đã kiểm chủ nhóm.
+     */
+    ClassCourseReportResponse courseReport(LearnerGroup group, Integer totalChapters, Map<UUID, Instant> lastActive) {
+        List<LearnerSlot> active = activeSlots(group);
+        Map<UUID, ReportServiceImpl.ChapterBlocks> blocks = blocksOf(active);
+        Map<Integer, String> titles = chapterTitles();
+
+        int maxCh = totalChapters == null ? 0 : totalChapters;
+        Map<Integer, int[]> perChapter = new TreeMap<>();   // chương → [xong, đã nộp]
+        Map<String, int[]> topicSum = new TreeMap<>();   // D0x → [đúng, tổng]
+        Map<String, Set<Integer>> topicChapters = new HashMap<>();
+        List<ClassCourseReportResponse.Learner> learners = new ArrayList<>();
+        List<List<GroupReportResponse.LearnerRef>> bandLearners = new ArrayList<>();
+        for (int i = 0; i < SCORE_BANDS.length; i++) {
+            bandLearners.add(new ArrayList<>());
+        }
+        int sumCorrect = 0;
+        int sumTotal = 0;
+        int basedOn = 0;
+        for (LearnerSlot s : active) {
+            ReportServiceImpl.ChapterBlocks b = blocks.get(s.getId());
+            int submittedCount = 0;
+            int correct = 0;
+            int total = 0;
+            for (SlotReportResponse.ChapterRow row : b.chapters()) {
+                maxCh = Math.max(maxCh, row.chapter());
+                int[] pc = perChapter.computeIfAbsent(row.chapter(), k -> new int[2]);
+                pc[0]++;
+                SlotReportResponse.PostTest pt = row.postTest();
+                if (ReportServiceImpl.SUBMITTED.equals(pt.status())) {
+                    pc[1]++;   // cùng tiêu chí "đã nộp" với API theo chương
+                    submittedCount++;
+                    if (pt.total() != null && pt.total() > 0) {
+                        correct += pt.correct() == null ? 0 : pt.correct();
+                        total += pt.total();
+                    }
+                }
+            }
+            b.chapterConcepts().forEach((ch, byConcept) -> byConcept.forEach((id, c) -> {
+                String topic = KnowledgeUnits.domainOf(id);
+                if (topic == null) {
+                    return;
+                }
+                int[] t = topicSum.computeIfAbsent(topic, k -> new int[2]);
+                t[0] += c[0] + c[2];
+                t[1] += c[1] + c[3];
+                if (c[1] + c[3] > 0) {
+                    topicChapters.computeIfAbsent(topic, k -> new TreeSet<>()).add(ch);
+                }
+            }));
+            if (total > 0) {
+                basedOn++;
+                sumCorrect += correct;
+                sumTotal += total;
+                bandLearners.get(scoreBand(rate(correct, total))).add(ref(s));
+            }
+            learners.add(new ClassCourseReportResponse.Learner(s.getId(), s.getDisplayName(), s.getCode(),
+                    b.chapters().size(), submittedCount, correct, total, lastActive.get(s.getId())));
+        }
+
+        List<ClassCourseReportResponse.ChapterProgress> chapters = new ArrayList<>();
+        for (int ch = 1; ch <= maxCh; ch++) {
+            int[] pc = perChapter.getOrDefault(ch, new int[2]);
+            chapters.add(new ClassCourseReportResponse.ChapterProgress(ch, titles.get(ch), pc[0], pc[1]));
+        }
+        List<ClassCourseReportResponse.ScoreBand> distribution = new ArrayList<>();
+        for (int i = 0; i < SCORE_BANDS.length; i++) {
+            distribution.add(new ClassCourseReportResponse.ScoreBand(SCORE_LABELS[i], SCORE_BANDS[i][0],
+                    SCORE_BANDS[i][1], bandLearners.get(i).size(), bandLearners.get(i)));
+        }
+        ClassCourseReportResponse.PostTest postTest = new ClassCourseReportResponse.PostTest(basedOn,
+                sumTotal == 0 ? null : new ClassCourseReportResponse.Score(sumCorrect, sumTotal, rate(sumCorrect, sumTotal)),
+                distribution);
+        List<ClassCourseReportResponse.Topic> topics = new ArrayList<>();
+        KnowledgeUnits.DOMAINS.forEach((code, name) -> {
+            int[] t = topicSum.getOrDefault(code, new int[2]);
+            String level = ReportPackage.classBand(t[0], t[1]);
+            topics.add(new ClassCourseReportResponse.Topic(code, name, t[0], t[1], rate(t[0], t[1]), level,
+                    !NO_DATA.equals(level), List.copyOf(topicChapters.getOrDefault(code, Set.of()))));
+        });
+        return new ClassCourseReportResponse(active.size(), totalChapters, chapters, postTest, topics, learners);
+    }
+
+    private static final String NO_DATA = "NO_DATA";
+
+    private static ClassChapterReportResponse.Bucket bucket(List<GroupReportResponse.LearnerRef> learners) {
+        return new ClassChapterReportResponse.Bucket(learners.size(), learners);
+    }
+
+    /** % làm tròn; mẫu số 0 → null. */
+    static Integer rate(int part, int whole) {
+        return whole <= 0 ? null : (int) Math.round(100.0 * part / whole);
+    }
+
+    static int scoreBand(int rate) {
+        for (int i = SCORE_BANDS.length - 1; i > 0; i--) {
+            if (rate >= SCORE_BANDS[i][0]) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    /** A, B, … Z rồi 27, 28… (chương thật không quá vài phương án). */
+    static String optionKey(int index) {
+        return index < 26 ? String.valueOf((char) ('A' + index)) : String.valueOf(index + 1);
+    }
+
+    /** Tên chương theo số (bảng Chapter) — dùng khi chưa em nào chơi chương đó nên chưa có JSON. */
+    private Map<Integer, String> chapterTitles() {
+        Map<Integer, String> out = new HashMap<>();
+        for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
+            if (c.getChapterNumber() != null && c.getTitle() != null) {
+                out.putIfAbsent(c.getChapterNumber(), c.getTitle());
+            }
+        }
+        return out;
     }
 
     private record CommentPick(GroupReportResponse.Comment comment, List<GroupReportResponse.HistoryItem> history) {}

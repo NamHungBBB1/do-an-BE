@@ -1,6 +1,8 @@
 package com.doan.game.controller;
 
 import com.doan.game.DTO.response.ApiResponse;
+import com.doan.game.DTO.response.ClassChapterReportResponse;
+import com.doan.game.DTO.response.ClassCourseReportResponse;
 import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.service.ReportService;
@@ -39,5 +41,19 @@ public class ReportController {
     public ApiResponse<GroupReportResponse> groupReport(@AuthenticationPrincipal Jwt jwt,
                                                         @PathVariable UUID id) {
         return ApiResponse.ok(reportService.groupReport(UUID.fromString(jwt.getSubject()), id));
+    }
+
+    /** Một chương của nhóm (26/11): bốn nhóm tiến độ, nội dung, lựa chọn trong truyện — số và tỉ lệ BE tính sẵn. */
+    @GetMapping("/api/groups/{id}/reports/chapters/{chapter}")
+    public ApiResponse<ClassChapterReportResponse> chapterReport(@AuthenticationPrincipal Jwt jwt,
+                                                                 @PathVariable UUID id, @PathVariable int chapter) {
+        return ApiResponse.ok(reportService.chapterReport(UUID.fromString(jwt.getSubject()), id, chapter));
+    }
+
+    /** Toàn khoá của nhóm (26/11): tiến độ đủ chương, bài sau chương, tám chủ đề cộng dồn, danh sách em. */
+    @GetMapping("/api/groups/{id}/reports/course")
+    public ApiResponse<ClassCourseReportResponse> courseReport(@AuthenticationPrincipal Jwt jwt,
+                                                               @PathVariable UUID id) {
+        return ApiResponse.ok(reportService.courseReport(UUID.fromString(jwt.getSubject()), id));
     }
 }

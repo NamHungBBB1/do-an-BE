@@ -1,5 +1,7 @@
 package com.doan.game.service.impl;
 
+import com.doan.game.DTO.response.ClassChapterReportResponse;
+import com.doan.game.DTO.response.ClassCourseReportResponse;
 import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 import com.doan.game.configuration.ClockConfig;
@@ -553,6 +555,36 @@ public class ReportServiceImpl implements ReportService {
                 ? classReports.getObject().liveChapters(group) : List.of();
         return new GroupReportResponse(base.group(), base.frozenAt(), base.formulaVersion(), base.summary(), base.rows(),
                 chapters);
+    }
+
+    /**
+     * Chương < 1 → 1001. Không chặn trên theo bản hiện hành: em có thể đã chơi chương của bản cũ dài hơn; chương chưa em
+     * nào tới thì mọi em ở notStarted. Nhóm không có / không phải chủ như groupReport.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ClassChapterReportResponse chapterReport(UUID callerId, UUID groupId, int chapter) {
+        if (chapter < 1) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "chương phải từ 1");
+        }
+        LearnerGroup group = ownedGroup(callerId, groupId);
+        return classReports.getObject().chapterReport(group, chapter);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ClassCourseReportResponse courseReport(UUID callerId, UUID groupId) {
+        LearnerGroup group = ownedGroup(callerId, groupId);
+        return classReports.getObject().courseReport(group, currentTotalChapters(), lastActiveInGroup(groupId));
+    }
+
+    /** Như groupReport: kiểm chủ nhóm, chốt lượt quiz quá giờ trước khi đọc. */
+    private LearnerGroup ownedGroup(UUID callerId, UUID groupId) {
+        LearnerGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "không có nhóm " + groupId));
+        requireOwner(callerId, group);
+        quizAttemptService.finalizeExpiredInGroup(group.getId());
+        return group;
     }
 
     // ------------------------------------------------------------------ đóng băng lúc đóng nhóm

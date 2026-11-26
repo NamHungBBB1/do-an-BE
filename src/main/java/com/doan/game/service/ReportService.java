@@ -1,5 +1,7 @@
 package com.doan.game.service;
 
+import com.doan.game.DTO.response.ClassChapterReportResponse;
+import com.doan.game.DTO.response.ClassCourseReportResponse;
 import com.doan.game.DTO.response.GroupReportResponse;
 import com.doan.game.DTO.response.SlotReportResponse;
 
@@ -26,4 +28,10 @@ public interface ReportService {
 
     /** GET /api/slots/{id}/report: một học sinh, chỉ chủ nhóm; token SLOT bị chặn từ cửa Security. */
     SlotReportResponse slotReport(UUID callerId, UUID slotId);
+
+    /** GET /api/groups/{id}/reports/chapters/{chapter}: một chương của nhóm, BE tính sẵn nhóm em / tỉ lệ; chỉ chủ nhóm. */
+    ClassChapterReportResponse chapterReport(UUID callerId, UUID groupId, int chapter);
+
+    /** GET /api/groups/{id}/reports/course: toàn khoá của nhóm (tiến độ, bài sau chương, tám chủ đề); chỉ chủ nhóm. */
+    ClassCourseReportResponse courseReport(UUID callerId, UUID groupId);
 }
