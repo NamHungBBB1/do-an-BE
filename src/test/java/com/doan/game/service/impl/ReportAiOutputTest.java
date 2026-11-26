@@ -176,5 +176,7 @@ class ReportAiOutputTest {
         assertThat(ok.tokensOut()).isEqualTo(3);
         assertThat(AiCallClassifier.sanitize("key " + key + " and AIzaSyOTHERKEY0000000000", key))
                 .isEqualTo("key *** and ***");
+        // Khoá authorization của AI Studio (từ 28/05/2026) bắt đầu bằng "AQ."
+        assertThat(AiCallClassifier.sanitize("bad AQ.Ab8RN6LtestOnlyNotARealKey_0000", null)).isEqualTo("bad ***");
     }
 }

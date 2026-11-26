@@ -62,8 +62,8 @@ public class ReportAiWriter implements AiJobWriter {
 
     public ReportAiWriter(AiKeyRepository keyRepo, AiKeyServiceImpl keys, AiTextClient ai, AiCallLogRepository logRepo,
                           Clock clock,
-                          @Value("${app.ai.gemini-model:gemini-2.5-flash}") String geminiModel,
-                          @Value("${app.ai.gemini-fallback-model:gemini-2.5-flash-lite}") String geminiFallbackModel,
+                          @Value("${app.ai.gemini-model:gemini-3.5-flash-lite}") String geminiModel,
+                          @Value("${app.ai.gemini-fallback-model:gemini-3.1-flash-lite}") String geminiFallbackModel,
                           @Value("${app.ai.demo-mode:false}") boolean demoMode) {
         this.keyRepo = keyRepo;
         this.keys = keys;
