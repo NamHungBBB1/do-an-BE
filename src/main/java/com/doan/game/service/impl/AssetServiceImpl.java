@@ -98,11 +98,12 @@ public class AssetServiceImpl implements AssetService {
     private final Path dir;
     private final String cwebp;
     private final ArchivePolicy archivePolicy;
+    private final VoiceKeys voiceKeys;
 
     public AssetServiceImpl(AssetRepository assetRepo, ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                             GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                             AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
-                            ObjectMapper objectMapper, Clock clock, ArchivePolicy archivePolicy,
+                            ObjectMapper objectMapper, Clock clock, ArchivePolicy archivePolicy, VoiceKeys voiceKeys,
                             @Value("${app.assets.base-url}") String assetBase,
                             @Value("${app.assets.dir}") String dir,
                             @Value("${app.assets.cwebp:cwebp}") String cwebp) {
@@ -119,6 +120,7 @@ public class AssetServiceImpl implements AssetService {
         this.dir = Path.of(dir);
         this.cwebp = cwebp;
         this.archivePolicy = archivePolicy;
+        this.voiceKeys = voiceKeys;
     }
 
     // ------------------------------------------------------------------ đọc
@@ -274,7 +276,7 @@ public class AssetServiceImpl implements AssetService {
     /**
      * Tập "đang dùng" của vòng đời lưu trữ (27/11): như {@link #usageIndex()} nhưng bỏ các bản phát hành đã lưu trữ, và tính cả
      * giọng biến thể đã đóng băng (personalization.voiceReady) — câu cá nhân hoá chỉ có giọng sau khi ghép nên đường dẫn không
-     * nằm trong JSON; bỏ sót là giọng bé đang nghe bị coi là mồ côi.
+     * nằm trong JSON; bỏ sót là giọng bé đang nghe bị coi là mồ côi. Nháp mới nhất chưa phát hành: tính mọi giọng nó sẽ cần.
      */
     public Map<String, List<AssetUsageResponse>> usageIndexForArchive(Set<String> archivedVersions) {
         return usageIndex(archivedVersions, true);
@@ -310,7 +312,12 @@ public class AssetServiceImpl implements AssetService {
             // Nháp RELEASED trùng nội dung bản đã phát hành — đã đếm ở trên.
             draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId())
                     .filter(d -> d.getStatus() != DraftStatus.RELEASED)
-                    .ifPresent(d -> add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null));
+                    .ifPresent(d -> {
+                        add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null);
+                        if (withVoiceReady) {
+                            add(acc, draftVoiceRefs(d.getContent()), c.getCode(), "DRAFT", null);
+                        }
+                    });
         }
         Map<String, List<AssetUsageResponse>> out = new LinkedHashMap<>();
         acc.forEach((path, byPlace) -> out.put(path, byPlace.values().stream().map(Usage::toResponse).toList()));
@@ -327,6 +334,25 @@ public class AssetServiceImpl implements AssetService {
         return releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(releaseId).stream()
                 .map(rc -> new ChapterRefs(rc.getChapter().getCode(), refs(rc.getContent()), voiceReadyRefs(rc.getContent())))
                 .toList();
+    }
+
+    /**
+     * Mọi tệp giọng nháp sẽ cần (v/<khoá>.mp3 của mọi câu, mọi tổ hợp cá nhân hoá — đúng danh sách VoiceKeys dùng để sinh giọng).
+     * Câu có token chỉ có giọng sau khi ghép nên không nằm trong JSON nháp; bỏ sót là giọng sắp phát hành bị coi là mồ côi.
+     */
+    private Map<String, Set<String>> draftVoiceRefs(String json) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        if (json == null) {
+            return out;
+        }
+        try {
+            for (VoiceKeys.Line l : voiceKeys.lines(objectMapper.readTree(json))) {
+                out.computeIfAbsent("v/" + l.key() + ".mp3", k -> new LinkedHashSet<>()).add(l.sceneId());
+            }
+        } catch (IOException e) {
+            log.warn("JSON nháp hỏng, bỏ qua giọng: {}", e.getMessage());
+        }
+        return out;
     }
 
     /** Giọng biến thể đóng băng của một chương (v/<khoá>.mp3, không gắn cảnh); rỗng với chương không cá nhân hoá. */

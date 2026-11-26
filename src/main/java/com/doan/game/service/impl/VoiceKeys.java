@@ -1,7 +1,10 @@
 package com.doan.game.service.impl;
 
+import com.doan.game.entity.ArchiveItem;
 import com.doan.game.entity.VoiceClip;
+import com.doan.game.enums.ArchiveKind;
 import com.doan.game.enums.VoiceClipStatus;
+import com.doan.game.repository.ArchiveItemRepository;
 import com.doan.game.repository.VoiceClipRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,10 +54,13 @@ public class VoiceKeys {
     private final VoiceClipRepository clipRepo;
     private final ObjectMapper objectMapper;
     private final Personalizer personalizer;
+    private final ArchiveItemRepository archiveRepo;
     private final JsonNode config;
 
-    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper, Personalizer personalizer) {
+    public VoiceKeys(VoiceClipRepository clipRepo, ObjectMapper objectMapper, Personalizer personalizer,
+                     ArchiveItemRepository archiveRepo) {
         this.clipRepo = clipRepo;
+        this.archiveRepo = archiveRepo;
         this.objectMapper = objectMapper;
         this.personalizer = personalizer;
         try (InputStream in = new ClassPathResource("voice/voices.json").getInputStream()) {
@@ -164,6 +170,16 @@ public class VoiceKeys {
             Line l = lineOf(s);
             if (l != null && s.path("voiceUrl").asText("").endsWith("/v/" + l.key() + ".mp3")) {
                 ready.add(l.key());
+            }
+        }
+        if (!ready.isEmpty()) {
+            // Giọng đã lưu trữ (tệp không còn trên máy chủ) coi như chưa sinh: không gắn voiceUrl, không vào voiceReady — gắn vào
+            // là nội dung trỏ tệp không có, và chốt lưu trữ chặn editor dù họ không tự thêm. Một truy vấn; bảng rỗng thì không có gì.
+            Set<String> paths = ready.stream().map(k -> "v/" + k + ".mp3").collect(Collectors.toSet());
+            for (ArchiveItem a : archiveRepo.findByItemRefInAndKindIn(paths, Set.of(ArchiveKind.AUDIO))) {
+                if (ArchivePolicy.GONE.contains(a.getState())) {
+                    ready.remove(a.getItemRef().substring(2, a.getItemRef().length() - 4));
+                }
             }
         }
         return ready;

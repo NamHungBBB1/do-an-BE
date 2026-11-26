@@ -30,14 +30,14 @@ public class ArchiveItem {
     private UUID id;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "kind")
+    @Column(name = "kind", nullable = false)
     private ArchiveKind kind;
 
     @Column(name = "item_ref", length = 128)
     private String itemRef;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "state")
+    @Column(name = "state", nullable = false)
     private ArchiveState state;
 
     @Column(name = "countdown_from")

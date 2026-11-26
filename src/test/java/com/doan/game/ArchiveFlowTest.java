@@ -100,6 +100,8 @@ class ArchiveFlowTest {
     @Autowired LearnerGroupRepository groupRepo;
     @Autowired LearnerSlotRepository slotRepo;
     @Autowired ArchivePolicy policy;
+    @Autowired com.doan.game.service.impl.VoiceKeys voiceKeys;
+    @Autowired com.doan.game.repository.VoiceClipRepository clipRepo;
     @Autowired ArchiveServiceImpl archiveService;
     private final ObjectMapper json = new ObjectMapper();
     private ContentTestSupport.Repos repos;
@@ -180,6 +182,7 @@ class ArchiveFlowTest {
     // ------------------------------------------------------------------ 2. DRY_RUN
     @Test
     void dryRunCountsButNeverHandsOutWorkOrArchivesReleases() throws Exception {
+        file("a", 0);
         String orphan = file("a", 1);
         publishFresh(SHARED);
         publishNext("CH01", chapter("Chương 1 bản 2", SHARED));
@@ -463,7 +466,12 @@ class ArchiveFlowTest {
         assertThat(restored.path("url").isNull()).isTrue();
         assertThat(item(own.get(0)).getState()).isEqualTo(ArchiveState.RESTORING);
         assertThat(item(own.get(1)).getState()).as("tệp của bản khác không đụng").isEqualTo(ArchiveState.COUNTING);
-        // Đã khôi phục thì đặt lại làm bản đang chạy được.
+        // Bản đã khôi phục nhưng tệp còn chưa về máy chủ → chưa được đặt làm bản đang chạy (6011 kèm đường dẫn).
+        mvc.perform(post("/api/studio/releases/1.0.0/current").with(admin)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(6011)).andExpect(jsonPath("$.result[0]").value(own.get(0)));
+        // Mọi tệp đã về (máy lưu trữ báo restored) → đặt được.
+        Files.write(DIR.resolve(own.get(0)), "tep".getBytes(StandardCharsets.UTF_8));
+        worker(post("/api/archive-worker/items/" + item(own.get(0)).getId() + "/restored")).andExpect(status().isOk());
         mvc.perform(post("/api/studio/releases/1.0.0/current").with(admin)).andExpect(status().isOk());
     }
 
@@ -475,6 +483,7 @@ class ArchiveFlowTest {
         String stuckHere = file("a", 2);  // ARCHIVING quá 24 giờ, tệp vẫn còn
         String stuckGone = "a/" + "3".repeat(20) + ".webp";   // ARCHIVING quá 24 giờ, tệp đã rời máy chủ
         String inUse = file("a", 4);      // ARCHIVED, có trên đĩa và đang dùng → bỏ dòng
+        String lost = "a/" + "5".repeat(20) + ".webp";   // COUNTING mà tệp bị gỡ ngoài BE → vào "đã lưu trữ"
         publishFresh(SHARED, inUse);
         setMode(ArchivePolicy.Mode.ON);
         seed(ArchiveKind.IMAGE, back, ArchiveState.ARCHIVED, null);
@@ -485,10 +494,13 @@ class ArchiveFlowTest {
         s2.setClaimedAt(Instant.now().minus(Duration.ofHours(25)));
         itemRepo.save(s2);
         seed(ArchiveKind.IMAGE, inUse, ArchiveState.ARCHIVED, null);
+        seed(ArchiveKind.IMAGE, lost, ArchiveState.COUNTING, Instant.now().plus(Duration.ofDays(5)));
         Instant dueBefore = item(stuckHere).getDueAt();
 
         JsonNode run = runJob();
-        assertThat(run.path("reconciled").asInt()).isEqualTo(4);
+        assertThat(run.path("reconciled").asInt()).isEqualTo(5);
+        assertThat(item(lost).getState()).as("không xoá dòng").isEqualTo(ArchiveState.ARCHIVED);
+        assertThat(result(mvc.perform(get("/api/studio/archive/archived").with(admin))).toString()).contains(lost);
         assertThat(item(back).getState()).isEqualTo(ArchiveState.COUNTING);
         assertThat(item(back).getDueAt()).isAfter(Instant.now().plus(Duration.ofDays(29)));
         assertThat(item(stuckHere).getState()).isEqualTo(ArchiveState.COUNTING);
@@ -586,6 +598,154 @@ class ArchiveFlowTest {
         assertThat(lastSync().isNull() || lastSync().isMissingNode()).isTrue();
         Files.delete(STATUS);
         assertThat(lastSync().isNull() || lastSync().isMissingNode()).isTrue();
+    }
+
+    // ------------------------------------------------------------------ giọng của nháp (rà độc lập C1)
+    @Test
+    void draftVoicesNeededAfterComposeCountAsInUse() throws Exception {
+        file("a", 0);
+        publishFresh(SHARED);
+        String content = """
+                {"id":"chapter","title":"Chương 2",
+                 "personalization":{"tokens":{"item":{"default":"chiếc tai nghe","interest:SPORT":"đôi giày"}}},
+                 "scenes":[
+                   {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/%s","speakerId":"AN","text":"Mua {{item}} nhé","nextSceneId":"end"},
+                   {"id":"end","type":"ending"}]}
+                """.formatted(SHARED);
+        List<String> keys = voiceKeys.lines(json.readTree(content)).stream().map(l -> l.key()).distinct().toList();
+        assertThat(keys).as("câu có token: một khoá mỗi tổ hợp").hasSizeGreaterThanOrEqualTo(2);
+        List<com.doan.game.entity.VoiceClip> clips = keys.stream().map(this::doneClip).toList();
+        try {
+            for (String k : keys) {
+                voiceFile(k);
+            }
+            mvc.perform(put("/api/studio/chapters/CH02/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                    .content(content)).andExpect(status().isOk());
+            setMode(ArchivePolicy.Mode.ON);
+            assertThat(runJob().path("aborted").asBoolean()).isFalse();
+            for (String k : keys) {
+                assertThat(item("v/" + k + ".mp3")).as("giọng nháp sẽ cần không phải mồ côi").isNull();
+            }
+        } finally {
+            clipRepo.deleteAll(clips);
+        }
+    }
+
+    @Test
+    void archivedVoiceIsTreatedAsNotGenerated() throws Exception {
+        file("a", 0);
+        publishFresh(SHARED);
+        String content = """
+                {"id":"chapter","title":"Chương 2","scenes":[
+                  {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/%s","speakerId":"AN","text":"Chào bạn nhỏ","nextSceneId":"end"},
+                  {"id":"end","type":"ending"}]}
+                """.formatted(SHARED);
+        String key = voiceKeys.lines(json.readTree(content)).get(0).key();
+        String voice = "v/" + key + ".mp3";
+        com.doan.game.entity.VoiceClip clip = doneClip(key);
+        try {
+            seed(ArchiveKind.AUDIO, voice, ArchiveState.ARCHIVED, null);
+            mvc.perform(put("/api/studio/chapters/CH02/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                    .content(content)).andExpect(status().isOk());
+            assertThat(latestDraft("CH02")).as("không gắn voiceUrl tới tệp đã lưu trữ").doesNotContain(key);
+            String version = publishNext("CH02", content);
+            assertThat(version).isEqualTo("2.0.0");
+            assertThat(releaseChapterRepo.findByRelease_IdAndChapter_Code(
+                    releaseRepo.findByVersion(version).orElseThrow().getId(), "CH02").orElseThrow().getContent())
+                    .doesNotContain(key);
+            // Đối chứng: hết lưu trữ thì giọng được gắn lại như trước.
+            itemRepo.deleteAll();
+            mvc.perform(put("/api/studio/chapters/CH02/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                    .content(content)).andExpect(status().isOk());
+            assertThat(latestDraft("CH02")).contains(voice);
+        } finally {
+            clipRepo.delete(clip);
+        }
+    }
+
+    // ------------------------------------------------------------------ phanh về đĩa (rà độc lập N1)
+    @Test
+    void safetyBrakeWhenStoreLooksEmptyOrMissing() throws Exception {
+        file("a", 0);
+        String orphan = file("a", 1);
+        publishFresh(SHARED);
+        setMode(ArchivePolicy.Mode.ON);
+        runJob();
+        due(ArchiveKind.IMAGE, orphan);
+        ArchiveItem stuck = seed(ArchiveKind.IMAGE, "a/" + "7".repeat(20) + ".webp", ArchiveState.ARCHIVING, null);
+        stuck.setClaimedAt(Instant.now().minus(Duration.ofHours(30)));
+        itemRepo.save(stuck);
+
+        // Tệp bản đang chạy dùng không có trên đĩa → job và claim đều phanh.
+        Files.delete(DIR.resolve(SHARED));
+        JsonNode run = runJob();
+        assertThat(run.path("aborted").asBoolean()).isTrue();
+        assertThat(run.path("note").asText()).contains("không có trên máy chủ");
+        assertThat(claim(10)).isEmpty();
+        assertThat(item(orphan).getState()).isEqualTo(ArchiveState.COUNTING);
+
+        // Kho trống hẳn → phanh, không xoá đồng hồ, không biến ARCHIVING kẹt thành ARCHIVED.
+        Files.delete(DIR.resolve(orphan));
+        run = runJob();
+        assertThat(run.path("aborted").asBoolean()).isTrue();
+        assertThat(run.path("note").asText()).contains("không có tệp nào");
+        assertThat(item(orphan).getState()).isEqualTo(ArchiveState.COUNTING);
+        assertThat(item(stuck.getItemRef()).getState()).isEqualTo(ArchiveState.ARCHIVING);
+    }
+
+    // ------------------------------------------------------------------ OFF sau khi đã bật (rà độc lập N3)
+    @Test
+    void offAfterArchivingStillShowsArchivedAndRestores() throws Exception {
+        String gone = "a/" + "8".repeat(20) + ".webp";
+        ArchiveItem row = seed(ArchiveKind.IMAGE, gone, ArchiveState.ARCHIVED, null);
+        row.setSizeBytes(1234L);
+        itemRepo.save(row);
+        seed(ArchiveKind.IMAGE, file("a", 9), ArchiveState.COUNTING, Instant.now().plus(Duration.ofDays(1)));
+        setMode(ArchivePolicy.Mode.OFF);
+
+        JsonNode s = result(mvc.perform(get("/api/studio/archive/summary").with(admin)));
+        assertThat(s.path("enabled").asBoolean()).isFalse();
+        assertThat(s.path("archivedCount").asLong()).isEqualTo(1);
+        assertThat(s.path("archivedBytes").asLong()).isEqualTo(1234);
+        assertThat(s.path("countingCount").asLong()).isZero();
+        assertThat(s.path("dueSoonCount").asLong()).isZero();
+        assertThat(result(mvc.perform(get("/api/studio/archive/due-soon").with(admin))).size()).isZero();
+        JsonNode archived = result(mvc.perform(get("/api/studio/archive/archived").with(admin)));
+        assertThat(archived.get(0).path("ref").asText()).isEqualTo(gone);
+
+        mvc.perform(post("/api/studio/archive/" + row.getId() + "/restore").with(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.state").value("RESTORING"));
+        assertThat(result(mvc.perform(get("/api/studio/archive/summary").with(admin))).path("restoringCount").asLong())
+                .isEqualTo(1);
+        assertThat(result(mvc.perform(get("/api/studio/archive/log").with(admin))).get(0).path("action").asText())
+                .isEqualTo("RESTORE_REQUEST");
+        assertThat(result(worker(get("/api/archive-worker/restores"))).get(0).path("path").asText()).isEqualTo(gone);
+    }
+
+    // ------------------------------------------------------------------ tiện ích
+    private com.doan.game.entity.VoiceClip doneClip(String key) {
+        com.doan.game.entity.VoiceClip c = new com.doan.game.entity.VoiceClip();
+        c.setClipKey(key);
+        c.setProfile("adam");
+        c.setModelVersion(voiceKeys.modelVersion());
+        c.setReadText("thử");
+        c.setStatus(com.doan.game.enums.VoiceClipStatus.DONE);
+        c.setPath("v/" + key + ".mp3");
+        c.setRequestedAt(Instant.now());
+        c.setDoneAt(Instant.now());
+        return clipRepo.save(c);
+    }
+
+    private String latestDraft(String code) {
+        return draftRepo.findTopByChapter_IdOrderByRevisionDesc(chapterRepo.findByCode(code).orElseThrow().getId())
+                .orElseThrow().getContent();
+    }
+
+    /** Tệp giọng giả v/<khoá>.mp3. */
+    private static void voiceFile(String key) throws Exception {
+        Path p = DIR.resolve("v").resolve(key + ".mp3");
+        Files.createDirectories(p.getParent());
+        Files.write(p, "giong".getBytes(StandardCharsets.UTF_8));
     }
 
     // ------------------------------------------------------------------ tiện ích

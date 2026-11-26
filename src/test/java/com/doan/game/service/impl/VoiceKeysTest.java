@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VoiceKeysTest {
 
     private final VoiceKeys keys = new VoiceKeys(Mockito.mock(VoiceClipRepository.class), new ObjectMapper(),
-            new Personalizer(new ObjectMapper()));
+            new Personalizer(new ObjectMapper()), Mockito.mock(com.doan.game.repository.ArchiveItemRepository.class));
 
     @Test
     void sameKeysAsPython() throws Exception {

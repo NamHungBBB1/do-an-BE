@@ -174,7 +174,8 @@ BE không xoá tệp kho theo vòng đời, không gọi tiến trình ngoài; v
 - `app.archive.mode` OFF | DRY_RUN | ON (lạ → OFF). OFF: job không chạy, API Studio rỗng, claim rỗng. DRY_RUN: đếm + xem được,
   không phát việc, không lưu trữ bản phát hành.
 - "Đang dùng" = `AssetServiceImpl.usageIndexForArchive` (cùng bộ quét + cache `frozenRefs` của kho ảnh, bỏ bản đã lưu trữ, tính cả
-  giọng biến thể `personalization.voiceReady`). Kho ảnh và nút xoá vẫn dùng `usageIndex()` đủ mọi bản.
+  giọng biến thể `personalization.voiceReady` và mọi giọng nháp chưa phát hành sẽ cần). Giọng đã lưu trữ thì
+  `VoiceKeys.readyKeys` coi như chưa sinh (không gắn `voiceUrl`). Khoá máy lưu trữ kiểm ở `ArchiveWorkerConfig` (interceptor). Kho ảnh và nút xoá vẫn dùng `usageIndex()` đủ mọi bản.
 - `ArchivePolicy` (chế độ, thời hạn, chốt chặn ở luồng đang chạy) tách khỏi `ArchiveServiceImpl` để kho ảnh / nội dung gọi được
   mà không vòng phụ thuộc. Chốt: lưu nháp / gửi duyệt / phát hành trỏ tệp đã lưu trữ → 6011; đặt / lùi về bản đã lưu trữ → 6012.
 - Phanh: bản đang chạy không trỏ tệp nào, hoặc mồ côi mới > `max-new-orphan-ratio` → job không đổi gì, ghi JOB_ABORTED.

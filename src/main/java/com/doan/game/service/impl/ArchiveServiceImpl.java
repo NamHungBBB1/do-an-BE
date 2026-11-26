@@ -182,6 +182,9 @@ public class ArchiveServiceImpl implements ArchiveService {
             brake = "không đọc được thư mục kho";
         }
         if (brake == null) {
+            brake = diskProblem(usage, files::containsKey, files.isEmpty());
+        }
+        if (brake == null) {
             long newOrphans = files.keySet().stream()
                     .filter(p -> !usage.containsKey(p) && !fileRows.containsKey(p)).count();
             if (!firstRun && !files.isEmpty() && newOrphans > maxNewOrphanRatio * files.size()) {
@@ -228,7 +231,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             } else if (row.getState() == ArchiveState.ARCHIVING && isStuck(row, now)) {
                 row.setState(ArchiveState.COUNTING);   // giữ dueAt: lượt nhận việc sau thử lại
                 row.setClaimedAt(null);
-                policy.log(row, ArchiveAction.RECONCILED, null, "nhận việc quá 24 giờ, tệp vẫn còn");
+                policy.log(row, ArchiveAction.RECONCILED, null, "đối soát: tệp vẫn còn trên máy chủ, sẽ thử lại");
                 reconciled[0]++;
             }
         }
@@ -240,15 +243,15 @@ public class ArchiveServiceImpl implements ArchiveService {
             boolean inUse = usage.containsKey(row.getItemRef());
             switch (row.getState()) {
                 case COUNTING -> {
-                    itemRepo.delete(row);   // người dùng đã xoá ảnh mồ côi
-                    policy.log(row, ArchiveAction.COUNT_CLEAR, null, "tệp không còn trên máy chủ");
-                    cleared[0]++;
+                    // Xoá tay trong kho đã bỏ dòng (onAssetDelete); tệp mất ngoài BE thì đưa vào "đã lưu trữ" để còn nút khôi phục.
+                    markGone(row, now, inUse);
+                    reconciled[0]++;
                 }
                 case ARCHIVING -> {
                     if (isStuck(row, now)) {
                         row.setState(ArchiveState.ARCHIVED);
                         row.setArchivedAt(now);
-                        policy.log(row, ArchiveAction.RECONCILED, null, "nhận việc quá 24 giờ, tệp đã rời máy chủ");
+                        policy.log(row, ArchiveAction.RECONCILED, null, "đối soát: tệp không còn trên máy chủ");
                         reconciled[0]++;
                     }
                 }
@@ -265,6 +268,8 @@ public class ArchiveServiceImpl implements ArchiveService {
                 case RESTORING -> {
                     if (inUse) {
                         log.error("Tệp đang khôi phục {} đã được nội dung dùng", row.getItemRef());
+                        policy.log(row, ArchiveAction.RECONCILED, null, "đang được dùng, chờ khôi phục xong");
+                        reconciled[0]++;
                     }
                 }
             }
@@ -318,6 +323,34 @@ public class ArchiveServiceImpl implements ArchiveService {
                 policy.mode(), files.size(), counting, started[0], cleared[0], reconciled[0], archivedReleases);
         return new ArchiveRunResponse(false, files.size(), counting, started[0], cleared[0], reconciled[0], archivedReleases,
                 null);
+    }
+
+    /** Tệp mất khỏi máy chủ ngoài BE: ARCHIVED (đang dùng thì RESTORING luôn để kéo về). */
+    private void markGone(ArchiveItem row, Instant now, boolean inUse) {
+        row.setState(inUse ? ArchiveState.RESTORING : ArchiveState.ARCHIVED);
+        row.setArchivedAt(now);
+        row.setClaimedAt(null);
+        if (inUse) {
+            log.error("Tệp {} đang được nội dung dùng mà không còn trên máy chủ — tự yêu cầu khôi phục", row.getItemRef());
+            row.setRestoreRequestedAt(now);
+        }
+        policy.log(row, ArchiveAction.RECONCILED, null, inUse ? "đối soát: tệp không còn trên máy chủ, tự yêu cầu khôi phục"
+                : "đối soát: tệp không còn trên máy chủ, chuyển sang đã lưu trữ");
+    }
+
+    /**
+     * Phanh về đĩa (chốt chặn số 2): kho trống, hoặc bản đang chạy dùng tệp không có trên đĩa → thư mục kho mất / gắn nhầm, mọi
+     * kết luận về mồ côi đều sai. onDisk: tra tồn tại (job dùng kết quả quét, claim hỏi đĩa).
+     */
+    private String diskProblem(Map<String, List<AssetUsageResponse>> usage, java.util.function.Predicate<String> onDisk,
+                               boolean storeEmpty) {
+        if (storeEmpty) {
+            return "kho không có tệp nào";
+        }
+        long missing = usage.entrySet().stream()
+                .filter(e -> e.getValue().stream().anyMatch(u -> "CURRENT".equals(u.where())))
+                .filter(e -> !onDisk.test(e.getKey())).count();
+        return missing == 0 ? null : missing + " tệp bản đang chạy dùng không có trên máy chủ";
     }
 
     /** null = ổn. Có bản đang chạy mà không trỏ tới tệp nào (đọc JSON hỏng / mất kết nối) thì mọi tệp trông như mồ côi. */
@@ -387,9 +420,8 @@ public class ArchiveServiceImpl implements ArchiveService {
     @Override
     @Transactional(readOnly = true)
     public ArchiveSummaryResponse summary() {
-        if (!policy.enabled()) {
-            return new ArchiveSummaryResponse(false, 0, 0, 0, 0, 0, null);
-        }
+        // Đã lưu trữ / đang khôi phục là sự thật dù chế độ nào (từng bật rồi tắt vẫn phải thấy để khôi phục); đếm ngày chỉ khi bật.
+        boolean enabled = policy.enabled();
         Instant now = Instant.now(clock);
         long dueSoon = 0;
         long counting = 0;
@@ -399,9 +431,11 @@ public class ArchiveServiceImpl implements ArchiveService {
         for (ArchiveItem r : itemRepo.findAll()) {
             switch (r.getState()) {
                 case COUNTING -> {
-                    counting++;
-                    if (isDueSoon(r, now)) {
-                        dueSoon++;
+                    if (enabled) {
+                        counting++;
+                        if (isDueSoon(r, now)) {
+                            dueSoon++;
+                        }
                     }
                 }
                 case ARCHIVED -> {
@@ -413,7 +447,7 @@ public class ArchiveServiceImpl implements ArchiveService {
                 }
             }
         }
-        return new ArchiveSummaryResponse(true, dueSoon, counting, archived, restoring, bytes, lastSync());
+        return new ArchiveSummaryResponse(enabled, dueSoon, counting, archived, restoring, bytes, enabled ? lastSync() : null);
     }
 
     private boolean isDueSoon(ArchiveItem r, Instant now) {
@@ -453,9 +487,6 @@ public class ArchiveServiceImpl implements ArchiveService {
     @Override
     @Transactional(readOnly = true)
     public List<ArchiveItemResponse> archived() {
-        if (!policy.enabled()) {
-            return List.of();
-        }
         Comparator<ArchiveItem> newest = Comparator.comparing(
                 (ArchiveItem r) -> r.getArchivedAt() != null ? r.getArchivedAt() : r.getClaimedAt(),
                 Comparator.nullsFirst(Comparator.reverseOrder()));
@@ -535,9 +566,6 @@ public class ArchiveServiceImpl implements ArchiveService {
     @Override
     @Transactional(readOnly = true)
     public List<ArchiveLogResponse> log(Integer limit) {
-        if (!policy.enabled()) {
-            return List.of();
-        }
         int n = limit == null ? 100 : Math.max(1, Math.min(500, limit));
         return logRepo.findLatest(PageRequest.of(0, n)).stream()
                 .map(l -> new ArchiveLogResponse(l.getCreatedAt(), l.getAction(), l.getKind(), l.getItemRef(),
@@ -646,9 +674,12 @@ public class ArchiveServiceImpl implements ArchiveService {
                 .map(ArchiveItem::getItemRef).collect(Collectors.toSet());
         Map<String, List<AssetUsageResponse>> usage = assets.usageIndexForArchive(archivedVersions);
         String brake = currentUsageProblem(usage);
+        if (brake == null) {
+            brake = diskProblem(usage, p -> Files.exists(dir.resolve(p)), !Files.isDirectory(dir));
+        }
         if (brake != null) {
             log.error("Phanh an toàn khi phát việc lưu trữ: {} — không phát việc", brake);
-            policy.log(null, null, ArchiveAction.JOB_ABORTED, null, "phát việc: " + brake);
+            policy.log(null, null, ArchiveAction.JOB_ABORTED, null, "kiểm tra trước khi lưu trữ: " + brake);
             return List.of();
         }
         locked.sort(Comparator.comparing(ArchiveItem::getDueAt).thenComparing(ArchiveItem::getItemRef));
@@ -663,8 +694,7 @@ public class ArchiveServiceImpl implements ArchiveService {
                 continue;
             }
             if (!Files.exists(dir.resolve(row.getItemRef()))) {
-                itemRepo.delete(row);
-                policy.log(row, ArchiveAction.COUNT_CLEAR, null, "tệp không còn trên máy chủ");
+                markGone(row, now, false);   // không đang dùng (vừa kiểm ở trên)
                 continue;
             }
             row.setState(ArchiveState.ARCHIVING);

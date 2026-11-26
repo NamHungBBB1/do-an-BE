@@ -316,7 +316,7 @@ public class ContentServiceImpl implements ContentService {
         if (release.getRecalledAt() != null) {
             throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, version + " đã bị thu hồi — phát hành bản sửa");
         }
-        archivePolicy.requireReleaseUsable(version);
+        archivePolicy.requireReleaseUsable(version, chapterJsons(release));
         moveCurrentPointer(release);
         log.info("Đổi bản hiện tại sang {} bởi {}", version, callerId);
         return toSummary(release);
@@ -343,7 +343,7 @@ public class ContentServiceImpl implements ContentService {
                 .orElseThrow(() -> new AppException(ErrorCode.RELEASE_STATE_CONFLICT,
                         "không còn bản cũ hơn để lùi về — phát hành bản sửa thay vì thu hồi"));
         // Lùi về bản đã lưu trữ = đưa nó lên chạy khi tệp của nó có thể không còn: khôi phục bản đó trước.
-        archivePolicy.requireReleaseUsable(previous.getVersion());
+        archivePolicy.requireReleaseUsable(previous.getVersion(), chapterJsons(previous));
         target.setRecalledAt(Instant.now(clock));
         target.setRecalledBy(accountRepo.findById(callerId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId)));
@@ -529,6 +529,11 @@ public class ContentServiceImpl implements ContentService {
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.UNCATEGORIZED, "JSON chương hỏng trong DB: " + code);
         }
+    }
+
+    private List<String> chapterJsons(GameRelease release) {
+        return releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(release.getId()).stream()
+                .map(ReleaseChapter::getContent).toList();
     }
 
     /** Đúng một bản isCurrent = true. */

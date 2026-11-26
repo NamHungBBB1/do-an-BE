@@ -201,7 +201,10 @@ public class ArchivePolicy {
      * danh sách đường dẫn; khoá các dòng tìm được để máy lưu trữ nhận việc cùng lúc phải chờ lần ghi này rồi mới tính lại chỗ dùng.
      */
     public void requireFilesUsable(String json) {
-        Set<String> paths = filePaths(json);
+        requirePathsUsable(filePaths(json));
+    }
+
+    private void requirePathsUsable(Set<String> paths) {
         if (paths.isEmpty()) {
             return;
         }
@@ -212,13 +215,19 @@ public class ArchivePolicy {
         }
     }
 
-    /** Bản phát hành đã lưu trữ không được đưa lên chạy (đặt làm hiện tại / lùi về). */
-    public void requireReleaseUsable(String version) {
+    /**
+     * Bản đưa lên chạy (đặt làm hiện tại / lùi về): bản đã lưu trữ → 6012; bản đã khôi phục nhưng còn tệp (kể cả giọng voiceReady)
+     * chưa về máy chủ → 6011 kèm danh sách đường dẫn, để trẻ không tải phải bản thiếu ảnh / giọng.
+     */
+    public void requireReleaseUsable(String version, List<String> chapterJsons) {
         itemRepo.findByKindAndItemRef(ArchiveKind.RELEASE, version)
                 .filter(row -> row.getState() != ArchiveState.COUNTING)
                 .ifPresent(row -> {
                     throw new AppException(ErrorCode.RELEASE_ARCHIVED, version);
                 });
+        Set<String> paths = new LinkedHashSet<>();
+        chapterJsons.forEach(j -> paths.addAll(filePaths(j)));
+        requirePathsUsable(paths);
     }
 
     /** Đường dẫn tệp kho trong một JSON chương: chuỗi {{ASSET_BASE}}/… và giọng biến thể đóng băng (voiceReady). */
