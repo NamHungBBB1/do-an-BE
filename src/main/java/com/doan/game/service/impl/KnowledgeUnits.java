@@ -25,7 +25,7 @@ final class KnowledgeUnits {
 
     /**
      * Tám chủ đề (domain) của khung v3, theo thứ tự. Tên tiếng Việt dịch từ tên khung (build/khung-bao-cao-ai/
-     * khung-kien-thuc-v3.md mục D01–D08) — nháp 26/11, chờ HA duyệt câu chữ.
+     * khung-kien-thuc-v3.md mục D01–D08) — HA duyệt 26/11 (D07 đổi thành "Bảo vệ tài chính", phạm vi giữ nguyên Risk, Insurance & Safety).
      */
     static final Map<String, String> DOMAINS = orderedDomains();
 
@@ -37,7 +37,7 @@ final class KnowledgeUnits {
         m.put("D04", "Tiết kiệm và ngân hàng");
         m.put("D05", "Đầu tư");
         m.put("D06", "Tín dụng và nợ");
-        m.put("D07", "Rủi ro, bảo hiểm và an toàn");
+        m.put("D07", "Bảo vệ tài chính");
         m.put("D08", "Ra quyết định tài chính");
         return java.util.Collections.unmodifiableMap(m);
     }
