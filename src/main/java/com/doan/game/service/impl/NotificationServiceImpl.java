@@ -23,6 +23,8 @@ import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.NotificationService;
+import com.doan.game.service.PushMessage;
+import com.doan.game.service.PushNotifier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -67,6 +69,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final RunStateRepository runStateRepo;
     private final QuizResultRepository quizResultRepo;
     private final QuizRepository quizRepo;
+    private final PushNotifier pushNotifier;
     private final Clock clock;
 
     // ------------------------------------------------------------------ đọc
@@ -216,6 +219,7 @@ public class NotificationServiceImpl implements NotificationService {
         n.setCreatedAt(now);
         n.setUpdatedAt(now);
         notificationRepo.save(n);
+        push(n);
     }
 
     /**
@@ -247,6 +251,29 @@ public class NotificationServiceImpl implements NotificationService {
         n.setCreatedAt(now);
         n.setUpdatedAt(now);
         notificationRepo.save(n);
+        // Chỉ đẩy khi dòng gộp MỚI. Có em nộp thêm thì dòng cũ chỉ đổi mốc — đẩy cả 40 lần một
+        // tiết là spam điện thoại giáo viên; chuông trong app vẫn nổi lại chưa đọc.
+        push(n);
+    }
+
+    /**
+     * Dựng tin đẩy từ ĐÚNG câu chữ của chuông (ghép lúc đọc) rồi giao {@link PushNotifier}.
+     *
+     * <p>Gọi trong transaction để còn đọc được slot/group; PushNotifier hoãn gửi tới sau commit nên
+     * rollback không để lại tin đã đẩy. Không có khoá Firebase thì PushNotifier tự bỏ qua.
+     */
+    private void push(Notification n) {
+        NotificationResponse r = toResponse(n, new HashMap<>());
+        Map<String, String> data = new HashMap<>();
+        data.put("notificationId", n.getId().toString());
+        data.put("type", r.type().name());
+        if (r.action() != null && r.action().type() != null) {
+            data.put("actionType", r.action().type());
+            if (r.action().resourceId() != null) {
+                data.put("resourceId", r.action().resourceId().toString());
+            }
+        }
+        pushNotifier.notify(n.getRecipient().getId(), new PushMessage(r.title(), r.message(), data));
     }
 
     // ------------------------------------------------------------------ ghép câu chữ lúc đọc

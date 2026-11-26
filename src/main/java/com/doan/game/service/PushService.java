@@ -22,10 +22,9 @@ import org.springframework.stereotype.Service;
  * {@link #send} trả {@link Outcome#DISABLED} — không ném, vì push là phụ: hỏng push không được làm
  * hỏng luồng tạo thông báo (giống mail, chuông trong app vẫn còn).
  *
- * <p><b>Chưa nối vào luồng nghiệp vụ.</b> Cần bảng {@code device_token} (qua ERD) để biết gửi cho
- * thiết bị nào; khi có bảng đó, ba chỗ móc trong NotificationServiceImpl gọi
- * {@code pushService.send(token, new PushMessage(title, body, data))} cho từng token của tài khoản
- * nhận. Token chết (FCM trả UNREGISTERED) thì chỗ gọi xoá dòng đó khỏi bảng.
+ * <p>Đã nối vào luồng nghiệp vụ: NotificationServiceImpl dựng {@link PushMessage} từ đúng câu chữ của
+ * chuông, {@link PushNotifier} gửi cho mọi token của tài khoản nhận (bảng {@code device_token}) sau
+ * khi transaction commit. Token chết (FCM trả UNREGISTERED) thì chỗ gọi xoá luôn dòng đó.
  */
 @Service
 public class PushService {

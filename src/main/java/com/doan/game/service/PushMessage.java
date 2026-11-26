@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * Nội dung một tin push. Tách khỏi {@link PushService} để chỗ gọi không phụ thuộc SDK Firebase.
  *
- * {@code data} là phần app đọc khi người dùng bấm vào tin (xem docs/push/README.md):
+ * {@code data} là phần app đọc khi người dùng bấm vào tin:
  *   notificationId — chống trùng, FCM có thể gửi lặp cùng một tin
  *   type           — CHAPTER_COMPLETED | QUIZ_SUBMITTED | REPORT_READY
  *   actionType     — OPEN_LEARNER_REPORT | OPEN_GROUP_REPORT | OPEN_QUIZ_RESULTS | OPEN_LEARNER_LIST
