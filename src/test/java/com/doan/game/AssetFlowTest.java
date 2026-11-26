@@ -156,6 +156,7 @@ class AssetFlowTest {
         Path thumb = DIR.resolve("t").resolve(name);
         assertThat(r.path("asset").path("thumbUrl").asText()).endsWith("/t/" + name);
         assertThat(new String(Files.readAllBytes(thumb), 8, 4, StandardCharsets.US_ASCII)).isEqualTo("WEBP");
+        assertThat(AssetImageTest.widthOf(Files.readAllBytes(thumb))).as("ảnh hẹp hơn 320 không bị phóng to").isEqualTo(4);
         Files.delete(thumb);
         assetService.backfillThumbnails();
         assertThat(Files.exists(thumb)).isTrue();

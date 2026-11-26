@@ -391,12 +391,17 @@ public class AssetServiceImpl implements AssetService {
         try {
             out = Files.createTempFile("thumb-", ".webp");
             Process p = new ProcessBuilder(cwebp, "-quiet", "-q", String.valueOf(THUMB_QUALITY), "-metadata", "none",
-                    "-resize", String.valueOf(THUMB_WIDTH), "0", dir.resolve(path).toString(), "-o", out.toString())
+                    "-resize", String.valueOf(THUMB_WIDTH), "0", "-resize_mode", "down_only", dir.resolve(path).toString(), "-o", out.toString())
                     .redirectErrorStream(true).start();
-            String err = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            if (!p.waitFor(60, TimeUnit.SECONDS) || p.exitValue() != 0) {
+            // Chờ trước rồi mới đọc: đọc trước sẽ treo theo cwebp, mất tác dụng của giới hạn 60 giây (-quiet nên đầu ra nhỏ).
+            if (!p.waitFor(60, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
-                log.warn("Không tạo được hình thu nhỏ {}: {}", path, err.strip());
+                log.warn("Không tạo được hình thu nhỏ {}: quá 60 giây", path);
+                return false;
+            }
+            if (p.exitValue() != 0) {
+                log.warn("Không tạo được hình thu nhỏ {}: {}", path,
+                        new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip());
                 return false;
             }
             writeOnce(thumbPath(path), Files.readAllBytes(out));
