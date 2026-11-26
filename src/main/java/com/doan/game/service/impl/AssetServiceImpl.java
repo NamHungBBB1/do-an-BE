@@ -57,6 +57,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -248,32 +249,45 @@ public class AssetServiceImpl implements AssetService {
         UUID currentId = releaseRepo.findFirstByIsCurrentTrue().map(GameRelease::getId).orElse(null);
         for (GameRelease r : releaseRepo.findAll()) {
             String where = r.getId().equals(currentId) ? "CURRENT" : "OLD";
-            for (ReleaseChapter rc : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(r.getId())) {
-                scan(acc, rc.getContent(), rc.getChapter().getCode(), where, r.getVersion());
+            for (ChapterRefs c : frozenRefs.computeIfAbsent(r.getId(), this::refsOfRelease)) {
+                add(acc, c.refs(), c.chapter(), where, r.getVersion());
             }
         }
         for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
             // Nháp RELEASED trùng nội dung bản đã phát hành — đã đếm ở trên.
             draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId())
                     .filter(d -> d.getStatus() != DraftStatus.RELEASED)
-                    .ifPresent(d -> scan(acc, d.getContent(), c.getCode(), "DRAFT", null));
+                    .ifPresent(d -> add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null));
         }
         Map<String, List<AssetUsageResponse>> out = new LinkedHashMap<>();
         acc.forEach((path, byPlace) -> out.put(path, byPlace.values().stream().map(Usage::toResponse).toList()));
         return out;
     }
 
-    private void scan(Map<String, Map<String, Usage>> acc, String json, String chapter, String where, String version) {
+    /** Bản phát hành đã đóng băng, không đổi nội dung: quét một lần rồi giữ (trước đây mỗi lần gọi quét lại mọi bản, ~5 giây). */
+    private final Map<UUID, List<ChapterRefs>> frozenRefs = new ConcurrentHashMap<>();
+
+    private record ChapterRefs(String chapter, Map<String, Set<String>> refs) {
+    }
+
+    private List<ChapterRefs> refsOfRelease(UUID releaseId) {
+        return releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(releaseId).stream()
+                .map(rc -> new ChapterRefs(rc.getChapter().getCode(), refs(rc.getContent())))
+                .toList();
+    }
+
+    /** Đường dẫn tệp có trong JSON chương → các cảnh nhắc tới nó. */
+    private Map<String, Set<String>> refs(String json) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
         if (json == null) {
-            return;
+            return out;
         }
-        Set<String> paths = new LinkedHashSet<>();
         Matcher m = REF.matcher(json);
         while (m.find()) {
-            paths.add(m.group(1));
+            out.computeIfAbsent(m.group(1), k -> new LinkedHashSet<>());
         }
-        if (paths.isEmpty()) {
-            return;
+        if (out.isEmpty()) {
+            return out;
         }
         JsonNode scenes;
         try {
@@ -281,18 +295,28 @@ public class AssetServiceImpl implements AssetService {
         } catch (IOException e) {
             scenes = objectMapper.createArrayNode();
         }
-        for (String path : paths) {
+        for (JsonNode s : scenes) {
+            String text = s.toString();
+            String id = s.path("id").asText();
+            out.forEach((path, sceneIds) -> {
+                if (text.contains(path)) {
+                    sceneIds.add(id);
+                }
+            });
+        }
+        return out;
+    }
+
+    private void add(Map<String, Map<String, Usage>> acc, Map<String, Set<String>> refs, String chapter, String where,
+                     String version) {
+        refs.forEach((path, sceneIds) -> {
             Usage u = acc.computeIfAbsent(path, k -> new LinkedHashMap<>())
                     .computeIfAbsent(chapter + "|" + where, k -> new Usage(chapter, where));
             if (version != null) {
                 u.versions.add(version);
             }
-            for (JsonNode s : scenes) {
-                if (s.toString().contains(path)) {
-                    u.sceneIds.add(s.path("id").asText());
-                }
-            }
-        }
+            u.sceneIds.addAll(sceneIds);
+        });
     }
 
     private static final class Usage {
