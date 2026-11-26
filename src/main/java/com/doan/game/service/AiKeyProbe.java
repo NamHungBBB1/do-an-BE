@@ -8,7 +8,7 @@ import com.doan.game.enums.AiProviderKind;
  */
 public interface AiKeyProbe {
 
-    /** OK: dùng được · INVALID: khoá sai / bị thu (400, 401, 403) · QUOTA: hết lượt (402, 429) · ERROR: mạng / lỗi khác. */
+    /** OK: dùng được · INVALID: khoá sai / bị thu (400, 401, 403) hoặc Gemini 404 (project không được dùng model) · QUOTA: hết lượt (402, 429) · ERROR: mạng / lỗi khác. */
     enum Outcome { OK, INVALID, QUOTA, ERROR }
 
     record Result(Outcome outcome, String detail) {

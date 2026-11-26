@@ -46,7 +46,7 @@ final class AiCallClassifier {
             "RECITATION", "IMAGE_SAFETY");
     private static final Pattern DELAY = Pattern.compile("(\\d+(?:\\.\\d+)?)s");
     private static final Pattern LONG_DIGITS = Pattern.compile("\\d{6,}");
-    private static final Pattern KEY_LIKE = Pattern.compile("AIza[0-9A-Za-z_\\-]{10,}|sk-or-[0-9A-Za-z_\\-]{6,}|"
+    private static final Pattern KEY_LIKE = Pattern.compile("AIza[0-9A-Za-z_\\-]{10,}|AQ\\.[0-9A-Za-z_.\\-]{10,}|sk-or-[0-9A-Za-z_\\-]{6,}|"
             + "sk-[0-9A-Za-z_\\-]{16,}");
 
     private AiCallClassifier() {

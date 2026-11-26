@@ -27,7 +27,7 @@ public class HttpAiTextClient implements AiTextClient {
     private final String openRouterModel;
 
     public HttpAiTextClient(ObjectMapper json,
-                            @Value("${app.ai.gemini-model:gemini-2.5-flash}") String geminiModel,
+                            @Value("${app.ai.gemini-model:gemini-3.5-flash-lite}") String geminiModel,
                             @Value("${app.ai.openrouter-model:google/gemini-2.5-flash}") String openRouterModel) {
         this.json = json;
         this.geminiModel = geminiModel;
