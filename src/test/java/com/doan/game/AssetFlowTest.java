@@ -11,6 +11,7 @@ import com.doan.game.repository.ChapterRepository;
 import com.doan.game.repository.GameReleaseRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.service.impl.AssetImageTest;
+import com.doan.game.service.impl.AssetServiceImpl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Kho ảnh (24/10, đợt 2a): tải lên WebP / PNG, trùng thì trả bản cũ, trạng thái tính từ JSON (mồ côi → mới → đang dùng),
  * xem được cả tệp chưa đăng ký mà nội dung đang trỏ, chỉ xoá được tệp mồ côi, Reviewer chỉ xem.
  */
-@SpringBootTest(properties = "app.assets.dir=target/test-assets")
+// Tắt tạo bù hình thu nhỏ lúc khởi động: luồng nền đó chạy song song với clean() xoá thư mục kho.
+@SpringBootTest(properties = {"app.assets.dir=target/test-assets", "app.assets.thumb-backfill=false"})
 @AutoConfigureMockMvc
 class AssetFlowTest {
 
@@ -61,6 +63,7 @@ class AssetFlowTest {
     @Autowired GameReleaseRepository releaseRepo;
     @Autowired ChapterDraftRepository draftRepo;
     @Autowired ChapterRepository chapterRepo;
+    @Autowired AssetServiceImpl assetService;
     private final ObjectMapper json = new ObjectMapper();
 
     @BeforeEach
@@ -147,6 +150,33 @@ class AssetFlowTest {
         assertThat(webp[20] & 0x10).as("cờ alpha").isNotZero();
         assertThat(r.path("asset").path("width").asInt()).isEqualTo(4);
         assertThat(r.path("asset").path("height").asInt()).isEqualTo(6);
+
+        // Tải lên tạo luôn hình thu nhỏ; mất thì lần tạo bù lúc khởi động làm lại.
+        String name = r.path("asset").path("ref").asText().substring("{{ASSET_BASE}}/a/".length());
+        Path thumb = DIR.resolve("t").resolve(name);
+        assertThat(r.path("asset").path("thumbUrl").asText()).endsWith("/t/" + name);
+        assertThat(new String(Files.readAllBytes(thumb), 8, 4, StandardCharsets.US_ASCII)).isEqualTo("WEBP");
+        Files.delete(thumb);
+        assetService.backfillThumbnails();
+        assertThat(Files.exists(thumb)).isTrue();
+    }
+
+    /** thumbUrl chỉ có khi tệp t/<tên>.webp nằm trên đĩa — ghi tay để không phụ thuộc cwebp trên máy test. */
+    @Test
+    void thumbUrlOnlyWhenThumbnailFileExists() throws Exception {
+        RequestPostProcessor editor = as(Role.GAME_EDITOR);
+        JsonNode asset = result(upload(editor, AssetImageTest.VP8, "the.webp").andExpect(status().isOk())).path("asset");
+        String id = asset.path("id").asText();
+        String name = asset.path("ref").asText().substring("{{ASSET_BASE}}/a/".length());
+        Path thumb = DIR.resolve("t").resolve(name);
+        Files.deleteIfExists(thumb);   // có cwebp thì upload đã tạo sẵn
+        assertThat(result(mvc.perform(get("/api/studio/assets/" + id).with(editor))).path("thumbUrl").textValue()).isNull();
+
+        Files.createDirectories(thumb.getParent());
+        Files.write(thumb, AssetImageTest.VP8);
+        String base = env.getProperty("app.assets.base-url").replaceAll("/+$", "");
+        assertThat(result(mvc.perform(get("/api/studio/assets/" + id).with(editor))).path("thumbUrl").textValue())
+                .isEqualTo(base + "/t/" + name);
     }
 
     private boolean cwebpAvailable() {
