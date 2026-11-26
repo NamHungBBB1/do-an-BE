@@ -57,6 +57,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,6 +78,9 @@ public class AssetServiceImpl implements AssetService {
     // Cùng thông số ops/finteen-assets/build_assets.py (71 ảnh hiện có): rộng ≤ 1920, chất lượng 80.
     private static final int MAX_WIDTH = 1920;
     private static final int QUALITY = 80;
+    // Hình thu nhỏ cho màn kho ảnh (26/11): thẻ hiển thị ≤ 320 px, tải 558 ảnh gốc ≈ 60 MB là quá nặng.
+    private static final int THUMB_WIDTH = 320;
+    private static final int THUMB_QUALITY = 70;
     private static final Set<Role> WRITERS = Set.of(Role.ADMIN, Role.GAME_EDITOR, Role.GAME_MANAGER);
 
     private final AssetRepository assetRepo;
@@ -188,6 +192,7 @@ public class AssetServiceImpl implements AssetService {
         }
         String path = "a/" + sha.substring(0, 20) + ".webp";
         writeOnce(path, webp);
+        createThumbnail(path);
 
         Asset a = new Asset();
         a.setKind(AssetKind.IMAGE);
@@ -234,6 +239,7 @@ public class AssetServiceImpl implements AssetService {
         assetRepo.delete(a);
         try {
             Files.deleteIfExists(dir.resolve(a.getPath()));
+            Files.deleteIfExists(dir.resolve(thumbPath(a.getPath())));
         } catch (IOException e) {
             // Phiếu đã xoá; tệp sót lại vô hại (tên theo hash, không ai trỏ tới) — dọn kho đợt 4 sẽ gom.
             log.warn("Không xoá được tệp {}: {}", a.getPath(), e.getMessage());
@@ -248,32 +254,45 @@ public class AssetServiceImpl implements AssetService {
         UUID currentId = releaseRepo.findFirstByIsCurrentTrue().map(GameRelease::getId).orElse(null);
         for (GameRelease r : releaseRepo.findAll()) {
             String where = r.getId().equals(currentId) ? "CURRENT" : "OLD";
-            for (ReleaseChapter rc : releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(r.getId())) {
-                scan(acc, rc.getContent(), rc.getChapter().getCode(), where, r.getVersion());
+            for (ChapterRefs c : frozenRefs.computeIfAbsent(r.getId(), this::refsOfRelease)) {
+                add(acc, c.refs(), c.chapter(), where, r.getVersion());
             }
         }
         for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
             // Nháp RELEASED trùng nội dung bản đã phát hành — đã đếm ở trên.
             draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId())
                     .filter(d -> d.getStatus() != DraftStatus.RELEASED)
-                    .ifPresent(d -> scan(acc, d.getContent(), c.getCode(), "DRAFT", null));
+                    .ifPresent(d -> add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null));
         }
         Map<String, List<AssetUsageResponse>> out = new LinkedHashMap<>();
         acc.forEach((path, byPlace) -> out.put(path, byPlace.values().stream().map(Usage::toResponse).toList()));
         return out;
     }
 
-    private void scan(Map<String, Map<String, Usage>> acc, String json, String chapter, String where, String version) {
+    /** Bản phát hành đã đóng băng, không đổi nội dung: quét một lần rồi giữ (trước đây mỗi lần gọi quét lại mọi bản, ~5 giây). */
+    private final Map<UUID, List<ChapterRefs>> frozenRefs = new ConcurrentHashMap<>();
+
+    private record ChapterRefs(String chapter, Map<String, Set<String>> refs) {
+    }
+
+    private List<ChapterRefs> refsOfRelease(UUID releaseId) {
+        return releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(releaseId).stream()
+                .map(rc -> new ChapterRefs(rc.getChapter().getCode(), refs(rc.getContent())))
+                .toList();
+    }
+
+    /** Đường dẫn tệp có trong JSON chương → các cảnh nhắc tới nó. */
+    private Map<String, Set<String>> refs(String json) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
         if (json == null) {
-            return;
+            return out;
         }
-        Set<String> paths = new LinkedHashSet<>();
         Matcher m = REF.matcher(json);
         while (m.find()) {
-            paths.add(m.group(1));
+            out.computeIfAbsent(m.group(1), k -> new LinkedHashSet<>());
         }
-        if (paths.isEmpty()) {
-            return;
+        if (out.isEmpty()) {
+            return out;
         }
         JsonNode scenes;
         try {
@@ -281,18 +300,28 @@ public class AssetServiceImpl implements AssetService {
         } catch (IOException e) {
             scenes = objectMapper.createArrayNode();
         }
-        for (String path : paths) {
+        for (JsonNode s : scenes) {
+            String text = s.toString();
+            String id = s.path("id").asText();
+            out.forEach((path, sceneIds) -> {
+                if (text.contains(path)) {
+                    sceneIds.add(id);
+                }
+            });
+        }
+        return out;
+    }
+
+    private void add(Map<String, Map<String, Usage>> acc, Map<String, Set<String>> refs, String chapter, String where,
+                     String version) {
+        refs.forEach((path, sceneIds) -> {
             Usage u = acc.computeIfAbsent(path, k -> new LinkedHashMap<>())
                     .computeIfAbsent(chapter + "|" + where, k -> new Usage(chapter, where));
             if (version != null) {
                 u.versions.add(version);
             }
-            for (JsonNode s : scenes) {
-                if (s.toString().contains(path)) {
-                    u.sceneIds.add(s.path("id").asText());
-                }
-            }
-        }
+            u.sceneIds.addAll(sceneIds);
+        });
     }
 
     private static final class Usage {
@@ -375,6 +404,81 @@ public class AssetServiceImpl implements AssetService {
             deleteQuietly(in);
             deleteQuietly(out);
         }
+    }
+
+    /**
+     * Hình thu nhỏ t/<tên>.webp cạnh a/<tên>.webp — suy ra từ tên nên không cần cột DB. Hỏng chỉ log: ảnh gốc vẫn dùng
+     * được, lần khởi động sau AssetThumbnailBackfill thử lại.
+     */
+    boolean createThumbnail(String path) {
+        Path out = null;
+        try {
+            out = Files.createTempFile("thumb-", ".webp");
+            Process p = new ProcessBuilder(cwebp, "-quiet", "-q", String.valueOf(THUMB_QUALITY), "-metadata", "none",
+                    "-resize", String.valueOf(THUMB_WIDTH), "0", "-resize_mode", "down_only", dir.resolve(path).toString(), "-o", out.toString())
+                    .redirectErrorStream(true).start();
+            // Chờ trước rồi mới đọc: đọc trước sẽ treo theo cwebp, mất tác dụng của giới hạn 60 giây (-quiet nên đầu ra nhỏ).
+            if (!p.waitFor(60, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                log.warn("Không tạo được hình thu nhỏ {}: quá 60 giây", path);
+                return false;
+            }
+            if (p.exitValue() != 0) {
+                log.warn("Không tạo được hình thu nhỏ {}: {}", path,
+                        new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip());
+                return false;
+            }
+            writeOnce(thumbPath(path), Files.readAllBytes(out));
+            return true;
+        } catch (IOException | AppException e) {
+            log.warn("Không tạo được hình thu nhỏ {}: {}", path, e.getMessage());
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } finally {
+            deleteQuietly(out);
+        }
+    }
+
+    /** Tạo bù hình thu nhỏ cho ảnh có trước 26/11 (gọi từ AssetThumbnailBackfill); ảnh lỗi thì log rồi đi tiếp. */
+    public void backfillThumbnails() {
+        Path images = dir.resolve("a");
+        if (!Files.isDirectory(images)) {
+            return;
+        }
+        int made = 0;
+        int failed = 0;
+        try (var files = Files.list(images)) {
+            for (Path f : (Iterable<Path>) files::iterator) {
+                String path = "a/" + f.getFileName();
+                if (!path.endsWith(".webp") || Files.exists(dir.resolve(thumbPath(path)))) {
+                    continue;
+                }
+                if (createThumbnail(path)) {
+                    made++;
+                } else {
+                    failed++;
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Không duyệt được {}: {}", images, e.getMessage());
+        }
+        log.info("Tạo bù hình thu nhỏ: {} tạo, {} lỗi", made, failed);
+    }
+
+    /** a/<tên>.webp → t/<tên>.webp. */
+    private static String thumbPath(String path) {
+        return "t/" + path.substring(path.indexOf('/') + 1);
+    }
+
+    /** Một Files.exists mỗi dòng — kho vài trăm ảnh, không cần cache. */
+    private String thumbUrl(AssetKind kind, String path) {
+        if (kind != AssetKind.IMAGE) {
+            return null;
+        }
+        String thumb = thumbPath(path);
+        return Files.exists(dir.resolve(thumb)) ? assetBase + "/" + thumb : null;
     }
 
     /** Rộng ảnh PNG / JPEG đọc từ header bằng ImageIO (không giải mã cả ảnh); -1 nếu không đọc được. */
@@ -498,13 +602,14 @@ public class AssetServiceImpl implements AssetService {
         Account by = a.getUploadedBy();
         return new AssetResponse(a.getId(), true, a.getKind(), "{{ASSET_BASE}}/" + a.getPath(), assetBase + "/" + a.getPath(),
                 a.getSizeBytes(), a.getWidth(), a.getHeight(), a.getLabel(), a.getChapterCode(),
-                by == null ? null : by.getDisplayName(), a.getCreatedAt(), status(usage), usage);
+                by == null ? null : by.getDisplayName(), a.getCreatedAt(), status(usage), usage,
+                thumbUrl(a.getKind(), a.getPath()));
     }
 
     private AssetResponse unregistered(String path, List<AssetUsageResponse> usage) {
         AssetKind kind = path.startsWith("v/") ? AssetKind.AUDIO : AssetKind.IMAGE;
         return new AssetResponse(null, false, kind, "{{ASSET_BASE}}/" + path, assetBase + "/" + path,
-                null, null, null, null, null, null, null, status(usage), usage);
+                null, null, null, null, null, null, null, status(usage), usage, thumbUrl(kind, path));
     }
 
     private static String sha256(byte[] bytes) {

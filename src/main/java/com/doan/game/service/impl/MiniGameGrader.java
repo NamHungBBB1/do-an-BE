@@ -69,6 +69,13 @@ public final class MiniGameGrader {
         return out;
     }
 
+    /** Ô nhập MỘT câu đọc tới (play-v2: gắn seq của ô nhập vào kết quả câu). */
+    public static Set<String> inputsOf(Question q) {
+        Set<String> used = new LinkedHashSet<>();
+        inputsOf(q.rule(), q.input(), used);
+        return used;
+    }
+
     /** Ô nhập mọi câu của cảnh đọc tới — ô FE gửi mà không nằm đây thì bỏ qua (log ở nơi gọi). */
     public static Set<String> inputsUsed(JsonNode scene) {
         Set<String> used = new HashSet<>();

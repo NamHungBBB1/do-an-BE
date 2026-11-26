@@ -18,11 +18,15 @@ import com.doan.game.repository.QuizRepository;
 import com.doan.game.repository.QuizResultRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.NotificationService;
+import com.doan.game.service.PushMessage;
+import com.doan.game.service.PushNotifier;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +37,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -71,6 +78,8 @@ class NotificationFlowTest {
     private QuizRepository quizRepo;
     @Autowired
     private QuizResultRepository quizResultRepo;
+    @MockitoBean
+    private PushNotifier pushNotifier;
 
     // ------------------------------------------------------------------ phụ huynh
 
@@ -165,6 +174,48 @@ class NotificationFlowTest {
                 .andExpect(jsonPath("$.result.items.length()").value(1))
                 .andExpect(jsonPath("$.result.items[0].slotDisplayName").doesNotExist())
                 .andExpect(jsonPath("$.result.items[0].title").value(containsString("Học sinh đã xoá")));
+    }
+
+    // ------------------------------------------------------------------ push
+
+    @Test
+    void pushUsesTheBellTextAndCarriesNavigationData() {
+        Account parent = adult("push-phu-huynh");
+        LearnerGroup family = group(parent, LearningContext.FAMILY);
+        LearnerSlot kid = slot(family, "Minh");
+        org.mockito.Mockito.when(pushNotifier.isEnabled()).thenReturn(true);
+
+        notifications.notifyChapterCompleted(kid, 3, 1);
+
+        ArgumentCaptor<PushMessage> sent = ArgumentCaptor.forClass(PushMessage.class);
+        verify(pushNotifier).notify(eq(parent.getId()), sent.capture());
+        PushMessage message = sent.getValue();
+        assertThat(message.title()).contains("Minh").contains("Chương 3");
+        assertThat(message.body()).contains("Minh").contains("chương 3");
+        assertThat(message.data())
+                .containsEntry("type", "CHAPTER_COMPLETED")
+                .containsEntry("actionType", "OPEN_LEARNER_REPORT")
+                .containsEntry("resourceId", kid.getId().toString())
+                .containsKey("notificationId");
+    }
+
+    @Test
+    void teacherPushFiresOnlyWhenTheGroupedRowIsCreatedNotOnEverySubmit() {
+        Account teacher = adult("push-giao-vien");
+        LearnerGroup room = group(teacher, LearningContext.CLASS);
+        LearnerSlot first = slot(room, "An");
+        LearnerSlot second = slot(room, "Binh");
+        org.mockito.Mockito.when(pushNotifier.isEnabled()).thenReturn(true);
+
+        notifications.notifyChapterCompleted(first, 1, 1);
+        // Em thứ hai chỉ CẬP NHẬT dòng gộp: chuông nổi lại chưa đọc nhưng không đẩy thêm lần nữa.
+        notifications.notifyChapterCompleted(second, 1, 1);
+
+        ArgumentCaptor<PushMessage> sent = ArgumentCaptor.forClass(PushMessage.class);
+        verify(pushNotifier, times(1)).notify(eq(teacher.getId()), sent.capture());
+        assertThat(sent.getValue().data())
+                .containsEntry("actionType", "OPEN_LEARNER_LIST")
+                .containsEntry("resourceId", room.getId().toString());
     }
 
     // ------------------------------------------------------------------ giáo viên

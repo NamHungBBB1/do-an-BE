@@ -17,3 +17,8 @@ local-assets/
 
 # Python (scripts/seed)
 __pycache__/
+
+# Khoá service account (Firebase Admin, Google...) — KHÔNG BAO GIỜ vào repo.
+# File thật để ngoài, ví dụ C:\Users\<may>\secrets\ hoặc /etc/finteen/.
+*service-account*.json
+*-firebase-adminsdk-*.json

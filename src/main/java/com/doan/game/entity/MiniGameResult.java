@@ -61,4 +61,7 @@ public class MiniGameResult {
 
     @Column(name = "received_at")
     private Instant receivedAt;
+
+    @Column(name = "seq")
+    private Integer seq;
 }
