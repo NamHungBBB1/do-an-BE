@@ -35,4 +35,9 @@ public class AssetImageTest {
         assertThat(AssetServiceImpl.sniff(new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0})).isEqualTo("jpeg");
         assertThat(AssetServiceImpl.sniff("<?php echo 1; ?>".getBytes())).isNull();
     }
+
+    /** Cho test ở gói khác đọc chiều rộng WebP. */
+    public static int widthOf(byte[] webp) {
+        return AssetServiceImpl.webpSize(webp)[0];
+    }
 }
