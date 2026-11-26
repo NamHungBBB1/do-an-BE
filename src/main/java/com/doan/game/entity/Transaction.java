@@ -16,7 +16,8 @@ import lombok.Setter;
  * QR trong app) để bấm Mua lại khi còn đơn chờ cùng gói thì trả đúng đơn đó, không tạo đơn mới.
  * 09/10 (rà soát): months chép số tháng lúc mua (đổi giá / tháng sau không ảnh hưởng); needsReview
  * + note ghi lại tiền về mà không cấp gói (lệch số, về sau khi đơn hết hạn) để admin đối soát thay
- * vì chỉ nằm trong log.
+ * vì chỉ nằm trong log. 27/11: bankReference là mã giao dịch ngân hàng PayOS trả về (cho phép
+ * NULL, không UNIQUE).
  */
 @Entity
 @Table(name = "transaction")
@@ -39,6 +40,9 @@ public class Transaction {
 
     @Column(name = "gateway_ref", length = 64, unique = true)
     private String gatewayRef;
+
+    @Column(name = "bank_reference", length = 64)
+    private String bankReference;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "kind")
