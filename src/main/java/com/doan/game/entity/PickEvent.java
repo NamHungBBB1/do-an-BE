@@ -11,8 +11,8 @@ import lombok.Setter;
  * Mỗi lần trẻ bấm một phương án ở cảnh lựa chọn được trình chơi chấp nhận, theo thứ tự seq
  * (play-v2 mục 3). BE tự rút nhóm quyết định, dòng quyết định (phương án không có deferLedger),
  * lựa chọn có hiệu lực (dòng quyết định cuối của nhóm) và lần chọn đầu từ bản phát hành đã đóng
- * băng. at là giờ máy trẻ. Ràng buộc: UNIQUE(slotId, chapter, attemptIndex, seq): gửi lại lô không
- * tạo dòng trùng
+ * băng. clientAt là giờ máy trẻ (trường at của lô). Ràng buộc: UNIQUE(slotId, chapter,
+ * attemptIndex, seq): gửi lại lô không tạo dòng trùng
  */
 @Entity
 @Table(name = "pick_event", uniqueConstraints = {
@@ -59,8 +59,8 @@ public class PickEvent {
     @Column(name = "first_decision", nullable = false, columnDefinition = "boolean default false not null")
     private boolean firstDecision;
 
-    @Column(name = "at")
-    private Instant at;
+    @Column(name = "client_at")
+    private Instant clientAt;
 
     @Column(name = "received_at")
     private Instant receivedAt;

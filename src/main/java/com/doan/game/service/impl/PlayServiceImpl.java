@@ -296,7 +296,7 @@ public class PlayServiceImpl implements PlayService {
             e.setDecision(row.decision());
             e.setEffective(row.effective());
             e.setFirstDecision(row.firstDecision());
-            e.setAt(row.pick().at());
+            e.setClientAt(row.pick().at());
             e.setReceivedAt(now);
             e.setBuildVersion(req.releaseVersion());
             pickEventRepo.save(e);
@@ -309,7 +309,7 @@ public class PlayServiceImpl implements PlayService {
             e.setSeq(x.seq());
             e.setSceneId(x.sceneId());
             e.setInspectId(x.inspectId());
-            e.setAt(x.at());
+            e.setClientAt(x.at());
             e.setReceivedAt(now);
             e.setBuildVersion(req.releaseVersion());
             inspectEventRepo.save(e);
@@ -322,7 +322,7 @@ public class PlayServiceImpl implements PlayService {
             a.setSeq(r.seq());
             a.setSceneId(r.sceneId());
             a.setAnswer(writeJson(r.answer()));
-            a.setAt(r.at());
+            a.setClientAt(r.at());
             a.setReceivedAt(now);
             a.setBuildVersion(req.releaseVersion());
             reflectionAnswerRepo.save(a);

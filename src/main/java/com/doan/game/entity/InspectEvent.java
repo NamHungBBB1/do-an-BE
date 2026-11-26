@@ -45,8 +45,8 @@ public class InspectEvent {
     @Column(name = "inspect_id", length = 64)
     private String inspectId;
 
-    @Column(name = "at")
-    private Instant at;
+    @Column(name = "client_at")
+    private Instant clientAt;
 
     @Column(name = "received_at")
     private Instant receivedAt;

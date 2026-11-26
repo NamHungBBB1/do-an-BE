@@ -45,8 +45,8 @@ public class ReflectionAnswer {
     @Column(name = "answer", columnDefinition = "text")
     private String answer;
 
-    @Column(name = "at")
-    private Instant at;
+    @Column(name = "client_at")
+    private Instant clientAt;
 
     @Column(name = "received_at")
     private Instant receivedAt;

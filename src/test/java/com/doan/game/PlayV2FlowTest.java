@@ -118,8 +118,8 @@ class PlayV2FlowTest {
         assertThat(picks).extracting(PickEvent::isDecision).containsExactly(false, true, true, true);
         assertThat(picks).extracting(PickEvent::isEffective).containsExactly(false, false, true, true);
         assertThat(picks).extracting(PickEvent::isFirstDecision).containsExactly(false, true, false, true);
-        assertThat(picks.get(1).getAt()).isEqualTo(Instant.parse("2026-10-02T03:00:03Z"));
-        assertThat(picks.get(0).getAt()).isNull();
+        assertThat(picks.get(1).getClientAt()).isEqualTo(Instant.parse("2026-10-02T03:00:03Z"));
+        assertThat(picks.get(0).getClientAt()).isNull();
         assertThat(picks).allSatisfy(p -> assertThat(p.getBuildVersion()).isEqualTo(version));
 
         // ChoiceEvent: đúng một dòng mỗi nhóm = lựa chọn có hiệu lực.
@@ -400,6 +400,83 @@ class PlayV2FlowTest {
                 .andExpect(status().isOk());
         assertThat(rows(PickEvent.class, slotOf(child))).hasSize(500);
         assertThat(runStateRepo.findBySlot_Id(slotOf(child)).orElseThrow().getSaving()).isEqualTo(60);   // seq 500 = A
+    }
+
+    // ------------------------------------------------------------------ 12. releaseVersion dài, chosen chỉ có dấu cách
+    @Test
+    void longReleaseVersionAndBlankChosenGive1001() throws Exception {
+        String child = newChild("v2len");
+        String longVersion = "9".repeat(33);
+        send(child, "{\"schema\":2,\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"" + longVersion + "\"," + EMPTY_ROWS + "}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.message").value(containsString("releaseVersion")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(containsString(longVersion))));
+        send(child, batch(1, 1, """
+                "picks":[],"inspections":[],"miniGames":[{"seq":1,"gameId":"SHOP_V3","itemId":"phone","chosen":"   "}],
+                "reflections":[]"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.message").value(containsString("miniGames[0].chosen")));
+        assertThat(runStateRepo.findBySlot_Id(slotOf(child))).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ 13. phần chép từ bản 1: 7001 / 7003 / 7004 / cửa quyền
+    @Test
+    void releaseOrderPostTestAndAuthErrorsMatchVersionOne() throws Exception {
+        String child = newChild("v2order");
+        send(child, "{\"schema\":2,\"chapter\":1,\"attemptIndex\":1,\"releaseVersion\":\"9.9.9\"," + EMPTY_ROWS + "}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(7001));
+        send(child, batch(2, 1, EMPTY_ROWS))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(7003));
+        send(child, batch(1, 2, EMPTY_ROWS))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(7003));
+
+        // BR-53: chương 1 có câu hậu trắc → xong chương 1 thì chương 2 bị chặn tới khi nộp.
+        mvc.perform(post("/api/admin/questions/import").with(admin()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"externalId\":\"PV2-" + System.nanoTime() + "\",\"pool\":\"QZPOOL\",\"stem\":\"Cau v2\","
+                                + "\"options\":[\"Dung\",\"Sai\"],\"correctIndex\":0,\"standard\":\"CEE-I\",\"concept\":null,"
+                                + "\"source\":\"test\",\"license\":\"test\",\"chapter\":1}]"))
+                .andExpect(status().isOk());
+        send(child, batch(1, 1, EMPTY_ROWS)).andExpect(status().isOk());
+        send(child, batch(2, 1, EMPTY_ROWS))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(7004));
+        passPostTest(child);
+        send(child, batch(2, 1, EMPTY_ROWS)).andExpect(status().isOk());
+
+        String parent = registerAndVerify("v2adult-" + System.nanoTime() + "@test.local");
+        send(parent, batch(1, 1, EMPTY_ROWS))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(3004));
+        mvc.perform(post("/api/play/chapter").contentType(MediaType.APPLICATION_JSON).content(batch(1, 1, EMPTY_ROWS)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(3003));
+    }
+
+    // ------------------------------------------------------------------ 14. đường bản 1 qua controller mới: lỗi body không đổi
+    /** Mã đo trên origin/main 66564bf (trước khi controller nhận JsonNode): giống hệt. */
+    @Test
+    void versionOneBodyErrorsUnchanged() throws Exception {
+        String child = newChild("v1body");
+        send(child, "[]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1002));
+        send(child, "{\"chapter\":\"abc\",\"attemptIndex\":1,\"releaseVersion\":\"1.0.0\",\"choices\":[],\"miniGames\":[]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1002));
+        mvc.perform(post("/api/play/chapter").header("Authorization", "Bearer " + child)
+                        .contentType(MediaType.TEXT_PLAIN).content("{\"chapter\":1}"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value(1007));
+        send(child, "{\"chapter\":\"abc\",\"attemptIndex\":1,\"releaseVersion\":\"" + "x".repeat(70 * 1024)
+                        + "\",\"choices\":[],\"miniGames\":[]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1002));
+        assertThat(runStateRepo.findBySlot_Id(slotOf(child))).isEmpty();
     }
 
     // ------------------------------------------------------------------ dựng dữ liệu

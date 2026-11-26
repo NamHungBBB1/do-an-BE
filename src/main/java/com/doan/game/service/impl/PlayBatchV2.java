@@ -32,6 +32,7 @@ final class PlayBatchV2 {
     static final int MAX_MINI_GAMES = 100;
     static final int MAX_REFLECTIONS = 10;
     private static final int MAX_CHAPTER = 99;
+    private static final int MAX_RELEASE_VERSION = 32;
     /** scene-schema.json: "activity" là tên cũ của "reflection" — JSON đóng băng có thể còn tên cũ. */
     private static final Set<String> REFLECTION_TYPES = Set.of("reflection", "activity");
 
@@ -71,6 +72,10 @@ final class PlayBatchV2 {
         int chapter = integer(body, "chapter", "chapter", 1, MAX_CHAPTER);
         int attemptIndex = integer(body, "attemptIndex", "attemptIndex", 1, Integer.MAX_VALUE);
         String releaseVersion = text(body, "releaseVersion", "releaseVersion");
+        // Cột build_version là varchar(32); không lặp chuỗi dài vào thông báo lỗi / log.
+        if (releaseVersion.length() > MAX_RELEASE_VERSION) {
+            throw bad("releaseVersion", "toi da " + MAX_RELEASE_VERSION + " ky tu");
+        }
         JsonNode picks = array(body, "picks", MAX_PICKS);
         JsonNode inspections = array(body, "inspections", MAX_INSPECTIONS);
         JsonNode miniGames = array(body, "miniGames", MAX_MINI_GAMES);
@@ -87,7 +92,7 @@ final class PlayBatchV2 {
             String gameId = text(n, "gameId", p);
             String itemId = text(n, "itemId", p);
             JsonNode chosen = n.get("chosen");
-            if (chosen == null || chosen.isNull() || (chosen.isTextual() && chosen.asText().isEmpty())) {
+            if (chosen == null || chosen.isNull() || (chosen.isTextual() && chosen.asText().isBlank())) {
                 throw bad(p + ".chosen", "bat buoc, khong duoc null / chuoi rong");
             }
             String earlier = gameItems.putIfAbsent(gameId + "\u0000" + itemId, p);
