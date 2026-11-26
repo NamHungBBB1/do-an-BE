@@ -91,11 +91,12 @@ public class ReportAiWriter implements AiJobWriter {
         // Việc lẻ của ngăn gom lô: lần đầu = hết giờ chờ mà lô chỉ có nó; đã lỗi trước đó = gửi lẻ.
         String reason = job.getLane() == null ? null : attempt > 1 ? AiJobQueue.SEND_SINGLE : AiJobQueue.SEND_TIMEOUT;
         Hit h = call(ReportAiOutput.systemPrompt(pkg), job.getInput(), ReportAiOutput.responseSchema(),
-                text -> ReportAiOutput.check(job.getInput(), text),
+                text -> ReportAiOutput.check(job.getInput(), ReportAiOutput.repair(job.getInput(), text)),
                 new LogCtx(job.getId(), job.getKind(), attempt, job.getBatchId(), job.getBatchId() == null ? null : 1,
                         reason), progress);
-        return new Output(ReportAiOutput.compose(job.getInput(), h.text()), tier(h.key()), h.key().getProvider().name(),
-                h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, h.text());
+        String fixed = ReportAiOutput.repair(job.getInput(), h.text());
+        return new Output(ReportAiOutput.compose(job.getInput(), fixed), tier(h.key()), h.key().getProvider().name(),
+                h.key().getAlias(), h.model(), ReportAiOutput.PROMPT_VERSION, fixed);
     }
 
     /**
@@ -151,7 +152,7 @@ public class ReportAiWriter implements AiJobWriter {
             try {
                 com.fasterxml.jackson.databind.node.ObjectNode one = item.deepCopy();
                 one.remove("id");
-                String raw = one.toString();
+                String raw = ReportAiOutput.repair(job.getInput(), one.toString());
                 String rule = ReportAiOutput.check(job.getInput(), raw);
                 if (rule != null) {
                     errors.put(job.getId(), new AiCallException(rule, false, AiCallClassifier.REJECTED_OUTPUT, false));

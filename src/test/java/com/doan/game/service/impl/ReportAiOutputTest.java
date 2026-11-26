@@ -96,12 +96,37 @@ class ReportAiOutputTest {
                 .isEqualTo("FORBIDDEN_WORD: lười");
         assertThat(ReportAiOutput.check(PKG, out("Ổn.", "D01.02", "D01.04", "Bé chọn sai phương án.", "[]")))
                 .isEqualTo("CHOICE_JUDGED: sai");
-        assertThat(ReportAiOutput.check(PKG, out("chữ ".repeat(200), "D01.02", "D01.04", "Có.", "[]")))
-                .startsWith("TOO_LONG");
+        // 26/11: trần kiểm 250 (prompt vẫn dặn 180); overview quá dài thì không bỏ mục nào cứu được → vẫn loại.
+        assertThat(ReportAiOutput.check(PKG, out("chữ ".repeat(200), "D01.02", "D01.04", "Có.", "[]"))).isNull();
+        String tooLong = out("chữ ".repeat(260), "D01.02", "D01.04", "Có.", "[]");
+        assertThat(ReportAiOutput.check(PKG, ReportAiOutput.repair(PKG, tooLong))).startsWith("TOO_LONG");
         // "sai" chỉ cấm khi nói về lựa chọn truyện; câu mini-game sai vẫn được nhắc ở mục khác.
         assertThat(ReportAiOutput.check(PKG, "{\"overview\":\"Ổn.\",\"decisions\":[],\"doingWell\":[],\"needsPractice\":"
                 + "[{\"concept\":\"D01.04\",\"text\":\"Bé làm đúng 1/4 câu, còn chọn sai ở mini-game.\"}],\"tips\":[]}"))
                 .isNull();
+    }
+
+    /** 26/11 sửa thay vì loại: bỏ NGUYÊN phần tử phạm luật / thừa chữ, không đụng câu chữ còn lại. */
+    @Test
+    void repairDropsWholeItemsNeverCutsSentences() {
+        assertThat(ReportAiOutput.repair(PKG, GOOD)).isSameAs(GOOD);
+        assertThat(ReportAiOutput.repair(PKG, "không phải json")).isEqualTo("không phải json");
+        // Sai mức + cảnh lạ + câu có mã thô → bỏ đúng các phần tử đó, bài còn lại đạt.
+        String bad = out("Bé làm đúng 5/6 câu.", "D01.04", "D01.04", "Ở cảnh CH01_SC02_CHOICE bé chờ.", "[]");
+        assertThat(ReportAiOutput.check(PKG, bad)).isNotNull();
+        String fixed = ReportAiOutput.repair(PKG, bad);
+        assertThat(ReportAiOutput.check(PKG, fixed)).isNull();
+        assertThat(fixed).contains("Bé làm đúng 5/6 câu.").contains("Cần luyện thêm.")
+                .doesNotContain("Bé phân biệt tốt").doesNotContain("bé chờ");
+        // Quá dài vì các mục: bỏ dần từ cuối (doingWell trước, needsPractice sau cùng), câu giữ lại còn nguyên văn.
+        String item = "{\"concept\":\"D01.02\",\"text\":\"" + "chữ ".repeat(99) + "hết.\"}";
+        String longOut = "{\"overview\":\"Ổn.\",\"decisions\":[],\"doingWell\":[" + item + "," + item + "," + item
+                + "],\"needsPractice\":[{\"concept\":\"D01.04\",\"text\":\"Cần luyện thêm.\"}],\"tips\":[]}";
+        assertThat(ReportAiOutput.check(PKG, longOut)).startsWith("TOO_LONG");
+        String trimmed = ReportAiOutput.repair(PKG, longOut);
+        assertThat(ReportAiOutput.check(PKG, trimmed)).isNull();
+        assertThat(trimmed).contains("Cần luyện thêm.").contains("hết.");
+        assertThat(trimmed.split("hết[.]", -1)).hasSize(3);
     }
 
     @Test

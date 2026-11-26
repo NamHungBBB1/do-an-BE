@@ -34,6 +34,12 @@ final class ReportAiOutput {
     /** Độ dài nhắm trong prompt — thấp hơn giới hạn kiểm để AI có chỗ hụt (19/11: 2/4 bài bị loại vì 188–214 chữ). */
     static final int TARGET_WORDS_CHAPTER = 150;
     static final int TARGET_WORDS_SUMMARY = 200;
+    /**
+     * Trần KIỂM (26/11) — cao hơn trần ghi trong prompt: 13/18 bài bị loại trên production chỉ vì 184–257 chữ trong khi nội
+     * dung đạt. Prompt vẫn dặn 150 / 180; bài vượt trần kiểm thì {@link #repair} bỏ bớt NGUYÊN mục, không cắt giữa câu.
+     */
+    static final int HARD_MAX_WORDS_CHAPTER = 250;
+    static final int HARD_MAX_WORDS_SUMMARY = 320;
     /** Mã thô không được lọt vào câu văn cho phụ huynh (RAW_CODE). */
     static final Pattern RAW_CODE = Pattern.compile("(?<![\\p{L}\\p{N}])(?:CH\\d{2}_|D\\d{2}\\.\\d{2}|ITEM_)|_CH\\d{2}"
             + "|(?<![\\p{L}\\p{N}])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![\\p{L}\\p{N}])");
@@ -70,6 +76,10 @@ final class ReportAiOutput {
 
     static int maxWords(JsonNode pkg) {
         return shortKind(pkg) ? MAX_WORDS_CHAPTER : MAX_WORDS_SUMMARY;
+    }
+
+    static int hardMaxWords(JsonNode pkg) {
+        return shortKind(pkg) ? HARD_MAX_WORDS_CHAPTER : HARD_MAX_WORDS_SUMMARY;
     }
 
     static int targetWords(JsonNode pkg) {
@@ -222,6 +232,85 @@ final class ReportAiOutput {
 
     // ------------------------------------------------------------------ kiểm đầu ra
 
+    private static Map<String, String> bandsOf(JsonNode pkg) {
+        Map<String, String> bands = new java.util.HashMap<>();
+        pkg.path("result").path("concepts").forEach(c -> bands.put(c.path("id").asText(), c.path("band").asText()));
+        return bands;
+    }
+
+    private static Set<String> scenesOf(JsonNode pkg) {
+        Set<String> scenes = new HashSet<>();
+        for (String key : List.of("scene", "chosen", "id")) {
+            pkg.findValues(key).forEach(v -> {
+                if (v.isTextual()) {
+                    scenes.add(v.asText());
+                }
+            });
+        }
+        return scenes;
+    }
+
+    private static Map<String, Integer> keyPointsOf(JsonNode pkg) {
+        Map<String, Integer> keyPoints = new java.util.HashMap<>();
+        pkg.path("frame").path("concepts").forEach(c -> keyPoints.put(c.path("id").asText(),
+                c.path("adultKeyPoints").size()));
+        return keyPoints;
+    }
+
+    private static int wordCount(JsonNode out) {
+        String all = String.join("\n", texts(out, List.of("overview", "decisions", "doingWell", "needsPractice", "tips")));
+        return all.isBlank() ? 0 : all.trim().split("\\s+").length;
+    }
+
+    /**
+     * Sửa thay vì loại (26/11): bỏ NGUYÊN phần tử phạm luật cục bộ (cảnh lạ, sai mức, tips ngoài adultKeyPoints, câu có mã
+     * thô) rồi, nếu còn quá dài, bỏ dần phần tử cuối theo thứ tự tips → doingWell → decisions → needsPractice. Không bao giờ
+     * sửa chữ hay cắt giữa câu; overview giữ nguyên. Trả lại raw khi không đọc được — {@link #check} vẫn là chốt cuối.
+     */
+    static String repair(String pkgText, String raw) {
+        JsonNode pkg = read(pkgText);
+        JsonNode parsed = read(raw);
+        if (pkg == null || parsed == null || !parsed.isObject()) {
+            return raw;
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode out = parsed.deepCopy();
+        Map<String, String> bands = bandsOf(pkg);
+        Set<String> scenes = scenesOf(pkg);
+        Map<String, Integer> keyPoints = keyPointsOf(pkg);
+        boolean changed = false;
+        for (String sec : List.of("decisions", "doingWell", "needsPractice", "tips")) {
+            if (!out.path(sec).isArray()) {
+                continue;
+            }
+            java.util.Iterator<JsonNode> it = out.path(sec).elements();
+            while (it.hasNext()) {
+                JsonNode e = it.next();
+                String code = e.path("concept").asText();
+                int idx = e.path("keyPoint").asInt(-1);
+                boolean bad = !e.path("text").isTextual() || RAW_CODE.matcher(nfc(e.path("text").asText())).find()
+                        || switch (sec) {
+                            case "decisions" -> !scenes.contains(e.path("scene").asText());
+                            case "doingWell" -> !"GOOD".equals(bands.get(code));
+                            case "needsPractice" -> !LOW_BANDS.contains(bands.getOrDefault(code, ""));
+                            default -> idx < 0 || idx >= keyPoints.getOrDefault(code, 0);
+                        };
+                if (bad) {
+                    it.remove();
+                    changed = true;
+                }
+            }
+        }
+        int max = hardMaxWords(pkg);
+        for (String sec : List.of("tips", "doingWell", "decisions", "needsPractice")) {
+            JsonNode a = out.path(sec);
+            while (a.isArray() && !a.isEmpty() && wordCount(out) > max) {
+                ((com.fasterxml.jackson.databind.node.ArrayNode) a).remove(a.size() - 1);
+                changed = true;
+            }
+        }
+        return changed ? out.toString() : raw;
+    }
+
     /** Luật bị vi phạm (mã + chi tiết ngắn) hoặc null khi đạt. pkgText = gói nguyên văn (AiJob.input). */
     static String check(String pkgText, String raw) {
         JsonNode pkg = read(pkgText);
@@ -249,8 +338,7 @@ final class ReportAiOutput {
         if (rawCode.find()) {
             return "RAW_CODE: " + rawCode.group();
         }
-        Map<String, String> bands = new java.util.HashMap<>();
-        pkg.path("result").path("concepts").forEach(c -> bands.put(c.path("id").asText(), c.path("band").asText()));
+        Map<String, String> bands = bandsOf(pkg);
         for (JsonNode it : out.path("doingWell")) {
             String code = it.path("concept").asText();
             if (!"GOOD".equals(bands.get(code))) {
@@ -265,14 +353,7 @@ final class ReportAiOutput {
         }
         // Cảnh hợp lệ = mọi giá trị scene / chosen / id có trong gói (khung quyết định + lựa chọn của bé). 19/11: AI dẫn một
         // cảnh có trong lựa chọn của bé mà khung không liệt kê → UNKNOWN_SCENE oan.
-        Set<String> scenes = new HashSet<>();
-        for (String key : List.of("scene", "chosen", "id")) {
-            pkg.findValues(key).forEach(v -> {
-                if (v.isTextual()) {
-                    scenes.add(v.asText());
-                }
-            });
-        }
+        Set<String> scenes = scenesOf(pkg);
         for (JsonNode it : out.path("decisions")) {
             if (!scenes.contains(it.path("scene").asText())) {
                 return "UNKNOWN_SCENE: " + it.path("scene").asText();
@@ -295,9 +376,7 @@ final class ReportAiOutput {
                 return "DELIBERATE_MISMATCH: " + it.path("scene").asText();
             }
         }
-        Map<String, Integer> keyPoints = new java.util.HashMap<>();
-        pkg.path("frame").path("concepts").forEach(c -> keyPoints.put(c.path("id").asText(),
-                c.path("adultKeyPoints").size()));
+        Map<String, Integer> keyPoints = keyPointsOf(pkg);
         for (JsonNode it : out.path("tips")) {
             int idx = it.path("keyPoint").asInt(-1);
             if (idx < 0 || idx >= keyPoints.getOrDefault(it.path("concept").asText(), 0)) {
@@ -324,8 +403,8 @@ final class ReportAiOutput {
             return "NUMBER_WORD: " + hit;
         }
         int words = all.isBlank() ? 0 : all.trim().split("\\s+").length;
-        if (words > maxWords(pkg)) {
-            return "TOO_LONG: " + words + " > " + maxWords(pkg);
+        if (words > hardMaxWords(pkg)) {
+            return "TOO_LONG: " + words + " > " + hardMaxWords(pkg);
         }
         // Từ cấm có ngay trong tên / mục tiêu khái niệm của gói (ví dụ "thẻ tín dụng" ở chương tín dụng) là nói về bài học,
         // không phải khuyên dùng → cho phép.
