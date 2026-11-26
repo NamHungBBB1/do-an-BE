@@ -257,26 +257,83 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
-     * Dựng tin đẩy từ ĐÚNG câu chữ của chuông (ghép lúc đọc) rồi giao {@link PushNotifier}.
-     *
-     * <p>Gọi trong transaction để còn đọc được slot/group; PushNotifier hoãn gửi tới sau commit nên
-     * rollback không để lại tin đã đẩy. Không có khoá Firebase thì PushNotifier tự bỏ qua.
+     * Giao tin đẩy cho {@link PushNotifier}. Gọi trong transaction thì PushNotifier hoãn gửi tới sau
+     * commit nên rollback không để lại tin đã đẩy; không có khoá Firebase thì nó bỏ qua.
      */
     private void push(Notification n) {
         if (!pushNotifier.isEnabled()) {
             return;
         }
-        NotificationResponse r = toResponse(n, new HashMap<>());
-        Map<String, String> data = new HashMap<>();
-        data.put("notificationId", n.getId().toString());
-        data.put("type", r.type().name());
-        if (r.action() != null && r.action().type() != null) {
-            data.put("actionType", r.action().type());
-            if (r.action().resourceId() != null) {
-                data.put("resourceId", r.action().resourceId().toString());
+        pushNotifier.notify(n.getRecipient().getId(), pushText(n));
+    }
+
+    /**
+     * Câu chữ của tin đẩy — CỐ Ý khác chuông trong app.
+     *
+     * <p>Chuông có tên bé ("Minh đã hoàn thành Chương 3"), nhưng tin đẩy hiện nguyên văn trên màn
+     * hình khoá: ai cầm máy cũng đọc được tên bé và việc bé đang học. Push chỉ báo "có gì mới",
+     * chi tiết để trong app (mở app vẫn thấy đúng tên bé ở chuông).
+     *
+     * <p>Chỉ đọc dữ liệu ngay trên dòng thông báo nên không tốn truy vấn, khác {@link #toResponse}
+     * (phải đếm tiến độ lớp và tra tên đề).
+     */
+    private PushMessage pushText(Notification n) {
+        String title;
+        String body;
+        if (n.getSlot() != null) {
+            // Phụ huynh: không nêu tên bé.
+            switch (n.getType()) {
+                case CHAPTER_COMPLETED -> {
+                    title = "Bé vừa hoàn thành chương " + n.getChapter();
+                    body = "Một chương mới đã xong trong hành trình FinTeen. Mở app xem chi tiết.";
+                }
+                case QUIZ_SUBMITTED -> {
+                    title = "Bé vừa nộp bài kiểm tra";
+                    body = "Bài làm đã được ghi nhận. Mở app xem kết quả.";
+                }
+                default -> {
+                    title = "Báo cáo học tập đã sẵn sàng";
+                    body = n.getChapter() == null
+                            ? "Báo cáo mới đã có. Mở app để xem."
+                            : "Báo cáo chương " + n.getChapter() + " đã có. Mở app để xem.";
+                }
+            }
+        } else {
+            // Giáo viên: tên lớp là của chính thầy cô, không phải dữ liệu của một bé.
+            String className = pushClassName(n);
+            switch (n.getType()) {
+                case CHAPTER_COMPLETED -> {
+                    title = className + ": có em vừa hoàn thành chương " + n.getChapter();
+                    body = "Mở app xem tiến độ cả lớp.";
+                }
+                case QUIZ_SUBMITTED -> {
+                    title = className + ": có bài kiểm tra vừa được nộp";
+                    body = "Mở app xem kết quả bài kiểm tra.";
+                }
+                default -> {
+                    title = className + ": báo cáo học tập đã sẵn sàng";
+                    body = n.getChapter() == null
+                            ? "Mở app xem báo cáo của lớp."
+                            : "Báo cáo chương " + n.getChapter() + " đã có. Mở app để xem.";
+                }
             }
         }
-        pushNotifier.notify(n.getRecipient().getId(), new PushMessage(r.title(), r.message(), data));
+        Map<String, String> data = new HashMap<>();
+        data.put("notificationId", n.getId().toString());
+        data.put("type", n.getType().name());
+        if (n.getActionType() != null) {
+            data.put("actionType", n.getActionType());
+            if (n.getActionResourceId() != null) {
+                data.put("resourceId", n.getActionResourceId().toString());
+            }
+        }
+        return new PushMessage(title, body, data);
+    }
+
+    private static String pushClassName(Notification n) {
+        LearnerGroup group = n.getGroup();
+        return group == null || group.getName() == null || group.getName().isBlank()
+                ? "Lớp của bạn" : group.getName();
     }
 
     // ------------------------------------------------------------------ ghép câu chữ lúc đọc
