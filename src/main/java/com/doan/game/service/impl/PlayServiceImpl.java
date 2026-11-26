@@ -1,13 +1,17 @@
 package com.doan.game.service.impl;
 
 import com.doan.game.DTO.request.ChapterBatchRequest;
+import com.doan.game.DTO.request.ChapterBatchV2Request;
 import com.doan.game.DTO.request.ChoiceDto;
 import com.doan.game.DTO.request.MiniGameDto;
 import com.doan.game.DTO.response.ChapterBatchResponse;
 import com.doan.game.DTO.response.RunStateResponse;
 import com.doan.game.entity.ChoiceEvent;
 import com.doan.game.entity.GameRelease;
+import com.doan.game.entity.InspectEvent;
 import com.doan.game.entity.MiniGameResult;
+import com.doan.game.entity.PickEvent;
+import com.doan.game.entity.ReflectionAnswer;
 import com.doan.game.entity.ReleaseChapter;
 import com.doan.game.entity.RunState;
 import com.doan.game.enums.SlotStatus;
@@ -16,8 +20,11 @@ import com.doan.game.exception.ErrorCode;
 import com.doan.game.mapper.RunStateMapper;
 import com.doan.game.repository.ChoiceEventRepository;
 import com.doan.game.repository.GameReleaseRepository;
+import com.doan.game.repository.InspectEventRepository;
 import com.doan.game.repository.LearnerSlotRepository;
 import com.doan.game.repository.MiniGameResultRepository;
+import com.doan.game.repository.PickEventRepository;
+import com.doan.game.repository.ReflectionAnswerRepository;
 import com.doan.game.repository.ReleaseChapterRepository;
 import com.doan.game.repository.RunStateRepository;
 import com.doan.game.service.PlayService;
@@ -68,6 +75,9 @@ public class PlayServiceImpl implements PlayService {
     private final RunStateRepository runStateRepo;
     private final ChoiceEventRepository choiceEventRepo;
     private final MiniGameResultRepository miniGameResultRepo;
+    private final PickEventRepository pickEventRepo;
+    private final InspectEventRepository inspectEventRepo;
+    private final ReflectionAnswerRepository reflectionAnswerRepo;
     private final QuizSupport quizSupport;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
@@ -201,6 +211,161 @@ public class PlayServiceImpl implements PlayService {
         events.publishEvent(new ReportSummaryService.ProgressEvent(slotId));
 
         // Bước 6: đợt 1 chưa có luật cấp thành tựu → luôn rỗng.
+        return toBatchResponse(attempt, done, total);
+    }
+
+    // ---------------------------------------------------------- POST /api/play/chapter, lô schema: 2
+    /**
+     * play-v2.md mục 9: kiểm (hình dạng → slot → bản / chương → từng dòng với JSON đóng băng → thứ tự chương), rồi ghi một transaction:
+     * mọi dòng picks / inspections / reflections, ChoiceEvent một dòng mỗi nhóm quyết định (lựa chọn có hiệu lực — báo cáo và RunState
+     * đọc như bản 1), kết quả mini-game, chỉ số. Gửi lại chương đã xong: không ghi, trả response hiện tại.
+     */
+    @Override
+    @Transactional
+    public ChapterBatchResponse submitChapterBatchV2(UUID slotId, JsonNode body) {
+        ChapterBatchV2Request req = PlayBatchV2.parse(body);
+        // shortcut: slot / bản / RunState dưới đây chép từ submitChapterBatch (không sửa đường bản 1 khi hai đường chạy song song);
+        // gỡ bản 1 (play-v2 mục 11.5) thì chỉ còn khối này — sửa luật (BR-53, thứ tự chương) phải sửa cả hai cho tới lúc đó.
+        var slot = slotRepo.lockById(slotId)
+                .orElseThrow(() -> new AppException(ErrorCode.SLOT_NOT_FOUND));
+        if (slot.getStatus() == SlotStatus.WIPED) {
+            throw new AppException(ErrorCode.SLOT_NOT_FOUND);
+        }
+        if (slot.getStatus() == SlotStatus.ARCHIVED) {
+            throw new AppException(ErrorCode.SLOT_ARCHIVED);
+        }
+        GameRelease release = releaseRepo.findByVersion(req.releaseVersion())
+                .orElseThrow(() -> new AppException(ErrorCode.RELEASE_CHAPTER_NOT_FOUND,
+                        "khong co ban " + req.releaseVersion()));
+        ReleaseChapter rc = releaseChapterRepo
+                .findByRelease_IdAndChapter_ChapterNumber(release.getId(), req.chapter())
+                .orElseThrow(() -> new AppException(ErrorCode.RELEASE_CHAPTER_NOT_FOUND,
+                        "ban " + req.releaseVersion() + " khong co chuong " + req.chapter()));
+        PlayBatchV2.Plan plan = PlayBatchV2.interpret(parse(rc.getContent(), "chuong " + req.chapter()), req);
+
+        Instant now = Instant.now(clock);
+        Integer total = totalChaptersCurrent();
+        RunState run = runStateRepo.findBySlot_Id(slotId).orElse(null);
+        int attempt;
+        List<Integer> done;
+        if (run == null) {
+            if (req.attemptIndex() != 1) {
+                throw new AppException(ErrorCode.CHAPTER_NOT_UNLOCKED,
+                        "chua tung cho ma loi gui attemptIndex " + req.attemptIndex());
+            }
+            attempt = 1;
+            done = new ArrayList<>();
+            run = new RunState();
+            run.setSlot(slot);
+            applyStats(run, initialStats(release));
+        } else {
+            attempt = run.getAttemptIndex() == null ? 1 : run.getAttemptIndex();
+            done = ChaptersDone.parse(run.getChaptersDone());
+            if (req.attemptIndex() == attempt) {
+                if (done.contains(req.chapter())) {
+                    return toBatchResponse(attempt, done, total);
+                }
+            } else if (req.attemptIndex() == attempt + 1 && isAllDone(done, total)) {
+                attempt = req.attemptIndex();
+                done = new ArrayList<>();
+                applyStats(run, initialStats(release));
+            } else {
+                throw new AppException(ErrorCode.CHAPTER_NOT_UNLOCKED,
+                        "loi gui attemptIndex " + req.attemptIndex() + ", dang la " + attempt);
+            }
+        }
+        if (req.chapter() != done.size() + 1) {
+            throw new AppException(ErrorCode.CHAPTER_NOT_UNLOCKED,
+                    "phai la chuong ke tiep — da xong " + done.size() + " chuong, loi gui chuong "
+                            + req.chapter());
+        }
+        if (!done.isEmpty() && quizSupport.pendingPostTest(slot, done.get(done.size() - 1)) != null) {
+            throw new AppException(ErrorCode.POST_TEST_REQUIRED,
+                    "chua nop hau trac chuong " + done.get(done.size() - 1));
+        }
+
+        for (PlayBatchV2.PickRow row : plan.picks()) {
+            PickEvent e = new PickEvent();
+            e.setSlot(slot);
+            e.setChapter(req.chapter());
+            e.setAttemptIndex(attempt);
+            e.setSeq(row.pick().seq());
+            e.setSceneId(row.pick().sceneId());
+            e.setOptionId(row.pick().optionId());
+            e.setGroupId(row.groupId());
+            e.setDecision(row.decision());
+            e.setEffective(row.effective());
+            e.setFirstDecision(row.firstDecision());
+            e.setClientAt(row.pick().at());
+            e.setReceivedAt(now);
+            e.setBuildVersion(req.releaseVersion());
+            pickEventRepo.save(e);
+        }
+        for (ChapterBatchV2Request.Inspection x : req.inspections()) {
+            InspectEvent e = new InspectEvent();
+            e.setSlot(slot);
+            e.setChapter(req.chapter());
+            e.setAttemptIndex(attempt);
+            e.setSeq(x.seq());
+            e.setSceneId(x.sceneId());
+            e.setInspectId(x.inspectId());
+            e.setClientAt(x.at());
+            e.setReceivedAt(now);
+            e.setBuildVersion(req.releaseVersion());
+            inspectEventRepo.save(e);
+        }
+        for (ChapterBatchV2Request.Reflection r : req.reflections()) {
+            ReflectionAnswer a = new ReflectionAnswer();
+            a.setSlot(slot);
+            a.setChapter(req.chapter());
+            a.setAttemptIndex(attempt);
+            a.setSeq(r.seq());
+            a.setSceneId(r.sceneId());
+            a.setAnswer(writeJson(r.answer()));
+            a.setClientAt(r.at());
+            a.setReceivedAt(now);
+            a.setBuildVersion(req.releaseVersion());
+            reflectionAnswerRepo.save(a);
+        }
+        // effects = deltaStats thật sự đã cộng (lần chọn đầu khi preserveFirstChoiceStats) — RunState vẫn cộng lại được từ ChoiceEvent.
+        for (PlayBatchV2.GroupChoice c : plan.choices()) {
+            ChoiceEvent e = new ChoiceEvent();
+            e.setSlot(slot);
+            e.setChapter(req.chapter());
+            e.setAttemptIndex(attempt);
+            e.setSceneId(c.effective().sceneId());
+            e.setChoiceId(c.effective().optionId());
+            e.setEffects(c.delta() == null ? null : writeJson(c.delta()));
+            e.setBuildVersion(req.releaseVersion());
+            e.setChosenAt(c.effective().at());
+            e.setReceivedAt(now);
+            choiceEventRepo.save(e);
+            applyDelta(run, c.delta());
+        }
+        for (PlayBatchV2.MiniRow row : plan.miniGames()) {
+            MiniGameResult m = new MiniGameResult();
+            m.setSlot(slot);
+            m.setChapter(req.chapter());
+            m.setAttemptIndex(attempt);
+            m.setGameId(row.gameId());
+            m.setItemId(row.questionId());
+            m.setConcept(row.concept());
+            m.setChosen(row.chosen());
+            m.setCorrect(row.correct());
+            m.setBuildVersion(req.releaseVersion());
+            m.setPlayedAt(row.at());
+            m.setSeq(row.seq());
+            m.setReceivedAt(now);
+            miniGameResultRepo.save(m);
+        }
+        done.add(req.chapter());
+        run.setAttemptIndex(attempt);
+        run.setChaptersDone(writeJson(done));
+        run.setUpdatedAt(now);
+        runStateRepo.save(run);
+        notificationService.notifyChapterCompleted(slot, req.chapter(), attempt);
+        quizSupport.ensurePostTests(slot.getGroup(), List.of(req.chapter()));
+        events.publishEvent(new ReportSummaryService.ProgressEvent(slotId));
         return toBatchResponse(attempt, done, total);
     }
 

@@ -15,6 +15,9 @@ public interface PlayService {
     /** Nhận lô cuối chương (Hưng 12/10): BE chấm tất cả, một @Transactional, trả tiến độ cho FE. */
     ChapterBatchResponse submitChapterBatch(UUID slotId, ChapterBatchRequest req);
 
+    /** Lô `schema: 2` (play-v2.md): kiểm chặt, BE diễn giải dãy sự kiện; response y như bản 1. */
+    ChapterBatchResponse submitChapterBatchV2(UUID slotId, com.fasterxml.jackson.databind.JsonNode body);
+
     RunStateResponse getRunState(UUID slotId);
 
 }
