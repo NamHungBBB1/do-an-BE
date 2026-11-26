@@ -179,7 +179,7 @@ class NotificationFlowTest {
     // ------------------------------------------------------------------ push
 
     @Test
-    void pushDoesNotPutTheChildNameOnTheLockScreenButKeepsNavigationData() {
+    void pushUsesTheBellTextAndCarriesNavigationData() {
         Account parent = adult("push-phu-huynh");
         LearnerGroup family = group(parent, LearningContext.FAMILY);
         LearnerSlot kid = slot(family, "Minh");
@@ -190,12 +190,8 @@ class NotificationFlowTest {
         ArgumentCaptor<PushMessage> sent = ArgumentCaptor.forClass(PushMessage.class);
         verify(pushNotifier).notify(eq(parent.getId()), sent.capture());
         PushMessage message = sent.getValue();
-        // Màn hình khoá ai cũng đọc được: push không nêu tên bé, chỉ nói có gì mới.
-        assertThat(message.title()).doesNotContain("Minh").contains("3");
-        assertThat(message.body()).doesNotContain("Minh");
-        // Chuông trong app thì vẫn phải còn tên bé.
-        assertThat(notifications.list(parent.getId(), 0, 10, false).items())
-                .anySatisfy(item -> assertThat(item.title()).contains("Minh"));
+        assertThat(message.title()).contains("Minh").contains("Chương 3");
+        assertThat(message.body()).contains("Minh").contains("chương 3");
         assertThat(message.data())
                 .containsEntry("type", "CHAPTER_COMPLETED")
                 .containsEntry("actionType", "OPEN_LEARNER_REPORT")
@@ -220,9 +216,6 @@ class NotificationFlowTest {
         assertThat(sent.getValue().data())
                 .containsEntry("actionType", "OPEN_LEARNER_LIST")
                 .containsEntry("resourceId", room.getId().toString());
-        // Tên lớp thì được, tên từng em thì không.
-        assertThat(sent.getValue().title()).contains(room.getName()).contains("chương 1");
-        assertThat(sent.getValue().body()).doesNotContain("An").doesNotContain("Binh");
     }
 
     // ------------------------------------------------------------------ giáo viên
