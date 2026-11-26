@@ -4,6 +4,8 @@ import com.doan.game.entity.Asset;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,4 +17,7 @@ public interface AssetRepository extends JpaRepository<Asset, UUID> {
 
     /** Hash tệp gốc người dùng tải lên — bắt trùng cả khi WebP ra byte khác (đổi phiên bản cwebp). */
     Optional<Asset> findFirstBySourceSha256(String sourceSha256);
+
+    /** Nhãn / người tải cho danh sách lưu trữ (27/11). */
+    List<Asset> findByPathIn(Collection<String> paths);
 }

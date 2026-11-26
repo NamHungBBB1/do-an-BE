@@ -84,13 +84,14 @@ public class ContentServiceImpl implements ContentService {
     private final String assetBase;
     private final VoiceKeys voiceKeys;
     private final Personalizer personalizer;
+    private final ArchivePolicy archivePolicy;
 
     public ContentServiceImpl(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                               GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                               AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
                               ObjectMapper objectMapper, ContentSchema contentSchema, Clock clock,
                               @Value("${app.assets.base-url}") String assetBase, VoiceKeys voiceKeys,
-                              Personalizer personalizer) {
+                              Personalizer personalizer, ArchivePolicy archivePolicy) {
         this.chapterRepo = chapterRepo;
         this.draftRepo = draftRepo;
         this.releaseRepo = releaseRepo;
@@ -103,6 +104,7 @@ public class ContentServiceImpl implements ContentService {
         this.assetBase = assetBase.replaceAll("/+$", "");
         this.voiceKeys = voiceKeys;
         this.personalizer = personalizer;
+        this.archivePolicy = archivePolicy;
     }
 
     // ------------------------------------------------------------------ đọc (công khai)
@@ -171,6 +173,9 @@ public class ContentServiceImpl implements ContentService {
         // Sửa nháp REJECTED / APPROVED thì về DRAFT — phiếu duyệt cũ hết giá trị. Dòng RELEASED là lịch sử (state
         // machine X.5: trạng thái cuối) — sửa tiếp thì mở dòng mới, revision nối tiếp (PR C, 23/10).
         ChapterDraft latest = draftRepo.findFirstByChapter_IdOrderByRevisionDesc(saved.getId()).orElse(null);
+        // Chốt chặn lưu trữ (27/11): tệp đã chuyển đi không được thành "đang dùng" lại khi chưa khôi phục. Đặt SAU khoá dòng nháp
+        // để thứ tự khoá (nháp → dòng lưu trữ) giống phát hành.
+        archivePolicy.requireFilesUsable(json);
         if (latest != null && latest.getStatus() == DraftStatus.SUBMITTED) {
             throw new AppException(ErrorCode.DRAFT_STATE_CONFLICT, code + " đang chờ duyệt — rút lại rồi mới sửa");
         }
@@ -231,6 +236,7 @@ public class ContentServiceImpl implements ContentService {
         for (ChapterDraft d : approved) {
             // Đóng băng kèm giọng đã sinh tới lúc phát hành (câu chưa có giọng thì không có voiceUrl — FE hiện chữ).
             String frozenJson = voiceKeys.freezeJson(d.getContent());
+            archivePolicy.requireFilesUsable(frozenJson);
             saveReleaseChapter(release, d.getChapter(), frozenJson, sha256(frozenJson));
             d.setStatus(DraftStatus.RELEASED);
             changed.add(d.getChapter().getId());
@@ -310,6 +316,7 @@ public class ContentServiceImpl implements ContentService {
         if (release.getRecalledAt() != null) {
             throw new AppException(ErrorCode.RELEASE_STATE_CONFLICT, version + " đã bị thu hồi — phát hành bản sửa");
         }
+        archivePolicy.requireReleaseUsable(version);
         moveCurrentPointer(release);
         log.info("Đổi bản hiện tại sang {} bởi {}", version, callerId);
         return toSummary(release);
@@ -335,6 +342,8 @@ public class ContentServiceImpl implements ContentService {
                 .max((a, b) -> compareVersion(a.getVersion(), b.getVersion()))
                 .orElseThrow(() -> new AppException(ErrorCode.RELEASE_STATE_CONFLICT,
                         "không còn bản cũ hơn để lùi về — phát hành bản sửa thay vì thu hồi"));
+        // Lùi về bản đã lưu trữ = đưa nó lên chạy khi tệp của nó có thể không còn: khôi phục bản đó trước.
+        archivePolicy.requireReleaseUsable(previous.getVersion());
         target.setRecalledAt(Instant.now(clock));
         target.setRecalledBy(accountRepo.findById(callerId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "account " + callerId)));
@@ -396,6 +405,7 @@ public class ContentServiceImpl implements ContentService {
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "content: nháp không đọc được");
         }
+        archivePolicy.requireFilesUsable(draft.getContent());
         draft.setChangeClass(req.changeClass());
         if (req.note() != null && !req.note().isBlank()) {
             draft.setChangeNote(req.note().trim());

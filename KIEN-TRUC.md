@@ -165,6 +165,22 @@ và `variants` trên cảnh / lựa chọn / thẻ (ghi đè trường bề mặ
 Test: `PersonalizerTest`, `PersonalizationContentFlowTest`, `PlayFlowTest` (ca cá nhân hoá + giáo viên chỉ thấy trạng thái).
 Chưa làm: chụp nhãn theo lần chơi (`RunLabelSnapshot`) để báo cáo phụ huynh hiện đúng chữ bé đã thấy.
 
+## Vòng đời lưu trữ — cách nó chạy (27/11, mặc định TẮT)
+
+Spec `build/spec-luu-tru-be-2026-11-27.md` (ngoài repo). BE chỉ quyết định và ghi trạng thái (`ArchiveItem`, nhật ký `ArchiveLog`);
+máy lưu trữ bên ngoài gọi `/api/archive-worker/*` (header `X-Archive-Worker-Key`, khoá trống = 403) là nơi duy nhất gỡ tệp.
+BE không xoá tệp kho theo vòng đời, không gọi tiến trình ngoài; với đĩa chỉ liệt kê / kiểm tồn tại / đọc cỡ.
+
+- `app.archive.mode` OFF | DRY_RUN | ON (lạ → OFF). OFF: job không chạy, API Studio rỗng, claim rỗng. DRY_RUN: đếm + xem được,
+  không phát việc, không lưu trữ bản phát hành.
+- "Đang dùng" = `AssetServiceImpl.usageIndexForArchive` (cùng bộ quét + cache `frozenRefs` của kho ảnh, bỏ bản đã lưu trữ, tính cả
+  giọng biến thể `personalization.voiceReady`). Kho ảnh và nút xoá vẫn dùng `usageIndex()` đủ mọi bản.
+- `ArchivePolicy` (chế độ, thời hạn, chốt chặn ở luồng đang chạy) tách khỏi `ArchiveServiceImpl` để kho ảnh / nội dung gọi được
+  mà không vòng phụ thuộc. Chốt: lưu nháp / gửi duyệt / phát hành trỏ tệp đã lưu trữ → 6011; đặt / lùi về bản đã lưu trữ → 6012.
+- Phanh: bản đang chạy không trỏ tệp nào, hoặc mồ côi mới > `max-new-orphan-ratio` → job không đổi gì, ghi JOB_ABORTED.
+- Khoá: job khoá con trỏ bản hiện tại rồi mọi dòng lưu trữ theo id; claim, chốt nội dung, Giữ lại / Khôi phục khoá dòng theo id →
+  claim tính lại chỗ dùng SAU khi khoá. Chỉ job tạo dòng mới (synchronized). Test: `ArchiveFlowTest`.
+
 ## Sinh lại
 
 Lược đồ đổi thì **chạy lại script, đừng sửa tay**:
