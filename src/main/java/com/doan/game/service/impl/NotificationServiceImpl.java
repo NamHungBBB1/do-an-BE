@@ -263,6 +263,9 @@ public class NotificationServiceImpl implements NotificationService {
      * rollback không để lại tin đã đẩy. Không có khoá Firebase thì PushNotifier tự bỏ qua.
      */
     private void push(Notification n) {
+        if (!pushNotifier.isEnabled()) {
+            return;
+        }
         NotificationResponse r = toResponse(n, new HashMap<>());
         Map<String, String> data = new HashMap<>();
         data.put("notificationId", n.getId().toString());

@@ -29,7 +29,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class PushService {
 
-    /** Kết quả một lần gửi. INVALID_TOKEN = token chết, chỗ gọi nên xoá khỏi device_token. */
+    /**
+     * Kết quả một lần gửi. INVALID_TOKEN = token chết (FCM: UNREGISTERED / SENDER_ID_MISMATCH),
+     * chỗ gọi nên xoá khỏi device_token. Lỗi khác — kể cả INVALID_ARGUMENT do nội dung tin sai —
+     * là FAILED: KHÔNG xoá token.
+     */
     public enum Outcome {
         SENT,
         INVALID_TOKEN,
@@ -89,19 +93,30 @@ public class PushService {
             return Outcome.SENT;
         } catch (FirebaseMessagingException e) {
             MessagingErrorCode code = e.getMessagingErrorCode();
-            if (code == MessagingErrorCode.UNREGISTERED
-                    || code == MessagingErrorCode.INVALID_ARGUMENT
-                    || code == MessagingErrorCode.SENDER_ID_MISMATCH) {
-                // Token chết / của app khác: gửi lại bao nhiêu lần cũng vô ích.
+            Outcome outcome = classify(code);
+            if (outcome == Outcome.INVALID_TOKEN) {
                 log.info("Push: token không còn dùng được ({}), cần xoá khỏi device_token", code);
-                return Outcome.INVALID_TOKEN;
+            } else {
+                log.warn("Push: gửi thất bại ({})", code, e);
             }
-            log.warn("Push: gửi thất bại ({})", code, e);
-            return Outcome.FAILED;
+            return outcome;
         } catch (IllegalArgumentException e) {
             // Token rỗng/sai định dạng bị SDK chặn trước khi gọi mạng.
             log.info("Push: token sai định dạng, cần xoá khỏi device_token");
             return Outcome.INVALID_TOKEN;
         }
+    }
+
+    /**
+     * Chỉ UNREGISTERED và SENDER_ID_MISMATCH mới chắc chắn là token hỏng. INVALID_ARGUMENT còn do
+     * NỘI DUNG tin sai (data trùng khoá dành riêng của FCM, payload quá lớn...). Coi nó là token
+     * chết sẽ xoá sạch token hợp lệ của mọi người nhận chỉ vì một tin dựng lỗi, và app chỉ đăng ký
+     * lại ở lần mở sau.
+     */
+    static Outcome classify(MessagingErrorCode code) {
+        if (code == MessagingErrorCode.UNREGISTERED || code == MessagingErrorCode.SENDER_ID_MISMATCH) {
+            return Outcome.INVALID_TOKEN;
+        }
+        return Outcome.FAILED;
     }
 }

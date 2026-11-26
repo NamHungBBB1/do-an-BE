@@ -42,7 +42,7 @@ class PushNotifierTest {
         when(push.send("tok-2", MESSAGE)).thenReturn(PushService.Outcome.INVALID_TOKEN);
         when(push.send("tok-3", MESSAGE)).thenReturn(PushService.Outcome.FAILED);
 
-        new PushNotifier(push, store).notify(ACCOUNT, MESSAGE);
+        new PushNotifier(push, store, Runnable::run).notify(ACCOUNT, MESSAGE);
 
         verify(push, times(3)).send(anyString(), eq(MESSAGE));
         verify(store).removeToken("tok-2");
@@ -57,7 +57,7 @@ class PushNotifierTest {
         DeviceTokenService store = mock(DeviceTokenService.class);
         when(push.isEnabled()).thenReturn(false);
 
-        new PushNotifier(push, store).notify(ACCOUNT, MESSAGE);
+        new PushNotifier(push, store, Runnable::run).notify(ACCOUNT, MESSAGE);
 
         verifyNoInteractions(store);
         verify(push, never()).send(anyString(), eq(MESSAGE));
@@ -71,6 +71,6 @@ class PushNotifierTest {
         when(push.isEnabled()).thenReturn(true);
         when(store.tokensOf(ACCOUNT)).thenThrow(new IllegalStateException("db down"));
 
-        assertDoesNotThrow(() -> new PushNotifier(push, store).notify(ACCOUNT, MESSAGE));
+        assertDoesNotThrow(() -> new PushNotifier(push, store, Runnable::run).notify(ACCOUNT, MESSAGE));
     }
 }

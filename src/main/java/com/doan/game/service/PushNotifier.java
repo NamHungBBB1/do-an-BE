@@ -2,12 +2,15 @@ package com.doan.game.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Gửi push cho mọi thiết bị của một tài khoản, SAU khi transaction nghiệp vụ commit.
@@ -20,6 +23,10 @@ import java.util.UUID;
  * transaction đã kết thúc và không được commit (xem javadoc TransactionSynchronization). Vì vậy chỉ
  * có thao tác xoá token chết mới mở transaction mới (REQUIRES_NEW trong DeviceTokenService).
  *
+ * <p>Gửi chạy trên pool riêng ({@code pushExecutor}) chứ không phải thread của request: mạng FCM
+ * chậm không được làm chậm việc nộp bài. Admin SDK có timeout 5 giây (xem
+ * {@link com.doan.game.configuration.FirebasePushConfig}).
+ *
  * <p>Push là phụ: mọi lỗi ở đây chỉ ghi log, không được làm hỏng response của luồng chính (chuông
  * trong app vẫn còn nguyên).
  */
@@ -30,15 +37,23 @@ public class PushNotifier {
 
     private final PushService pushService;
     private final DeviceTokenService deviceTokens;
+    private final Executor pushExecutor;
 
-    public PushNotifier(PushService pushService, DeviceTokenService deviceTokens) {
+    public PushNotifier(PushService pushService, DeviceTokenService deviceTokens,
+                        @Qualifier("pushExecutor") Executor pushExecutor) {
         this.pushService = pushService;
         this.deviceTokens = deviceTokens;
+        this.pushExecutor = pushExecutor;
+    }
+
+    /** Có khoá Firebase chưa — chỗ gọi dùng để khỏi dựng tin khi push đang tắt. */
+    public boolean isEnabled() {
+        return pushService.isEnabled();
     }
 
     /**
      * Đẩy một tin cho tài khoản. Gọi trong transaction thì gửi sau commit; gọi ngoài transaction
-     * (test, job) thì gửi ngay.
+     * (test, job) thì gửi ngay. Việc gửi luôn chạy trên pool riêng, không giữ thread của request.
      */
     public void notify(UUID accountId, PushMessage message) {
         if (accountId == null || message == null || !pushService.isEnabled()) {
@@ -53,12 +68,21 @@ public class PushNotifier {
                 @Override
                 public void afterCompletion(int status) {
                     if (status == STATUS_COMMITTED) {
-                        deliver(tokens, message);
+                        submit(tokens, message);
                     }
                 }
             });
         } else {
-            deliver(tokens, message);
+            submit(tokens, message);
+        }
+    }
+
+    private void submit(List<String> tokens, PushMessage message) {
+        try {
+            pushExecutor.execute(() -> deliver(tokens, message));
+        } catch (RejectedExecutionException e) {
+            // Pool đã shutdown (đang tắt ứng dụng) — bỏ tin, không làm hỏng luồng chính.
+            log.warn("Push: pool đã đóng, bỏ tin '{}'", message.title());
         }
     }
 

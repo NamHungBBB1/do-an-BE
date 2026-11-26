@@ -38,6 +38,13 @@ public class FirebasePushConfig {
 
     private static final Logger log = LoggerFactory.getLogger(FirebasePushConfig.class);
 
+    /**
+     * Chặn thời gian chờ FCM: lời gọi send chạy trên thread của request (sau commit), mạng treo mà
+     * không có timeout thì học sinh nộp bài phải chờ theo. Admin SDK mặc định không giới hạn.
+     */
+    private static final int CONNECT_TIMEOUT_MS = 5_000;
+    private static final int READ_TIMEOUT_MS = 5_000;
+
     @Bean(name = "pushFirebaseApp")
     @ConditionalOnExpression(
             "!'${app.push.credentials:}'.isEmpty() or !'${app.push.credentials-path:}'.isEmpty()")
@@ -61,6 +68,8 @@ public class FirebasePushConfig {
         FirebaseOptions options = FirebaseOptions.builder()
                 .setCredentials(credentials(props))
                 .setProjectId(props.projectId().trim())
+                .setConnectTimeout(CONNECT_TIMEOUT_MS)
+                .setReadTimeout(READ_TIMEOUT_MS)
                 .build();
         FirebaseApp app = FirebaseApp.initializeApp(options, PUSH_APP_NAME);
         log.info("Push notification: đã bật, project {}", props.projectId().trim());

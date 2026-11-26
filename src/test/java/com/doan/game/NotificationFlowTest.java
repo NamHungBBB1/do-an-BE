@@ -183,6 +183,7 @@ class NotificationFlowTest {
         Account parent = adult("push-phu-huynh");
         LearnerGroup family = group(parent, LearningContext.FAMILY);
         LearnerSlot kid = slot(family, "Minh");
+        org.mockito.Mockito.when(pushNotifier.isEnabled()).thenReturn(true);
 
         notifications.notifyChapterCompleted(kid, 3, 1);
 
@@ -204,6 +205,7 @@ class NotificationFlowTest {
         LearnerGroup room = group(teacher, LearningContext.CLASS);
         LearnerSlot first = slot(room, "An");
         LearnerSlot second = slot(room, "Binh");
+        org.mockito.Mockito.when(pushNotifier.isEnabled()).thenReturn(true);
 
         notifications.notifyChapterCompleted(first, 1, 1);
         // Em thứ hai chỉ CẬP NHẬT dòng gộp: chuông nổi lại chưa đọc nhưng không đẩy thêm lần nữa.
