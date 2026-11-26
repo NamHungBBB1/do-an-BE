@@ -7,6 +7,11 @@ import com.doan.game.DTO.request.ChapterBatchRequest;
 import com.doan.game.exception.AppException;
 import com.doan.game.exception.ErrorCode;
 import com.doan.game.service.PlayService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,16 +38,43 @@ public class PlayController {
 
     /** Trần body lô (Hưng chốt 12/10): 64 KB — quá thì 413/2003 như quá 100 dòng một mảng. */
     private static final long MAX_BATCH_BYTES = 64 * 1024;
+    /** Trần body lô schema: 2 (play-v2.md mục 2). */
+    private static final long MAX_BATCH_V2_BYTES = 128 * 1024;
 
     private final PlayService playService;
+    private final ObjectMapper objectMapper;
 
-    /** Cuối chương gửi đúng một lô; giữa chương không gửi gì. Gửi lại vô hại. */
+    /**
+     * Cuối chương gửi đúng một lô; giữa chương không gửi gì. Gửi lại vô hại. Hai dạng chạy song song (play-v2 mục 11): có trường
+     * schema → bản 2 (kiểm chặt, trường lạ 1001); không có → bản 1 y như cũ (trường lạ bỏ qua, FE đang chạy dựa vào đó).
+     */
     @PostMapping("/chapter")
-    public ApiResponse<ChapterBatchResponse> submitChapterBatch(@AuthenticationPrincipal Jwt jwt,
-                                                                @RequestBody ChapterBatchRequest req,
-                                                                HttpServletRequest httpReq) {
+    public ApiResponse<ChapterBatchResponse> submitChapterBatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(schema = @Schema(
+                    oneOf = {ChapterBatchRequest.class, com.doan.game.DTO.request.ChapterBatchV2Request.class})))
+            @RequestBody JsonNode body,
+            HttpServletRequest httpReq) {
+        // Bản 1 trước đây bind thẳng vào record: body không phải object → 1002 như Spring trả khi không đọc được.
+        if (body == null || !body.isObject()) {
+            throw new AppException(ErrorCode.MALFORMED_BODY);
+        }
         // Content-Length: MockMvc luôn set, client thật có thì mới kiểm được — thiếu thì bỏ qua.
-        if (httpReq.getContentLengthLong() > MAX_BATCH_BYTES) {
+        long length = httpReq.getContentLengthLong();
+        if (body.has("schema")) {
+            if (length > MAX_BATCH_V2_BYTES) {
+                throw new AppException(ErrorCode.BATCH_TOO_LARGE);
+            }
+            return ApiResponse.ok(playService.submitChapterBatchV2(currentSlotId(jwt), body));
+        }
+        // Đọc thành record trước rồi mới kiểm trần, đúng thứ tự cũ (Spring bind xong mới vào hàm).
+        ChapterBatchRequest req;
+        try {
+            req = objectMapper.treeToValue(body, ChapterBatchRequest.class);
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            throw new AppException(ErrorCode.MALFORMED_BODY);
+        }
+        if (length > MAX_BATCH_BYTES) {
             throw new AppException(ErrorCode.BATCH_TOO_LARGE);
         }
         return ApiResponse.ok(playService.submitChapterBatch(currentSlotId(jwt), req));
