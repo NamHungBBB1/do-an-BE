@@ -347,10 +347,17 @@ public class ArchiveServiceImpl implements ArchiveService {
         if (storeEmpty) {
             return "kho không có tệp nào";
         }
-        long missing = usage.entrySet().stream()
+        List<String> missing = usage.entrySet().stream()
                 .filter(e -> e.getValue().stream().anyMatch(u -> "CURRENT".equals(u.where())))
-                .filter(e -> !onDisk.test(e.getKey())).count();
-        return missing == 0 ? null : missing + " tệp bản đang chạy dùng không có trên máy chủ";
+                .map(Map.Entry::getKey).filter(p -> !onDisk.test(p)).sorted().toList();
+        if (missing.isEmpty()) {
+            return null;
+        }
+        log.error("Tệp bản đang chạy dùng không có trên máy chủ ({}): {}", missing.size(),
+                missing.subList(0, Math.min(50, missing.size())));
+        return missing.size() + " tệp bản đang chạy dùng không có trên máy chủ: "
+                + String.join(", ", missing.subList(0, Math.min(5, missing.size())))
+                + (missing.size() > 5 ? ", …" : "");
     }
 
     /** null = ổn. Có bản đang chạy mà không trỏ tới tệp nào (đọc JSON hỏng / mất kết nối) thì mọi tệp trông như mồ côi. */
@@ -688,13 +695,14 @@ public class ArchiveServiceImpl implements ArchiveService {
             if (row.getState() != ArchiveState.COUNTING || row.getDueAt().isAfter(now)) {
                 continue;   // đã đổi trong lúc chờ khoá (Giữ lại, job)
             }
-            if (usage.containsKey(row.getItemRef())) {
-                itemRepo.delete(row);
-                policy.log(row, ArchiveAction.COUNT_CLEAR, null, "được dùng lại trước lúc lưu trữ");
+            boolean inUse = usage.containsKey(row.getItemRef());
+            if (!Files.exists(dir.resolve(row.getItemRef()))) {
+                markGone(row, now, inUse);   // như job: tệp mất ngoài BE → đã lưu trữ / tự khôi phục, không xoá dòng
                 continue;
             }
-            if (!Files.exists(dir.resolve(row.getItemRef()))) {
-                markGone(row, now, false);   // không đang dùng (vừa kiểm ở trên)
+            if (inUse) {
+                itemRepo.delete(row);
+                policy.log(row, ArchiveAction.COUNT_CLEAR, null, "được dùng lại trước lúc lưu trữ");
                 continue;
             }
             row.setState(ArchiveState.ARCHIVING);

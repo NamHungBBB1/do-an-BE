@@ -74,11 +74,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {"app.assets.dir=target/test-archive-assets", "app.assets.thumb-backfill=false",
         "app.archive.cron=-", "app.archive.worker-key=" + ArchiveFlowTest.KEY,
-        "app.archive.status-file=target/test-archive-status.json"})
+        "app.archive.status-file=target/test-archive-status.json", "app.voice.worker-key=" + ArchiveFlowTest.VOICE_KEY})
 @AutoConfigureMockMvc
 class ArchiveFlowTest {
 
     static final String KEY = "test-archive-worker-key";
+    static final String VOICE_KEY = "test-voice-worker-key";
     private static final String HEADER = "X-Archive-Worker-Key";
     private static final Path DIR = Path.of("target/test-archive-assets");
     private static final Path STATUS = Path.of("target/test-archive-status.json");
@@ -663,6 +664,56 @@ class ArchiveFlowTest {
         }
     }
 
+    /** Giọng đã lưu trữ được sinh lại và nộp → sẵn sàng trở lại ngay (cả khi job không chạy), không xếp sinh lần nữa. */
+    @Test
+    void regeneratedArchivedVoiceIsReadyAgain() throws Exception {
+        file("a", 0);
+        publishFresh(SHARED);
+        String content = """
+                {"id":"chapter","title":"Chương 2","scenes":[
+                  {"id":"intro","type":"dialogue","background":"{{ASSET_BASE}}/%s","speakerId":"AN","text":"Sinh lại giọng này","nextSceneId":"end"},
+                  {"id":"end","type":"ending"}]}
+                """.formatted(SHARED);
+        String key = voiceKeys.lines(json.readTree(content)).get(0).key();
+        String voice = "v/" + key + ".mp3";
+        com.doan.game.entity.VoiceClip clip = doneClip(key);
+        try {
+            seed(ArchiveKind.AUDIO, voice, ArchiveState.ARCHIVED, null);
+            mvc.perform(put("/api/studio/chapters/CH02/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                    .content(content)).andExpect(status().isOk());
+            mvc.perform(post("/api/studio/chapters/CH02/voice").with(admin)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result.queued").value(1));
+            byte[] mp3 = {'I', 'D', '3', 3, 0, 0, 0, 0, 0, 0};
+            mvc.perform(multipart("/api/voice-worker/clips/" + key).file(new MockMultipartFile("file", "x.mp3", "audio/mpeg", mp3))
+                    .header("X-Voice-Worker-Key", VOICE_KEY)).andExpect(status().isOk());
+            assertThat(Files.exists(DIR.resolve(voice))).isTrue();
+            assertThat(item(voice).getState()).isEqualTo(ArchiveState.COUNTING);
+            mvc.perform(post("/api/studio/chapters/CH02/voice").with(admin)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result.queued").value(0));
+        } finally {
+            clipRepo.delete(clipRepo.findByClipKey(key).orElse(clip));
+        }
+    }
+
+    /** Claim: tệp tới hạn vừa mất trên đĩa vừa được dùng lại → như job (RESTORING), không xoá dòng, không phát việc. */
+    @Test
+    void claimMarksMissingInUseFileInsteadOfDeletingRow() throws Exception {
+        file("a", 0);
+        String orphan = file("a", 1);
+        publishFresh(SHARED);
+        setMode(ArchivePolicy.Mode.ON);
+        runJob();
+        due(ArchiveKind.IMAGE, orphan);
+        mvc.perform(put("/api/studio/chapters/CH02/draft").with(admin).contentType(MediaType.APPLICATION_JSON)
+                .content(chapter("Chương 2", orphan))).andExpect(status().isOk());
+        Files.delete(DIR.resolve(orphan));
+
+        assertThat(claim(10)).isEmpty();
+        assertThat(item(orphan)).isNotNull();
+        assertThat(item(orphan).getState()).isEqualTo(ArchiveState.RESTORING);
+        assertThat(logRepo.existsByAction(ArchiveAction.RECONCILED)).isTrue();
+    }
+
     // ------------------------------------------------------------------ phanh về đĩa (rà độc lập N1)
     @Test
     void safetyBrakeWhenStoreLooksEmptyOrMissing() throws Exception {
@@ -680,9 +731,12 @@ class ArchiveFlowTest {
         Files.delete(DIR.resolve(SHARED));
         JsonNode run = runJob();
         assertThat(run.path("aborted").asBoolean()).isTrue();
-        assertThat(run.path("note").asText()).contains("không có trên máy chủ");
+        assertThat(run.path("note").asText()).contains("không có trên máy chủ").contains(SHARED);
         assertThat(claim(10)).isEmpty();
         assertThat(item(orphan).getState()).isEqualTo(ArchiveState.COUNTING);
+        JsonNode aborted = result(mvc.perform(get("/api/studio/archive/log").with(admin))).get(0);
+        assertThat(aborted.path("action").asText()).isEqualTo("JOB_ABORTED");
+        assertThat(aborted.path("note").asText()).as("ghi chú của claim nêu tệp").contains(SHARED);
 
         // Kho trống hẳn → phanh, không xoá đồng hồ, không biến ARCHIVING kẹt thành ARCHIVED.
         Files.delete(DIR.resolve(orphan));

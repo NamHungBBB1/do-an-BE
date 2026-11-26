@@ -3,6 +3,7 @@ package com.doan.game.service.impl;
 import com.doan.game.entity.Chapter;
 import com.doan.game.entity.ChapterDraft;
 import com.doan.game.entity.VoiceClip;
+import com.doan.game.enums.ArchiveKind;
 import com.doan.game.enums.Role;
 import com.doan.game.enums.VoiceClipStatus;
 import com.doan.game.exception.AppException;
@@ -90,6 +91,7 @@ public class VoiceRenderService {
     private final AccountRepository accountRepo;
     private final AccountRoleRepository roleRepo;
     private final VoiceKeys keys;
+    private final ArchivePolicy archivePolicy;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final Path assetsDir;
@@ -105,6 +107,7 @@ public class VoiceRenderService {
 
     public VoiceRenderService(ChapterRepository chapterRepo, ChapterDraftRepository draftRepo, VoiceClipRepository clipRepo,
                               AccountRepository accountRepo, AccountRoleRepository roleRepo, VoiceKeys keys,
+                              ArchivePolicy archivePolicy,
                               ObjectMapper objectMapper, Clock clock,
                               @Value("${app.assets.dir}") String assetsDir,
                               @Value("${app.voice.refs-dir}") String refsDir,
@@ -118,6 +121,7 @@ public class VoiceRenderService {
         this.accountRepo = accountRepo;
         this.roleRepo = roleRepo;
         this.keys = keys;
+        this.archivePolicy = archivePolicy;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.assetsDir = Paths.get(assetsDir).toAbsolutePath();
@@ -340,6 +344,8 @@ public class VoiceRenderService {
         }
         String path = "v/" + key + ".mp3";
         writeOnce(path, mp3);
+        // Giọng đã lưu trữ vừa được sinh lại: tệp đã về đĩa nên dòng lưu trữ về đếm ngay — không thì readyKeys vẫn coi là chưa sinh.
+        archivePolicy.onFileRewritten(ArchiveKind.AUDIO, path);
         c.setStatus(VoiceClipStatus.DONE);
         c.setPath(path);
         c.setSeconds(seconds);
