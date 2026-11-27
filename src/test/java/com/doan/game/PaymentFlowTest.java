@@ -142,6 +142,10 @@ class PaymentFlowTest {
                 .andExpect(jsonPath("$.result.status").value("PAID"))
                 .andExpect(jsonPath("$.result.amount").value(PRICE))
                 .andExpect(jsonPath("$.result.paidAt").isNotEmpty());
+        // FE đọc "Mã giao dịch" từ đây: mã ngân hàng PayOS trả trong webhook, KHÔNG phải orderCode.
+        mvc.perform(get("/api/admin/transactions/" + orderCode).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.bankReference").value("FT" + orderCode));
         List<Entitlement> plans = entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id());
         assertThat(plans).singleElement().satisfies(e -> {
             assertThat(e.getKind()).isEqualTo(PlanKind.PARENT);

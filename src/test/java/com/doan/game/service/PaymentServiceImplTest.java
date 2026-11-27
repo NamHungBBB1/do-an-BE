@@ -25,12 +25,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import vn.payos.PayOS;
+import vn.payos.model.v2.paymentRequests.PaymentLink;
+import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 import vn.payos.model.webhooks.WebhookData;
+import vn.payos.service.blocking.v2.paymentRequests.PaymentRequestsService;
 import vn.payos.service.blocking.webhooks.WebhooksService;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,6 +63,7 @@ class PaymentServiceImplTest {
     @Mock ObjectProvider<PayOS> payOSProvider;
     @Mock PayOS payOS;
     @Mock WebhooksService webhooks;
+    @Mock PaymentRequestsService paymentRequests;
     @Mock ApplicationEventPublisher events;
     @Mock com.doan.game.repository.AccountRoleRepository accountRoleRepo;
 
@@ -119,10 +124,47 @@ class PaymentServiceImplTest {
         // Gói vĩnh viễn (18/11/2026): sentinel 9999-12-31, không cộng số tháng của đơn.
         assertEquals(LocalDate.of(9999, 12, 31), captor.getValue().getExpiresOn());
         assertEquals(tx, captor.getValue().getTransaction());
+        assertEquals("REF", tx.getBankReference());
         // Biên nhận: một mail, có mã đơn và ghi "vĩnh viễn" thay vì in ngày sentinel.
         ArgumentCaptor<OutgoingMail> mail = ArgumentCaptor.forClass(OutgoingMail.class);
         verify(events).publishEvent(mail.capture());
         assertTrue(mail.getValue().body().contains("123") && mail.getValue().body().contains("vĩnh viễn"));
+    }
+
+    /** Webhook lệch tiền vẫn lưu mã ngân hàng để admin đối soát, dù không cấp gói. */
+    @Test
+    void wrongAmountWebhookStillStoresTheBankReference() {
+        payOSReports(123L, 2000L - 1, "00");
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+
+        svc.handleWebhook("{}");
+
+        assertEquals("REF", tx.getBankReference());
+        assertEquals(TransactionStatus.PENDING, tx.getStatus());
+        assertTrue(tx.isNeedsReview());
+    }
+
+    /** Đơn PAID cũ (webhook đến trước khi có cột) được backfill, KHÔNG bị lùi về FAILED. */
+    @Test
+    void reconcileBackfillsBankReferenceWithoutRegressingAPaidOrder() {
+        tx.setStatus(TransactionStatus.PAID);
+        tx.setPaidAt(Instant.now(clock));
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+        when(payOSProvider.getIfAvailable()).thenReturn(payOS);
+        when(payOS.paymentRequests()).thenReturn(paymentRequests);
+
+        vn.payos.model.v2.paymentRequests.Transaction bankTx = new vn.payos.model.v2.paymentRequests.Transaction();
+        bankTx.setReference("FT26330478902219");
+        PaymentLink link = new PaymentLink();
+        // PayOS có thể báo CANCELLED vì link hết hạn — nhưng tiền đã về thì vẫn giữ PAID.
+        link.setStatus(PaymentLinkStatus.CANCELLED);
+        link.setTransactions(List.of(bankTx));
+        when(paymentRequests.get(123L)).thenReturn(link);
+
+        svc.reconcile(123L);
+
+        assertEquals("FT26330478902219", tx.getBankReference());
+        assertEquals(TransactionStatus.PAID, tx.getStatus());
     }
 
     @Test

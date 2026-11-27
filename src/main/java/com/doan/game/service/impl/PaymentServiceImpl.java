@@ -306,6 +306,10 @@ public class PaymentServiceImpl implements PaymentService {
                     data.getOrderCode(), data.getCode(), data.getDesc());
             return;
         }
+        // Mã giao dịch ngân hàng chỉ có SAU khi tiền về. Lưu ngay cả khi lệch số tiền để admin đối soát.
+        if (data.getReference() != null && !data.getReference().isBlank()) {
+            tx.setBankReference(data.getReference());
+        }
         if (!Objects.equals(data.getAmount(), tx.getAmount())) {
             // Tiền đã về nhưng lệch: không cấp gói, nhưng cũng không để chuyện này chỉ nằm trong log (P-01).
             // Đơn vẫn PENDING, đánh dấu cho admin lọc needsReview rồi đối soát tay.
@@ -474,14 +478,20 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentStatusResponse reconcile(long orderCode) {
         Transaction tx = transactionRepo.lockByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND, String.valueOf(orderCode)));
-        if (tx.getStatus() == TransactionStatus.PENDING) {
+        if (tx.getStatus() == TransactionStatus.PENDING
+                || (tx.getStatus() == TransactionStatus.PAID && isBlank(tx.getBankReference()))) {
+            // Đơn PAID cũ chưa có mã ngân hàng (webhook đến trước khi có cột): hỏi PayOS để backfill.
             reconcileWithPayOS(tx);
         }
         return toStatus(tx);
     }
 
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     // ------------------------------------------------------------------ lõi
-    /** Hỏi PayOS trạng thái thật của một giao dịch PENDING và áp vào. Lỗi mạng thì để nguyên, lần sau quét lại. */
+    /** Hỏi PayOS trạng thật của một giao dịch và áp vào. Lỗi mạng thì để nguyên, lần sau quét lại. */
     private void reconcileWithPayOS(Transaction tx) {
         PayOS client = payOS.getIfAvailable();
         if (client == null) {
@@ -489,6 +499,11 @@ public class PaymentServiceImpl implements PaymentService {
         }
         try {
             PaymentLink link = client.paymentRequests().get(tx.getOrderCode());
+            captureBankReference(tx, link);
+            if (tx.getStatus() == TransactionStatus.PAID) {
+                // Chỉ backfill mã ngân hàng: không được dùng link để lùi đơn đã PAID về FAILED.
+                return;
+            }
             String linkStatus = link.getStatus() == null ? "" : link.getStatus().name();
             switch (linkStatus) {
                 case "PAID" -> markPaid(tx, Instant.now(clock));
@@ -498,6 +513,25 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (PayOSException e) {
             log.warn("Hỏi PayOS orderCode {} lỗi: {}", tx.getOrderCode(), e.getMessage());
         }
+    }
+
+    /**
+     * PayOS trả mã giao dịch ngân hàng trong danh sách giao dịch của link. Lấy mã cuối (mới nhất);
+     * không đè mã đã có. Dùng khi webhook hụt hoặc cần backfill đơn PAID cũ.
+     */
+    private void captureBankReference(Transaction tx, PaymentLink link) {
+        if (!isBlank(tx.getBankReference())) {
+            return;
+        }
+        List<vn.payos.model.v2.paymentRequests.Transaction> rows = link.getTransactions();
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        rows.stream()
+                .map(vn.payos.model.v2.paymentRequests.Transaction::getReference)
+                .filter(ref -> !isBlank(ref))
+                .reduce((first, second) -> second)
+                .ifPresent(tx::setBankReference);
     }
 
     /** Idempotent. Gọi trong transaction đang giữ khoá hàng (lockByOrderCode) hoặc trong cron. */
@@ -677,13 +711,13 @@ public class PaymentServiceImpl implements PaymentService {
     static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
-                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote());
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(), tx.getBankReference());
     }
 
     private static TransactionDetailResponse toDetail(Transaction tx) {
         return new TransactionDetailResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
                 tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(),
-                tx.getGatewayRef(), tx.getTransferNote(), tx.getExpiresAt());
+                tx.getGatewayRef(), tx.getTransferNote(), tx.getExpiresAt(), tx.getBankReference());
     }
 }
