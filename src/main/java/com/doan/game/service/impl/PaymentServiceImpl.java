@@ -717,7 +717,14 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private static PaymentStatusResponse toStatus(Transaction tx) {
-        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt());
+        boolean pending = tx.getStatus() == TransactionStatus.PENDING;
+        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt(),
+                pending ? tx.getQrCode() : null,
+                pending ? tx.getBankBin() : null,
+                pending ? tx.getBankAccountNumber() : null,
+                pending ? tx.getBankAccountName() : null,
+                pending ? tx.getTransferNote() : null,
+                pending ? tx.getExpiresAt() : null);
     }
 
     /** Dùng chung với màn chi tiết tài khoản (AdminServiceImpl) — cùng một dạng dòng giao dịch. */

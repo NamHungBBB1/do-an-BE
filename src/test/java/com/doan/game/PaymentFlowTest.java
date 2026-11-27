@@ -130,7 +130,14 @@ class PaymentFlowTest {
         mvc.perform(get("/api/payments/" + orderCode).header("Authorization", "Bearer " + buyer.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.status").value("PENDING"))
-                .andExpect(jsonPath("$.result.paidAt").doesNotExist());
+                .andExpect(jsonPath("$.result.paidAt").doesNotExist())
+                // FE mở lại popup VietQR từ lịch sử: chỉ có orderCode thì phải lấy đủ thông tin QR ở đây.
+                .andExpect(jsonPath("$.result.qrCode").value("000201010212-fake-qr"))
+                .andExpect(jsonPath("$.result.bin").value("970422"))
+                .andExpect(jsonPath("$.result.accountNumber").value("0001112223"))
+                .andExpect(jsonPath("$.result.accountName").value("FINTEEN TEST"))
+                .andExpect(jsonPath("$.result.description").value("FinTeen goi phu huynh"))
+                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
         assertThat(entitlementRepo.findByAccount_IdOrderByExpiresOnDescCreatedAtDesc(buyer.id())).isEmpty();
 
         mailCatcher.sent.clear();
@@ -141,7 +148,11 @@ class PaymentFlowTest {
         mvc.perform(get("/api/payments/" + orderCode).header("Authorization", "Bearer " + buyer.token()))
                 .andExpect(jsonPath("$.result.status").value("PAID"))
                 .andExpect(jsonPath("$.result.amount").value(PRICE))
-                .andExpect(jsonPath("$.result.paidAt").isNotEmpty());
+                .andExpect(jsonPath("$.result.paidAt").isNotEmpty())
+                // Đơn đã xong thì không còn QR để mở lại.
+                .andExpect(jsonPath("$.result.qrCode").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.result.bin").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.result.description").value(org.hamcrest.Matchers.nullValue()));
         // FE đọc "Mã giao dịch" từ đây: mã ngân hàng PayOS trả trong webhook, KHÔNG phải orderCode.
         mvc.perform(get("/api/admin/transactions/" + orderCode).with(admin()))
                 .andExpect(status().isOk())
