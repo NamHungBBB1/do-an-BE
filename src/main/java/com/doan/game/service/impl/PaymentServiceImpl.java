@@ -306,10 +306,8 @@ public class PaymentServiceImpl implements PaymentService {
                     data.getOrderCode(), data.getCode(), data.getDesc());
             return;
         }
-        // Mã giao dịch ngân hàng chỉ có SAU khi tiền về. Lưu ngay cả khi lệch số tiền để admin đối soát.
-        if (data.getReference() != null && !data.getReference().isBlank()) {
-            tx.setBankReference(data.getReference());
-        }
+        // Mã giao dịch ngân hàng chỉ có SAU khi tiền về. Webhook là nguồn gốc nên ghi đè mã cũ.
+        setBankReference(tx, data.getReference());
         if (!Objects.equals(data.getAmount(), tx.getAmount())) {
             // Tiền đã về nhưng lệch: không cấp gói, nhưng cũng không để chuyện này chỉ nằm trong log (P-01).
             // Đơn vẫn PENDING, đánh dấu cho admin lọc needsReview rồi đối soát tay.
@@ -490,6 +488,20 @@ public class PaymentServiceImpl implements PaymentService {
         return value == null || value.isBlank();
     }
 
+    /** Cột ngân hàng dài 64: cắt bớt thay vì để lỗi DB kéo rollback cả webhook (tiền về mà không cấp gói). */
+    private void setBankReference(Transaction tx, String reference) {
+        if (isBlank(reference)) {
+            return;
+        }
+        String value = reference.trim();
+        if (value.length() > 64) {
+            log.warn("PayOS orderCode {}: mã ngân hàng dài {} ký tự, cắt còn 64",
+                    tx.getOrderCode(), value.length());
+            value = value.substring(0, 64);
+        }
+        tx.setBankReference(value);
+    }
+
     // ------------------------------------------------------------------ lõi
     /** Hỏi PayOS trạng thật của một giao dịch và áp vào. Lỗi mạng thì để nguyên, lần sau quét lại. */
     private void reconcileWithPayOS(Transaction tx) {
@@ -517,7 +529,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     /**
      * PayOS trả mã giao dịch ngân hàng trong danh sách giao dịch của link. Lấy mã cuối (mới nhất);
-     * không đè mã đã có. Dùng khi webhook hụt hoặc cần backfill đơn PAID cũ.
+     * chỉ điền khi chưa có — webhook là nguồn gốc và được phép ghi đè. Dùng khi webhook hụt hoặc cần
+     * backfill đơn PAID cũ.
      */
     private void captureBankReference(Transaction tx, PaymentLink link) {
         if (!isBlank(tx.getBankReference())) {
@@ -531,7 +544,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .map(vn.payos.model.v2.paymentRequests.Transaction::getReference)
                 .filter(ref -> !isBlank(ref))
                 .reduce((first, second) -> second)
-                .ifPresent(tx::setBankReference);
+                .ifPresent(ref -> setBankReference(tx, ref));
     }
 
     /** Idempotent. Gọi trong transaction đang giữ khoá hàng (lockByOrderCode) hoặc trong cron. */

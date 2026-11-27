@@ -92,10 +92,14 @@ class PaymentServiceImplTest {
     }
 
     private void payOSReports(long orderCode, long amount, String code) {
+        payOSReports(orderCode, amount, code, "REF");
+    }
+
+    private void payOSReports(long orderCode, long amount, String code, String reference) {
         // Dựng xong rồi mới stub: builder của SDK có @NonNull, NPE giữa when()...thenReturn() là UnfinishedStubbing.
         WebhookData data = WebhookData.builder()
                 .orderCode(orderCode).amount(amount).code(code).desc("ok")
-                .description("FinTeen goi phu huynh").accountNumber("0000").reference("REF")
+                .description("FinTeen goi phu huynh").accountNumber("0000").reference(reference)
                 .transactionDateTime("2026-10-02 10:05:00").currency("VND").paymentLinkId("plink")
                 .build();
         when(payOSProvider.getIfAvailable()).thenReturn(payOS);
@@ -142,6 +146,19 @@ class PaymentServiceImplTest {
         assertEquals("REF", tx.getBankReference());
         assertEquals(TransactionStatus.PENDING, tx.getStatus());
         assertTrue(tx.isNeedsReview());
+    }
+
+    /** Mã ngân hàng quá dài bị cắt còn 64 — không được làm rollback webhook (mất tiền đã về). */
+    @Test
+    void tooLongBankReferenceDoesNotRollBackTheWebhook() {
+        payOSReports(123L, 2000L, "00", "F".repeat(80));
+        when(transactionRepo.lockByOrderCode(123L)).thenReturn(Optional.of(tx));
+
+        svc.handleWebhook("{}");
+
+        assertEquals(TransactionStatus.PAID, tx.getStatus());
+        assertEquals(64, tx.getBankReference().length());
+        verify(entitlementRepo).save(any());
     }
 
     /** Đơn PAID cũ (webhook đến trước khi có cột) được backfill, KHÔNG bị lùi về FAILED. */
