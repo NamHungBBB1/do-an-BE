@@ -89,7 +89,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/studio/**").hasAnyAuthority("SCOPE_ADMIN", "SCOPE_GAME_EDITOR",
                         "SCOPE_GAME_REVIEWER", "SCOPE_GAME_MANAGER")
                 // Việc của admin: cấp / thu vai, cấp gói không thanh toán, đăng ký URL webhook PayOS.
-                .requestMatchers("/api/admin/**", "/api/entitlements/grant",
+                .requestMatchers("/api/admin/**", "/api/entitlements/grant", "/api/entitlements/grant-pack",
                         "/api/payments/webhook/confirm").hasAuthority("SCOPE_ADMIN")
                 // MỞ slot mới là việc của người lớn ĐANG CÓ GÓI (vai tính lại từ gói còn hạn mỗi request).
                 // Còn trả / xoá / đổi PIN slot đã có thì KHÔNG đòi gói (G-01, 10/10): hết hạn vẫn giữ

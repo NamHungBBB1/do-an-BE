@@ -96,7 +96,7 @@ class InternalLoginFlowTest {
         String bearer = "Bearer " + access;
 
         mvc.perform(post("/api/entitlements/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accountId\":\"" + customer.getId() + "\",\"kind\":\"PARENT\",\"months\":1,\"reason\":\"thu\"}"))
+                        .content("{\"accountId\":\"" + customer.getId() + "\",\"kind\":\"PARENT\",\"reason\":\"thu\"}"))
                 .andExpect(status().isOk());
         mvc.perform(post("/api/admin/roles/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
                         .content(roleJson(customer, "GAME_EDITOR")))
@@ -107,7 +107,7 @@ class InternalLoginFlowTest {
 
         // Ngược lại: tài khoản nội bộ không nhận gói, không mở nhóm.
         mvc.perform(post("/api/entitlements/grant").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accountId\":\"" + clean.getId() + "\",\"kind\":\"PARENT\",\"months\":1,\"reason\":\"thu\"}"))
+                        .content("{\"accountId\":\"" + clean.getId() + "\",\"kind\":\"PARENT\",\"reason\":\"thu\"}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(3025));
         mvc.perform(post("/api/groups").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Nhom admin\",\"context\":\"FAMILY\"}"))
