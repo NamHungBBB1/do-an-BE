@@ -18,5 +18,6 @@ public interface EntitlementService {
 
     EntitlementResponse grantPlan(UUID adminId, GrantPlanRequest req);
 
-
+    /** Admin cấp pack slot tay (đền bù), cần có gói gốc cùng loại. */
+    GrantPackResponse grantPack(UUID adminId, GrantPackRequest req);
 }

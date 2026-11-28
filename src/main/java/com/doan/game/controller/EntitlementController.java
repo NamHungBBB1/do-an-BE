@@ -1,8 +1,10 @@
 package com.doan.game.controller;
 
+import com.doan.game.DTO.request.GrantPackRequest;
 import com.doan.game.DTO.request.GrantPlanRequest;
 import com.doan.game.DTO.response.ApiResponse;
 import com.doan.game.DTO.response.EntitlementResponse;
+import com.doan.game.DTO.response.GrantPackResponse;
 import com.doan.game.service.EntitlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -40,6 +42,13 @@ public class EntitlementController {
     public ApiResponse<EntitlementResponse> grant(@AuthenticationPrincipal Jwt jwt,
                                                   @RequestBody GrantPlanRequest req) {
         return ApiResponse.ok(entitlementService.grantPlan(currentAccountId(jwt), req));
+    }
+
+    /** Admin cấp pack slot tay để đền bù; cần có gói gốc cùng loại. */
+    @PostMapping("/grant-pack")
+    public ApiResponse<GrantPackResponse> grantPack(@AuthenticationPrincipal Jwt jwt,
+                                                    @RequestBody GrantPackRequest req) {
+        return ApiResponse.ok(entitlementService.grantPack(currentAccountId(jwt), req));
     }
 
     private static UUID currentAccountId(Jwt jwt) {
