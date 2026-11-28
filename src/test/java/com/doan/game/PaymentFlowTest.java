@@ -478,6 +478,26 @@ class PaymentFlowTest {
         verify(payosRequests, never()).cancel(anyLong(), anyString());
     }
 
+    /** FE cần expiresAt + số pack trong lịch sử để dựng nút "Tiếp tục thanh toán". */
+    @Test
+    void myPaymentHistoryCarriesExpiresAtAndPackCount() throws Exception {
+        Buyer buyer = buyer("history-fields");
+        long planOrder = buy(buyer.token());
+        mvc.perform(get("/api/payments").header("Authorization", "Bearer " + buyer.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result[0].orderCode").value(planOrder))
+                .andExpect(jsonPath("$.result[0].expiresAt").isNotEmpty())
+                .andExpect(jsonPath("$.result[0].packs").value(org.hamcrest.Matchers.nullValue()));
+
+        mvc.perform(webhook(signedWebhook(planOrder, PRICE, "00", CHECKSUM_KEY))).andExpect(status().isOk());
+        long addonOrder = buyAddon(buyer.token(), 3);
+        mvc.perform(get("/api/payments").header("Authorization", "Bearer " + buyer.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result[0].orderCode").value(addonOrder))
+                .andExpect(jsonPath("$.result[0].packs").value(3))
+                .andExpect(jsonPath("$.result[0].expiresAt").isNotEmpty());
+    }
+
     // ------------------------------------------------------------------ add-on (18/11/2026)
     /**
      * Q16: mua pack 3 lần × 2 slot. Đã có gói gốc → tạo đơn ADDON; webhook (ký thật) cấp đúng 6 slot

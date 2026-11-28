@@ -731,7 +731,8 @@ public class PaymentServiceImpl implements PaymentService {
     static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
-                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(), tx.getBankReference());
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(), tx.getBankReference(),
+                tx.getPacks(), tx.getExpiresAt());
     }
 
     private static TransactionDetailResponse toDetail(Transaction tx) {
