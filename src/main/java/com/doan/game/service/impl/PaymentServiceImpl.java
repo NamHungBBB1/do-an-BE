@@ -717,14 +717,22 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private static PaymentStatusResponse toStatus(Transaction tx) {
-        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt());
+        boolean pending = tx.getStatus() == TransactionStatus.PENDING;
+        return new PaymentStatusResponse(tx.getOrderCode(), tx.getStatus().name(), tx.getAmount(), tx.getPaidAt(),
+                pending ? tx.getQrCode() : null,
+                pending ? tx.getBankBin() : null,
+                pending ? tx.getBankAccountNumber() : null,
+                pending ? tx.getBankAccountName() : null,
+                pending ? tx.getTransferNote() : null,
+                pending ? tx.getExpiresAt() : null);
     }
 
     /** Dùng chung với màn chi tiết tài khoản (AdminServiceImpl) — cùng một dạng dòng giao dịch. */
     static TransactionAdminResponse toAdmin(Transaction tx) {
         return new TransactionAdminResponse(tx.getOrderCode(), tx.getAccount().getId(), tx.getAccount().getEmail(),
                 tx.getKind().name(), tx.getPurpose().name(), tx.getAmount(), tx.getMonths(), tx.getStatus().name(),
-                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(), tx.getBankReference());
+                tx.getCreatedAt(), tx.getPaidAt(), tx.isNeedsReview(), tx.getNote(), tx.getBankReference(),
+                tx.getPacks(), tx.getExpiresAt());
     }
 
     private static TransactionDetailResponse toDetail(Transaction tx) {
