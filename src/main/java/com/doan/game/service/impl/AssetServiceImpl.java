@@ -5,10 +5,12 @@ import com.doan.game.DTO.response.AssetResponse;
 import com.doan.game.DTO.response.AssetUploadResponse;
 import com.doan.game.DTO.response.AssetUsageResponse;
 import com.doan.game.entity.Account;
+import com.doan.game.entity.ArchiveItem;
 import com.doan.game.entity.Asset;
 import com.doan.game.entity.Chapter;
 import com.doan.game.entity.GameRelease;
 import com.doan.game.entity.ReleaseChapter;
+import com.doan.game.enums.ArchiveKind;
 import com.doan.game.enums.AssetKind;
 import com.doan.game.enums.DraftStatus;
 import com.doan.game.enums.Role;
@@ -95,11 +97,13 @@ public class AssetServiceImpl implements AssetService {
     private final String assetBase;
     private final Path dir;
     private final String cwebp;
+    private final ArchivePolicy archivePolicy;
+    private final VoiceKeys voiceKeys;
 
     public AssetServiceImpl(AssetRepository assetRepo, ChapterRepository chapterRepo, ChapterDraftRepository draftRepo,
                             GameReleaseRepository releaseRepo, ReleaseChapterRepository releaseChapterRepo,
                             AccountRepository accountRepo, AccountRoleRepository accountRoleRepo,
-                            ObjectMapper objectMapper, Clock clock,
+                            ObjectMapper objectMapper, Clock clock, ArchivePolicy archivePolicy, VoiceKeys voiceKeys,
                             @Value("${app.assets.base-url}") String assetBase,
                             @Value("${app.assets.dir}") String dir,
                             @Value("${app.assets.cwebp:cwebp}") String cwebp) {
@@ -115,6 +119,8 @@ public class AssetServiceImpl implements AssetService {
         this.assetBase = assetBase.replaceAll("/+$", "");
         this.dir = Path.of(dir);
         this.cwebp = cwebp;
+        this.archivePolicy = archivePolicy;
+        this.voiceKeys = voiceKeys;
     }
 
     // ------------------------------------------------------------------ đọc
@@ -122,15 +128,21 @@ public class AssetServiceImpl implements AssetService {
     @Transactional(readOnly = true)
     public List<AssetResponse> list(String kind, String chapter, String status, String q) {
         Map<String, List<AssetUsageResponse>> usage = usageIndex();
+        // Vòng đời lưu trữ (27/11): tệp đã chuyển đi không còn trên máy chủ để hiện; tệp đang đếm kèm số ngày còn lại.
+        Map<String, ArchiveItem> archive = archivePolicy.fileRows();
         List<AssetResponse> out = new ArrayList<>();
         Set<String> registered = new LinkedHashSet<>();
         for (Asset a : assetRepo.findAll()) {
             registered.add(a.getPath());
-            out.add(toResponse(a, usage.getOrDefault(a.getPath(), List.of())));
+            ArchiveItem row = archive.get(a.getPath());
+            if (!ArchivePolicy.isGone(row)) {
+                out.add(toResponse(a, usage.getOrDefault(a.getPath(), List.of()), archivePolicy.daysLeft(row)));
+            }
         }
         usage.forEach((path, u) -> {
-            if (!registered.contains(path)) {
-                out.add(unregistered(path, u));
+            ArchiveItem row = archive.get(path);
+            if (!registered.contains(path) && !ArchivePolicy.isGone(row)) {
+                out.add(unregistered(path, u, archivePolicy.daysLeft(row)));
             }
         });
         String ch = chapter == null || chapter.isBlank() ? null : chapter.trim().toUpperCase(Locale.ROOT);
@@ -177,14 +189,20 @@ public class AssetServiceImpl implements AssetService {
         // Trùng tệp gốc (kể cả khi nâng cwebp làm WebP ra byte khác) hoặc trùng WebP → trả bản đã có, nhãn cũ giữ nguyên.
         String sourceSha = sha256(bytes);
         var bySource = assetRepo.findFirstBySourceSha256(sourceSha);
-        if (bySource.isPresent()) {
+        // Tệp của phiếu cũ đã được lưu trữ (không còn trên đĩa): đổi lại để ghi lại đúng tệp đó, thay vì trả bản trùng không có tệp.
+        if (bySource.isPresent() && Files.exists(dir.resolve(bySource.get().getPath()))) {
             return duplicate(bySource.get());
         }
         byte[] webp = "webp".equals(type) ? bytes : toWebp(bytes, type);
         String sha = sha256(webp);
         var byHash = assetRepo.findBySha256(sha);
         if (byHash.isPresent()) {
+            rewriteIfMissing(byHash.get().getPath(), webp);
             return duplicate(byHash.get());
+        }
+        if (bySource.isPresent()) {
+            // Cùng tệp gốc nhưng WebP ra byte khác (đổi phiên bản cwebp): giữ một phiếu như cũ; lấy lại tệp cũ bằng Khôi phục.
+            return duplicate(bySource.get());
         }
         int[] size = webpSize(webp);
         if (size == null) {
@@ -233,6 +251,8 @@ public class AssetServiceImpl implements AssetService {
     public void delete(UUID callerId, UUID id) {
         requireWriter(callerId);
         Asset a = requireAsset(id);
+        // Đã lưu trữ → 409; đang đếm → bỏ dòng đếm cùng giao dịch (rollback theo nếu tệp hoá ra đang dùng).
+        archivePolicy.onAssetDelete(a.getPath(), callerId);
         if (usageIndex().containsKey(a.getPath())) {
             throw new AppException(ErrorCode.ASSET_IN_USE, a.getPath());
         }
@@ -250,19 +270,54 @@ public class AssetServiceImpl implements AssetService {
     // ------------------------------------------------------------------ chỗ dùng
     /** path ("a/<hash>.webp") → nơi dùng. Bản đang chạy = CURRENT, bản khác = OLD, nháp chưa phát hành = DRAFT. */
     private Map<String, List<AssetUsageResponse>> usageIndex() {
+        return usageIndex(Set.of(), false);
+    }
+
+    /**
+     * Tập "đang dùng" của vòng đời lưu trữ (27/11): như {@link #usageIndex()} nhưng bỏ các bản phát hành đã lưu trữ, và tính cả
+     * giọng biến thể đã đóng băng (personalization.voiceReady) — câu cá nhân hoá chỉ có giọng sau khi ghép nên đường dẫn không
+     * nằm trong JSON; bỏ sót là giọng bé đang nghe bị coi là mồ côi. Nháp mới nhất chưa phát hành: tính mọi giọng nó sẽ cần.
+     */
+    public Map<String, List<AssetUsageResponse>> usageIndexForArchive(Set<String> archivedVersions) {
+        return usageIndex(archivedVersions, true);
+    }
+
+    /** Mọi tệp một bản phát hành trỏ tới (cả giọng biến thể) — khôi phục bản thì kéo các tệp này về. */
+    public Set<String> releaseFiles(GameRelease release) {
+        Set<String> out = new LinkedHashSet<>();
+        for (ChapterRefs c : frozenRefs.computeIfAbsent(release.getId(), this::refsOfRelease)) {
+            out.addAll(c.refs().keySet());
+            out.addAll(c.voiceReady().keySet());
+        }
+        return out;
+    }
+
+    private Map<String, List<AssetUsageResponse>> usageIndex(Set<String> skipVersions, boolean withVoiceReady) {
         Map<String, Map<String, Usage>> acc = new LinkedHashMap<>();
         UUID currentId = releaseRepo.findFirstByIsCurrentTrue().map(GameRelease::getId).orElse(null);
         for (GameRelease r : releaseRepo.findAll()) {
+            if (skipVersions.contains(r.getVersion())) {
+                continue;
+            }
             String where = r.getId().equals(currentId) ? "CURRENT" : "OLD";
+            // Cache theo id bản vẫn đúng khi bản được lưu trữ / khôi phục: JSON không đổi, chỉ khác có tính bản đó hay không.
             for (ChapterRefs c : frozenRefs.computeIfAbsent(r.getId(), this::refsOfRelease)) {
                 add(acc, c.refs(), c.chapter(), where, r.getVersion());
+                if (withVoiceReady) {
+                    add(acc, c.voiceReady(), c.chapter(), where, r.getVersion());
+                }
             }
         }
         for (Chapter c : chapterRepo.findAllByOrderByChapterNumberAsc()) {
             // Nháp RELEASED trùng nội dung bản đã phát hành — đã đếm ở trên.
             draftRepo.findTopByChapter_IdOrderByRevisionDesc(c.getId())
                     .filter(d -> d.getStatus() != DraftStatus.RELEASED)
-                    .ifPresent(d -> add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null));
+                    .ifPresent(d -> {
+                        add(acc, refs(d.getContent()), c.getCode(), "DRAFT", null);
+                        if (withVoiceReady) {
+                            add(acc, draftVoiceRefs(d.getContent()), c.getCode(), "DRAFT", null);
+                        }
+                    });
         }
         Map<String, List<AssetUsageResponse>> out = new LinkedHashMap<>();
         acc.forEach((path, byPlace) -> out.put(path, byPlace.values().stream().map(Usage::toResponse).toList()));
@@ -272,13 +327,46 @@ public class AssetServiceImpl implements AssetService {
     /** Bản phát hành đã đóng băng, không đổi nội dung: quét một lần rồi giữ (trước đây mỗi lần gọi quét lại mọi bản, ~5 giây). */
     private final Map<UUID, List<ChapterRefs>> frozenRefs = new ConcurrentHashMap<>();
 
-    private record ChapterRefs(String chapter, Map<String, Set<String>> refs) {
+    private record ChapterRefs(String chapter, Map<String, Set<String>> refs, Map<String, Set<String>> voiceReady) {
     }
 
     private List<ChapterRefs> refsOfRelease(UUID releaseId) {
         return releaseChapterRepo.findByRelease_IdOrderByChapter_ChapterNumberAsc(releaseId).stream()
-                .map(rc -> new ChapterRefs(rc.getChapter().getCode(), refs(rc.getContent())))
+                .map(rc -> new ChapterRefs(rc.getChapter().getCode(), refs(rc.getContent()), voiceReadyRefs(rc.getContent())))
                 .toList();
+    }
+
+    /**
+     * Mọi tệp giọng nháp sẽ cần (v/<khoá>.mp3 của mọi câu, mọi tổ hợp cá nhân hoá — đúng danh sách VoiceKeys dùng để sinh giọng).
+     * Câu có token chỉ có giọng sau khi ghép nên không nằm trong JSON nháp; bỏ sót là giọng sắp phát hành bị coi là mồ côi.
+     */
+    private Map<String, Set<String>> draftVoiceRefs(String json) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        if (json == null) {
+            return out;
+        }
+        try {
+            for (VoiceKeys.Line l : voiceKeys.lines(objectMapper.readTree(json))) {
+                out.computeIfAbsent("v/" + l.key() + ".mp3", k -> new LinkedHashSet<>()).add(l.sceneId());
+            }
+        } catch (IOException e) {
+            log.warn("JSON nháp hỏng, bỏ qua giọng: {}", e.getMessage());
+        }
+        return out;
+    }
+
+    /** Giọng biến thể đóng băng của một chương (v/<khoá>.mp3, không gắn cảnh); rỗng với chương không cá nhân hoá. */
+    private Map<String, Set<String>> voiceReadyRefs(String json) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        if (json == null || !json.contains("\"voiceReady\"")) {
+            return out;
+        }
+        try {
+            ArchivePolicy.voiceReadyPaths(objectMapper.readTree(json)).forEach(p -> out.put(p, Set.of()));
+        } catch (IOException e) {
+            log.warn("JSON bản phát hành hỏng, bỏ qua voiceReady: {}", e.getMessage());
+        }
+        return out;
     }
 
     /** Đường dẫn tệp có trong JSON chương → các cảnh nhắc tới nó. */
@@ -473,7 +561,7 @@ public class AssetServiceImpl implements AssetService {
     }
 
     /** Một Files.exists mỗi dòng — kho vài trăm ảnh, không cần cache. */
-    private String thumbUrl(AssetKind kind, String path) {
+    String thumbUrl(AssetKind kind, String path) {
         if (kind != AssetKind.IMAGE) {
             return null;
         }
@@ -529,6 +617,24 @@ public class AssetServiceImpl implements AssetService {
 
     private static int u24(byte[] b, int at) {
         return u16(b, at) | ((b[at + 2] & 0xFF) << 16);
+    }
+
+    /** URL công khai của một tệp kho. */
+    String fileUrl(String path) {
+        return assetBase + "/" + path;
+    }
+
+    /** Tải lại đúng tệp đã lưu trữ: ghi lại lên đĩa (cả hình thu nhỏ nếu mất) rồi đưa dòng lưu trữ về đếm ngay. */
+    private void rewriteIfMissing(String path, byte[] webp) {
+        if (Files.exists(dir.resolve(path))) {
+            return;
+        }
+        writeOnce(path, webp);
+        if (!Files.exists(dir.resolve(thumbPath(path)))) {
+            createThumbnail(path);
+        }
+        archivePolicy.onFileRewritten(ArchiveKind.IMAGE, path);
+        log.info("Ghi lại tệp {} từ lần tải lên trùng", path);
     }
 
     /** Ghi tệp một lần: đã có (cùng hash = cùng nội dung) thì thôi; ghi qua tệp tạm rồi đổi tên để không ai đọc nửa tệp. */
@@ -599,17 +705,21 @@ public class AssetServiceImpl implements AssetService {
     }
 
     private AssetResponse toResponse(Asset a, List<AssetUsageResponse> usage) {
+        return toResponse(a, usage, archivePolicy.daysLeft(a.getPath()));
+    }
+
+    private AssetResponse toResponse(Asset a, List<AssetUsageResponse> usage, Integer archiveDaysLeft) {
         Account by = a.getUploadedBy();
         return new AssetResponse(a.getId(), true, a.getKind(), "{{ASSET_BASE}}/" + a.getPath(), assetBase + "/" + a.getPath(),
                 a.getSizeBytes(), a.getWidth(), a.getHeight(), a.getLabel(), a.getChapterCode(),
                 by == null ? null : by.getDisplayName(), a.getCreatedAt(), status(usage), usage,
-                thumbUrl(a.getKind(), a.getPath()));
+                thumbUrl(a.getKind(), a.getPath()), archiveDaysLeft);
     }
 
-    private AssetResponse unregistered(String path, List<AssetUsageResponse> usage) {
+    private AssetResponse unregistered(String path, List<AssetUsageResponse> usage, Integer archiveDaysLeft) {
         AssetKind kind = path.startsWith("v/") ? AssetKind.AUDIO : AssetKind.IMAGE;
         return new AssetResponse(null, false, kind, "{{ASSET_BASE}}/" + path, assetBase + "/" + path,
-                null, null, null, null, null, null, null, status(usage), usage, thumbUrl(kind, path));
+                null, null, null, null, null, null, null, status(usage), usage, thumbUrl(kind, path), archiveDaysLeft);
     }
 
     private static String sha256(byte[] bytes) {
